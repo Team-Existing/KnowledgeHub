@@ -63,7 +63,6 @@ interface ProviderConfig {
         <div *ngIf="configs.length === 0" style="color:#667085">No workspace provider configs yet.</div>
 
         <div *ngFor="let cfg of configs" class="config-card">
-          <!-- View mode -->
           <ng-container *ngIf="editingConfigId !== cfg.id">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">
               <div>
@@ -78,27 +77,12 @@ interface ProviderConfig {
             </div>
           </ng-container>
 
-          <!-- Inline edit mode -->
           <ng-container *ngIf="editingConfigId === cfg.id">
-            <div class="form-row">
-              <label>Type</label>
-              <input [(ngModel)]="editConfig.provider_type" />
-            </div>
-            <div class="form-row">
-              <label>Name</label>
-              <input [(ngModel)]="editConfig.provider_name" />
-            </div>
-            <div class="form-row">
-              <label>Model</label>
-              <input [(ngModel)]="editConfig.model_name" />
-            </div>
-            <div class="form-row">
-              <label>API Key Ref</label>
-              <input [(ngModel)]="editConfig.api_key_ref" />
-            </div>
-            <div class="form-row checkbox-row">
-              <label><input type="checkbox" [(ngModel)]="editConfig.is_active" /> Active</label>
-            </div>
+            <div class="form-row"><label>Type</label><input [(ngModel)]="editConfig.provider_type" /></div>
+            <div class="form-row"><label>Name</label><input [(ngModel)]="editConfig.provider_name" /></div>
+            <div class="form-row"><label>Model</label><input [(ngModel)]="editConfig.model_name" /></div>
+            <div class="form-row"><label>API Key Ref</label><input [(ngModel)]="editConfig.api_key_ref" /></div>
+            <div class="form-row"><label><input type="checkbox" [(ngModel)]="editConfig.is_active" /> Active</label></div>
             <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
               <button class="primary" (click)="saveEditConfig(cfg.id)" [disabled]="updatingConfig">
                 {{ updatingConfig ? 'Saving…' : 'Save' }}
@@ -108,28 +92,13 @@ interface ProviderConfig {
           </ng-container>
         </div>
 
-        <!-- Create new config -->
         <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid #e5ecea">
           <h4 style="font-size:0.9rem;margin:0 0 0.75rem">Add configuration</h4>
-          <div class="form-row">
-            <label>Type</label>
-            <input [(ngModel)]="newConfig.provider_type" placeholder="llm or embedding" />
-          </div>
-          <div class="form-row">
-            <label>Name</label>
-            <input [(ngModel)]="newConfig.provider_name" placeholder="ollama, openai, local" />
-          </div>
-          <div class="form-row">
-            <label>Model</label>
-            <input [(ngModel)]="newConfig.model_name" placeholder="e.g. gpt-4o-mini" />
-          </div>
-          <div class="form-row">
-            <label>API Key Ref</label>
-            <input [(ngModel)]="newConfig.api_key_ref" placeholder="optional secret ref" />
-          </div>
-          <div class="form-row checkbox-row">
-            <label><input type="checkbox" [(ngModel)]="newConfig.is_active" /> Active</label>
-          </div>
+          <div class="form-row"><label>Type</label><input [(ngModel)]="newConfig.provider_type" placeholder="llm or embedding" /></div>
+          <div class="form-row"><label>Name</label><input [(ngModel)]="newConfig.provider_name" placeholder="ollama, openai, local" /></div>
+          <div class="form-row"><label>Model</label><input [(ngModel)]="newConfig.model_name" placeholder="e.g. gpt-4o-mini" /></div>
+          <div class="form-row"><label>API Key Ref</label><input [(ngModel)]="newConfig.api_key_ref" placeholder="optional secret ref" /></div>
+          <div class="form-row"><label><input type="checkbox" [(ngModel)]="newConfig.is_active" /> Active</label></div>
           <button style="margin-top:0.5rem" (click)="addConfig()" [disabled]="creating">
             {{ creating ? 'Creating…' : 'Create config' }}
           </button>
@@ -141,11 +110,11 @@ interface ProviderConfig {
   `,
   styles: [`
     .page-shell { max-width: 840px; margin: 2rem auto; padding: 0 1rem }
-    .section-card { background:rgba(255,255,255,0.97);border:1px solid rgba(255,255,255,0.6);border-radius:10px;box-shadow:0 4px 16px rgba(102,126,234,0.08);padding:1.25rem;margin-bottom:1.25rem }
+    .section-card { background:#fff;border:1px solid #dfe7e5;border-radius:8px;padding:1.25rem;margin-bottom:1.25rem }
     .section-card h3 { margin:0 0 1rem;font-size:1rem }
     .form-row { display:flex;flex-direction:column;gap:0.25rem;margin:0.75rem 0 }
     .form-row label { font-size:0.85rem;color:#475467;font-weight:500 }
-    .config-card { background:#f8f7ff;border:1px solid #e0d9ff;border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.5rem }
+    .config-card { background:#f8fbfa;border:1px solid #e5ecea;border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.5rem }
   `]
 })
 export class WorkspaceSettingsComponent {
@@ -187,8 +156,6 @@ export class WorkspaceSettingsComponent {
       await this.auth.updateWorkspaceSettings(this.settings)
       this._savedEmbeddingProvider = this.settings.default_embedding_provider
       await this.load()
-      // App Flow §11: embedding provider change must trigger a re-embed job
-      // automatically so the vector index stays consistent with the new provider.
       if (embeddingChanged) {
         this.reembedNote = 'Embedding provider changed — starting re-embed…'
         await this.reembed()

@@ -35,10 +35,9 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_token(user_id: str, workspace_id: str) -> str:
+def create_token(user_id: str) -> str:
     payload = {
         "sub": user_id,
-        "workspace": workspace_id,
         "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)

@@ -116,36 +116,6 @@ type Transform = { x: number; y: number; k: number }
         </ng-container>
       </section>
 
-      <section class="filters">
-        <div class="search-box">
-          <input [(ngModel)]="query" placeholder="Filter extracted knowledge" />
-        </div>
-        <select [(ngModel)]="typeFilter">
-          <option value="all">All types</option>
-          <option *ngFor="let t of itemTypes" [value]="t">{{ t }}</option>
-        </select>
-        <a [routerLink]="['/search']" [queryParams]="query ? {q: query} : {}" style="font-size:0.85rem;align-self:center;color:#667eea;text-decoration:none">
-          Advanced search →
-        </a>
-      </section>
-
-      <section class="knowledge-grid">
-        <a *ngFor="let item of filteredItems" class="knowledge-card knowledge-card-link" [routerLink]="['/knowledge', item.id]">
-          <div class="card-topline">
-            <span class="type-pill">{{ item.type }}</span>
-            <span>{{ item.date | date }}</span>
-          </div>
-          <h3>{{ item.title }}</h3>
-          <p>by {{ item.author }}</p>
-          <span *ngIf="item.review_status === 'pending'" class="review-badge">pending review</span>
-          <div class="tag-row"><span *ngFor="let t of item.tags">#{{ t }}</span></div>
-        </a>
-        <div *ngIf="filteredItems.length === 0" class="empty-state">
-          <h3>No knowledge items yet</h3>
-          <p>Add an artifact above to extract decisions, risks, best practices, and checklists.</p>
-        </div>
-      </section>
-
       <!-- Artifacts list with edit / delete -->
       <section class="ingest-panel" *ngIf="data.artifacts.length > 0">
         <h3>Artifacts <span style="font-weight:400;color:#667085;font-size:0.875rem">({{ data.artifacts.length }})</span></h3>
@@ -184,7 +154,7 @@ type Transform = { x: number; y: number; k: number }
             <p>{{ graph.nodes.length }} nodes · {{ graph.edges.length }} relationships</p>
           </div>
           <div style="display:flex;align-items:center;gap:0.5rem">
-            <a *ngIf="selectedNode" class="detail-link" [routerLink]="['/knowledge', selectedNode.id]">Open details</a>
+            <a *ngIf="selectedNode && selectedNode.type !== 'artifact'" class="detail-link" [routerLink]="['/knowledge', selectedNode.id]">Open details</a>
           </div>
         </div>
         <ng-container *ngIf="graph.nodes.length > 0; else emptyGraph">
@@ -226,6 +196,7 @@ type Transform = { x: number; y: number; k: number }
                 <span class="type-pill">{{ selectedNode.type }}</span>
                 <h4>{{ selectedNode.label }}</h4>
                 <p>{{ selectedNodeLinks.length }} relationship{{ selectedNodeLinks.length === 1 ? '' : 's' }}</p>
+                <p *ngIf="selectedNode.type === 'artifact'" class="muted-text">Artifact nodes are source documents; select a connected knowledge item to open its details.</p>
                 <div class="relationship-list">
                   <button *ngFor="let edge of selectedNodeLinks" (click)="selectOther(edge)">
                     <span>{{ edge.label }}</span>
@@ -248,6 +219,36 @@ type Transform = { x: number; y: number; k: number }
             <p>Ingest an artifact to generate artifact-to-knowledge relationships.</p>
           </div>
         </ng-template>
+      </section>
+
+      <section class="filters">
+        <div class="search-box">
+          <input [(ngModel)]="query" placeholder="Filter extracted knowledge" />
+        </div>
+        <select [(ngModel)]="typeFilter">
+          <option value="all">All types</option>
+          <option *ngFor="let t of itemTypes" [value]="t">{{ t }}</option>
+        </select>
+        <a [routerLink]="['/search']" [queryParams]="query ? {q: query} : {}" style="font-size:0.85rem;align-self:center;color:#667eea;text-decoration:none">
+          Advanced search →
+        </a>
+      </section>
+
+      <section class="knowledge-grid">
+        <a *ngFor="let item of filteredItems" class="knowledge-card knowledge-card-link" [routerLink]="['/knowledge', item.id]">
+          <div class="card-topline">
+            <span class="type-pill">{{ item.type }}</span>
+            <span>{{ item.date | date }}</span>
+          </div>
+          <h3>{{ item.title }}</h3>
+          <p>by {{ item.author }}</p>
+          <span *ngIf="item.review_status === 'pending'" class="review-badge">pending review</span>
+          <div class="tag-row"><span *ngFor="let t of item.tags">#{{ t }}</span></div>
+        </a>
+        <div *ngIf="filteredItems.length === 0" class="empty-state">
+          <h3>No knowledge items yet</h3>
+          <p>Add an artifact above to extract decisions, risks, best practices, and checklists.</p>
+        </div>
       </section>
     </div>
   `

@@ -28,50 +28,43 @@ export class AuthService {
     this._token.set(data.access_token)
   }
 
-  async register(username: string, password: string, workspace: string): Promise<void> {
+  async register(username: string, password: string, workspace_id?: string): Promise<void> {
     await firstValueFrom(
-      this.http.post(`${API_BASE}/auth/register`, { username, password, workspace_id: workspace })
+      this.http.post(`${API_BASE}/auth/register`, { username, password, workspace_id: workspace_id || username })
     )
   }
 
-  async getWorkspaceSettings(): Promise<any> {
-    return await firstValueFrom(
-      this.http.get(`${API_BASE}/workspace/settings`, { headers: this.authHeaders() })
-    )
-  }
-
-  async updateWorkspaceSettings(body: any): Promise<any> {
-    return await firstValueFrom(
-      this.http.patch(`${API_BASE}/workspace/settings`, body, { headers: this.authHeaders() })
-    )
-  }
-
-  async listProviderConfigs(): Promise<any> {
-    return await firstValueFrom(
-      this.http.get(`${API_BASE}/workspace/provider-configs`, { headers: this.authHeaders() })
-    )
-  }
-
-  async createProviderConfig(body: any): Promise<any> {
-    return await firstValueFrom(
-      this.http.post(`${API_BASE}/workspace/provider-configs`, body, { headers: this.authHeaders() })
-    )
-  }
-
-  async updateProviderConfig(id: string, body: any): Promise<any> {
-    return await firstValueFrom(
-      this.http.put(`${API_BASE}/workspace/provider-configs/${id}`, body, { headers: this.authHeaders() })
-    )
-  }
-
-  async deleteProviderConfig(id: string): Promise<void> {
-    await firstValueFrom(
-      this.http.delete(`${API_BASE}/workspace/provider-configs/${id}`, { headers: this.authHeaders() })
-    )
+  async registerAndLogin(username: string, password: string): Promise<void> {
+    await this.register(username, password)
+    await this.login(username, password)
   }
 
   logout(): void {
     localStorage.removeItem('kh_token')
     this._token.set(null)
+  }
+
+  async getWorkspaceSettings(): Promise<any> {
+    return firstValueFrom(this.http.get(`${API_BASE}/workspace/settings`, { headers: this.authHeaders() }))
+  }
+
+  async updateWorkspaceSettings(settings: any): Promise<any> {
+    return firstValueFrom(this.http.patch(`${API_BASE}/workspace/settings`, settings, { headers: this.authHeaders() }))
+  }
+
+  async listProviderConfigs(): Promise<any[]> {
+    return firstValueFrom(this.http.get<any[]>(`${API_BASE}/workspace/provider-configs`, { headers: this.authHeaders() }))
+  }
+
+  async createProviderConfig(body: any): Promise<any> {
+    return firstValueFrom(this.http.post(`${API_BASE}/workspace/provider-configs`, body, { headers: this.authHeaders() }))
+  }
+
+  async updateProviderConfig(id: string, body: any): Promise<any> {
+    return firstValueFrom(this.http.put(`${API_BASE}/workspace/provider-configs/${id}`, body, { headers: this.authHeaders() }))
+  }
+
+  async deleteProviderConfig(id: string): Promise<void> {
+    await firstValueFrom(this.http.delete(`${API_BASE}/workspace/provider-configs/${id}`, { headers: this.authHeaders() }))
   }
 }

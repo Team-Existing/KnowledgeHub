@@ -67,15 +67,15 @@ _SYSTEM["fallback"] = _SYSTEM["factual"]
 # 1. Embedding helpers (delegated to embeddings.py)
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def embed(text: str, workspace: Optional[Any] = None) -> Optional[List[float]]:
-    return await emb.embed(text, workspace=workspace)
+async def embed(text: str) -> Optional[List[float]]:
+    return await emb.embed(text)
 
 
-async def embed_items(items: List[Dict[str, Any]], workspace: Optional[Any] = None) -> List[Tuple[str, List[float]]]:
+async def embed_items(items: List[Dict[str, Any]]) -> List[Tuple[str, List[float]]]:
     if not items:
         return []
     texts = [_item_text(i) for i in items]
-    vecs = await emb.embed_batch(texts, workspace=workspace)
+    vecs = await emb.embed_batch(texts)
     return [(items[i]["id"], v) for i, v in enumerate(vecs) if v is not None]
 
 
@@ -91,7 +91,7 @@ def _item_text(item: Dict[str, Any]) -> str:
 # 2. Query transformation  (sub-queries + HyDE)
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def transform_query(question: str, workspace: Optional[Any] = None) -> Dict[str, Any]:
+async def transform_query(question: str) -> Dict[str, Any]:
     prompt = (
         "Rewrite the user question below into 3 distinct versions that cover "
         "different angles (synonyms, specificity levels, related concepts). "
@@ -107,7 +107,6 @@ async def transform_query(question: str, workspace: Optional[Any] = None) -> Dic
         temperature=0,
         max_tokens=300,
         json_mode=True,
-        workspace=workspace,
     )
     if content:
         try:
@@ -150,14 +149,14 @@ _ROUTE_EXEMPLARS: Dict[str, List[str]] = {
 _exemplar_vecs: Optional[Dict[str, List[List[float]]]] = None
 
 
-async def _get_exemplar_vecs(workspace: Optional[Any] = None) -> Dict[str, List[List[float]]]:
+async def _get_exemplar_vecs() -> Dict[str]:
     """Lazily embed route exemplars once and cache them."""
     global _exemplar_vecs
     if _exemplar_vecs is not None:
         return _exemplar_vecs
-    result: Dict[str, List[List[float]]] = {}
+    result: Dict[str] = {}
     for route, phrases in _ROUTE_EXEMPLARS.items():
-        vecs = await emb.embed_batch(phrases, workspace=workspace)
+        vecs = await emb.embed_batch(phrases)
         result[route] = [v for v in vecs if v is not None]
     _exemplar_vecs = result
     return result
@@ -170,17 +169,17 @@ def _cosine_simple(a: List[float], b: List[float]) -> float:
     return dot / (na * nb) if na and nb else 0.0
 
 
-async def _route_by_embedding(question: str, workspace: Optional[Any] = None) -> Optional[str]:
+async def _route_by_embedding(question: str) -> Optional[str]:
     """
     Classify query intent using embedding similarity against route exemplars.
     Returns a route label when confidence is clear (best score > 0.55 and
     margin over second-best > 0.05), otherwise returns None so the caller
     can fall back to LLM classification.
     """
-    q_vec = await emb.embed(question, workspace=workspace)
+    q_vec = await emb.embed(question)
     if q_vec is None:
         return None
-    exemplars = await _get_exemplar_vecs(workspace=workspace)
+    exemplars = await _get_exemplar_vecs()
     route_scores: Dict[str, float] = {}
     for route, vecs in exemplars.items():
         if vecs:
@@ -203,9 +202,9 @@ def route_query(question: str) -> str:
     return "exploratory"
 
 
-async def route_query_llm(question: str, workspace: Optional[Any] = None) -> str:
+async def route_query_llm(question: str) -> str:
     # Phase 3: try embedding-similarity classifier first to save an LLM call
-    embedding_route = await _route_by_embedding(question, workspace=workspace)
+    embedding_route = await _route_by_embedding(question)
     if embedding_route:
         return embedding_route
 
@@ -225,7 +224,6 @@ async def route_query_llm(question: str, workspace: Optional[Any] = None) -> str
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
         max_tokens=10,
-        workspace=workspace,
     )
     if content:
         label = content.strip().lower().split()[0] if content.strip() else ""
@@ -356,7 +354,6 @@ async def rerank(
     question: str,
     candidates: List[Dict[str, Any]],
     top_n: int = 8,
-    workspace: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
     if len(candidates) <= top_n:
         return candidates[:top_n]
@@ -380,7 +377,6 @@ async def rerank(
         temperature=0,
         max_tokens=256,
         json_mode=True,
-        workspace=workspace,
     )
     if content:
         try:
@@ -441,9 +437,18 @@ async def _generate(
     context: str,
     route: str,
     history: Optional[List[Dict[str, str]]] = None,
-    workspace: Optional[Any] = None,
 ) -> str:
     system = _SYSTEM.get(route, _SYSTEM["factual"])
+    system += """
+    
+When citing sources, use the format [Title] where Title is the name of the artifact or knowledge item.
+
+Format your answer as a well-structured response:
+- Use bullet points for lists
+- Group related information together
+- Provide clear, actionable advice
+- End with a brief summary
+"""
     user_msg = f"Context:\n{context}\n\nQuestion: {question}"
     messages = [{"role": "system", "content": system}]
     if history:
@@ -454,46 +459,100 @@ async def _generate(
         messages=messages,
         temperature=0.2,
         max_tokens=1000,
-        workspace=workspace,
     )
     if content:
         return content
-    # offline fallback — only surface items that share keywords with the question
-    _SKIP_DETAIL_KEYS = {"extractor", "evidence", "confidence", "what", "why", "severity"}
-    q_tokens = set(re.findall(r"[a-zA-Z]{3,}", question.lower()))
-    _STOPWORDS = {"the", "and", "for", "are", "was", "what", "who", "how", "why", "when", "this", "that", "with", "from", "have", "not", "your", "you"}
-    q_tokens -= _STOPWORDS
+    
+    # ✅ Improved fallback - group by type and format nicely
+    return _format_fallback_answer(question, context)
 
-    relevant_lines: List[str] = []
-    in_items_section = False
-    for line in context.splitlines():
-        stripped = line.strip()
-        if stripped == "=== KNOWLEDGE ITEMS ===":
-            in_items_section = True
-            continue
-        if stripped.startswith("==="):
-            in_items_section = False
-            continue
-        if not in_items_section or not stripped:
-            continue
-        if stripped.startswith("["):
-            clean = re.sub(r"^\[[^\]]+\]\s*", "", stripped)
-            clean = re.sub(r"relevance=\S+\s*", "", clean)
-            clean = re.sub(r"^\([^)]+\)\s*", "", clean).strip()
-            if not clean:
-                continue
-            # only include if question tokens overlap with item text
-            item_tokens = set(re.findall(r"[a-zA-Z]{3,}", clean.lower()))
-            if not q_tokens or q_tokens & item_tokens:
-                relevant_lines.append(f"- {clean}")
-        elif ":" in stripped:
-            key = stripped.split(":", 1)[0].strip().lower()
-            if key not in _SKIP_DETAIL_KEYS and relevant_lines:
-                relevant_lines.append(f"  {stripped}")
 
-    if not relevant_lines:
-        return f"**LLM is currently unavailable.** No relevant knowledge was found in your knowledge base for: *{question}*"
-    return "**LLM is currently unavailable.** Relevant items from your knowledge base:\n\n" + "\n".join(relevant_lines)
+def _format_fallback_answer(question: str, context: str) -> str:
+    """Format a nice fallback answer when LLM is unavailable."""
+    lines = context.splitlines()
+    
+    best_practices = []
+    how_tos = []
+    lessons = []
+    decisions = []
+    risks = []
+    
+    current_section = None
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if line == "=== KNOWLEDGE ITEMS ===":
+            current_section = "items"
+            continue
+        if line == "=== ARTIFACT SUMMARIES ===":
+            current_section = "summaries"
+            continue
+        if line == "=== RELATED CONTEXT (graph) ===":
+            current_section = "graph"
+            continue
+        if line.startswith("==="):
+            current_section = None
+            continue
+        
+        # Parse item lines
+        if current_section == "items" and "(" in line and ")" in line:
+            # Extract type and content
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                meta = parts[0].strip()
+                content_text = parts[1].strip()
+                
+                # Extract type from meta
+                if "(best-practice)" in meta:
+                    best_practices.append(content_text)
+                elif "(how-to)" in meta:
+                    how_tos.append(content_text)
+                elif "(lesson)" in meta:
+                    lessons.append(content_text)
+                elif "(decision)" in meta:
+                    decisions.append(content_text)
+                elif "(risk)" in meta:
+                    risks.append(content_text)
+    
+    # Build formatted answer
+    answer_parts = []
+    answer_parts.append(f"Based on the provided context, here are insights about **{question}**:\n")
+    
+    if how_tos:
+        answer_parts.append("### 📋 How-To Steps")
+        for i, item in enumerate(how_tos[:5], 1):
+            answer_parts.append(f"{i}. {item}")
+        answer_parts.append("")
+    
+    if best_practices:
+        answer_parts.append("### ✅ Best Practices")
+        for item in best_practices[:5]:
+            answer_parts.append(f"• {item}")
+        answer_parts.append("")
+    
+    if lessons:
+        answer_parts.append("### 📚 Lessons Learned")
+        for item in lessons[:5]:
+            answer_parts.append(f"• {item}")
+        answer_parts.append("")
+    
+    if decisions:
+        answer_parts.append("### 📝 Key Decisions")
+        for item in decisions[:5]:
+            answer_parts.append(f"• {item}")
+        answer_parts.append("")
+    
+    if risks:
+        answer_parts.append("### ⚠️ Risks to Consider")
+        for item in risks[:5]:
+            answer_parts.append(f"• {item}")
+        answer_parts.append("")
+    
+    if not any([how_tos, best_practices, lessons, decisions, risks]):
+        return f"No specific guidance found for: *{question}*. Please try rephrasing your question."
+    
+    return "\n".join(answer_parts)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -502,15 +561,23 @@ async def _generate(
 
 def _extract_citations(answer: str, nodes: List[Dict[str, Any]]) -> List[str]:
     brackets = re.findall(r"\[([^\]]+)\]", answer)
-    cited: List[str] = []
+    cited: List[Dict[str, str]] = []
+    seen_ids = set()
     for node in nodes:
         nid = node.get("id", "")
         if not nid:
             continue
+        nid = node.get("id", "")
         prefix = nid.split("_")[0]
         for token in brackets:
             if token == nid or nid.startswith(token) or token.startswith(prefix):
-                cited.append(nid)
+                if nid not in seen_ids:
+                    seen_ids.add(nid)
+                    cited.append({
+                        "id": nid,
+                        "title": node.get("title") or node.get("label") or nid,
+                        "type": node.get("kind") or node.get("type") or "item"
+                    })
                 break
     return cited
 
@@ -527,23 +594,22 @@ async def graphrag_query(
     artifact_summaries: Optional[List[Dict[str, Any]]] = None,
     history:        Optional[List[Dict[str, str]]] = None,
     top_k:          int = 8,
-    workspace: Optional[Any] = None,
 ) -> Dict[str, Any]:
     t0 = time.monotonic()
 
-    transformed = await transform_query(question, workspace=workspace)
+    transformed = await transform_query(question)
     sub_queries  = transformed["sub_queries"]
     hyde_doc     = transformed["hyde_doc"]
 
-    route = await route_query_llm(question, workspace=workspace)
+    route = await route_query_llm(question)
 
     all_context_nodes: List[Dict[str, Any]] = []
     retrieval_mode = "none"
     summaries_used: List[Dict[str, Any]] = []
 
     query_vecs = [v for v in [
-        await emb.embed(question, workspace=workspace),
-        await emb.embed(hyde_doc, workspace=workspace) if hyde_doc != question else None,
+        await emb.embed(question),
+        await emb.embed(hyde_doc) if hyde_doc != question else None,
     ] if v is not None]
 
     # ── PRIMARY: Neo4j ──────────────────────────────────────────────────────
@@ -554,7 +620,7 @@ async def graphrag_query(
             if hits:
                 vec_lists.append(hits)
         for sq in sub_queries[1:3]:
-            sqv = await emb.embed(sq, workspace=workspace)
+            sqv = await emb.embed(sq)
             if sqv:
                 hits = neo4j_store.vector_search(sqv, top_k=top_k // 2)
                 if hits:
@@ -609,7 +675,7 @@ async def graphrag_query(
             "latency_ms": int((time.monotonic() - t0) * 1000),
         }
 
-    reranked  = await rerank(question, all_context_nodes, top_n=top_k, workspace=workspace)
+    reranked  = await rerank(question, all_context_nodes, top_n=top_k)
 
     # Drop nodes with negligible RRF scores to avoid surfacing unrelated content
     _MIN_RRF = 0.005
@@ -637,7 +703,7 @@ async def graphrag_query(
     graph_nbr = [n for n in reranked if "graph" in n.get("retrieved_by", "")]
 
     context   = _build_context(summaries_used, primary, graph_nbr)
-    answer    = await _generate(question, context, route, history, workspace=workspace)
+    answer    = await _generate(question, context, route, history)
     citations = _extract_citations(answer, reranked)
 
     return {
@@ -651,3 +717,74 @@ async def graphrag_query(
         "retrieval_mode": retrieval_mode,
         "latency_ms": int((time.monotonic() - t0) * 1000),
     }
+
+def _extract_citations_with_titles(answer: str, nodes: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """Extract citations with human-readable titles."""
+    brackets = re.findall(r"\[([^\]]+)\]", answer)
+    cited: List[Dict[str, str]] = []
+    seen_ids = set()
+    
+    for node in nodes:
+        nid = node.get("id", "")
+        if not nid:
+            continue
+        
+    # Check if this node was cited
+        for token in brackets:
+            if token == nid or nid.startswith(token) or token == nid.split("_")[0]:
+                if nid not in seen_ids:
+                    seen_ids.add(nid)
+                    cited.append({
+                        "id": nid,
+                        "title": node.get("title") or node.get("label") or nid,
+                        "type": node.get("kind") or node.get("type") or "item"
+                    })
+                break
+    
+    return cited
+
+def _build_context_with_labels(
+    summaries: List[Dict[str, Any]],
+    ranked_items: List[Dict[str, Any]],
+    graph_neighbours: List[Dict[str, Any]],
+) -> str:
+    """Build context with human-readable labels instead of IDs."""
+    parts: List[str] = []
+    
+    if summaries:
+        lines = ["=== ARTIFACT SUMMARIES ==="]
+        for s in summaries:
+            title = s.get('title') or s.get('artifact_id', 'Untitled')
+            lines.append(f"📄 {title}: {s.get('summary', '')}")
+        parts.append("\n".join(lines))
+        
+    if ranked_items:
+        lines = ["=== KNOWLEDGE ITEMS ==="]
+        for n in ranked_items:
+            title = n.get('title') or n.get('label') or 'Untitled'
+            kind = n.get('kind') or n.get('type') or 'item'
+            score = n.get('rrf_score') or n.get('score') or 0.0
+            
+            # ✅ Use human-readable label with a short ID suffix
+            short_id = n.get('id', '').split('_')[-1][:6] if n.get('id') else '???'
+            label = f"[{short_id}]"
+            
+            lines.append(f"{label} ({kind}) relevance={score:.3f}: {title}")
+            
+            # Add details
+            for k, v in (n.get('details') or {}).items():
+                if isinstance(v, str) and v and k not in ("evidence", "confidence"):
+                    lines.append(f"  {k}: {v[:100]}")
+        parts.append("\n".join(lines))
+        
+    if graph_neighbours:
+        lines = ["=== RELATED CONTEXT (graph) ==="]
+        for n in graph_neighbours:
+            title = n.get('title') or n.get('label') or 'Untitled'
+            kind = n.get('kind') or n.get('type') or 'item'
+            short_id = n.get('id', '').split('_')[-1][:6] if n.get('id') else '???'
+            lines.append(f"[{short_id}] ({kind}): {title}")
+        parts.append("\n".join(lines))
+    
+    return "\n\n".join(parts)
+

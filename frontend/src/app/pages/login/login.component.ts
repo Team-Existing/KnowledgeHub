@@ -16,9 +16,6 @@ import { AuthService } from '../../services/auth.service'
         <div class="form-stack">
           <input placeholder="Username" [(ngModel)]="username" class="input-field" />
           <input placeholder="Password" type="password" [(ngModel)]="password" class="input-field" />
-          @if (mode === 'register') {
-            <input placeholder="Workspace name (e.g. team-alpha)" [(ngModel)]="workspace" class="input-field" />
-          }
         </div>
         @if (error) { <p class="error-text">{{ error }}</p> }
         <button class="btn-primary" [disabled]="loading || !username || !password" (click)="submit()">
@@ -31,6 +28,23 @@ import { AuthService } from '../../services/auth.service'
     </div>
   `,
   styles: [`
+    .auth-shell { 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 1rem;
+    }
+    .auth-card {
+      background: white;
+      border-radius: 12px;
+      padding: 2.5rem 2rem;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+    }
+    .form-stack { display: flex; flex-direction: column; gap: 1rem; margin: 1.5rem 0; }
     .input-field {
       width: 100%; padding: 0.75rem;
       border: 1px solid #d0d0d0; border-radius: 4px; font-size: 0.95rem;
@@ -53,7 +67,7 @@ import { AuthService } from '../../services/auth.service'
 })
 export class LoginComponent {
   mode: 'login' | 'register' = 'login'
-  username = ''; password = ''; workspace = ''; error = ''; loading = false
+  username = ''; password = ''; error = ''; loading = false
 
   constructor(private auth: AuthService, private router: Router) {}
 
@@ -63,7 +77,7 @@ export class LoginComponent {
     this.error = ''; this.loading = true
     try {
       if (this.mode === 'register') {
-        await this.auth.register(this.username, this.password, this.workspace || this.username)
+        await this.auth.register(this.username, this.password)
       }
       await this.auth.login(this.username, this.password)
       this.router.navigate(['/knowledge'])

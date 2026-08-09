@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core'
-import { ActivatedRoute, RouterLink } from '@angular/router'
+import { ActivatedRoute, Router, RouterLink } from '@angular/router'
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { HttpClient } from '@angular/common/http'
@@ -39,12 +39,17 @@ type RelatedItem = { item: KnowledgeItem; score: number }
               <input [(ngModel)]="editedTitle" style="font-size:1.4rem;font-weight:600;width:100%" />
             </ng-template>
           </div>
-          <div class="detail-meta-grid">
-            <div><span>{{ item.author }}</span></div>
-            <div><span>{{ item.date | date:'medium' }}</span></div>
-            <div><span>{{ relationships.length }} relationship{{ relationships.length === 1 ? '' : 's' }}</span></div>
-            <div><span>{{ item.tags.length }} tag{{ item.tags.length === 1 ? '' : 's' }}</span></div>
+
+          <!-- Header chips: skip unknown author, make tags + relationships clickable -->
+          <div class="hero-chips">
+            <span *ngIf="item.author && item.author !== 'unknown'" class="chip chip-neutral">✍ {{ item.author }}</span>
+            <span class="chip chip-neutral">🗓 {{ item.date | date:'mediumDate' }}</span>
+            <span *ngIf="relationships.length > 0" class="chip chip-link" (click)="scrollTo('rels')">🔗 {{ relationships.length }} relationship{{ relationships.length === 1 ? '' : 's' }}</span>
+            <a *ngFor="let tag of item.tags" class="chip chip-tag" [routerLink]="['/search']" [queryParams]="{tag: tag}">#{{ tag }}</a>
+            <span *ngIf="item.tags.length === 0" class="chip chip-action" (click)="startEdit()">+ Add tags</span>
+            <span *ngIf="confidence !== null" class="chip" [ngClass]="confidenceClass">{{ confidence }}% confidence</span>
           </div>
+
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
             <ng-container *ngIf="!editing">
               <button (click)="startEdit()">Edit</button>
@@ -58,7 +63,7 @@ type RelatedItem = { item: KnowledgeItem; score: number }
           </div>
         </section>
 
-        <!-- Edit form — shown inline below the hero when editing -->
+        <!-- Edit form -->
         <section *ngIf="editing" class="detail-panel">
           <h3>Edit Item</h3>
           <div class="detail-edit-grid">
@@ -75,17 +80,25 @@ type RelatedItem = { item: KnowledgeItem; score: number }
         </section>
 
         <div class="detail-grid">
+          <!-- Left: extracted details, deduplicated, steps hidden when empty -->
           <section class="detail-panel">
             <h3>Extracted Details</h3>
-            <p *ngIf="detailEntries.length === 0" class="muted-text">No structured detail was captured.</p>
-            <dl *ngIf="detailEntries.length > 0" class="detail-fields">
-              <div *ngFor="let entry of detailEntries">
-                <dt>{{ humanize(entry.key) }}</dt>
-                <dd>{{ formatValue(entry.value) }}</dd>
+            <p *ngIf="cleanDetailEntries.length === 0" class="muted-text">No structured detail was captured.</p>
+            <dl *ngIf="cleanDetailEntries.length > 0" class="detail-fields">
+              <div *ngFor="let entry of cleanDetailEntries">
+                <dt>
+                  {{ humanize(entry.key) }}
+                  <span *ngIf="entry.key === 'confidence'" class="conf-bar-wrap">
+                    <span class="conf-bar" [style.width]="entry.value + '%'" [ngClass]="confidenceClass"></span>
+                  </span>
+                </dt>
+                <dd *ngIf="entry.key !== 'confidence'">{{ formatValue(entry.value) }}</dd>
+                <dd *ngIf="entry.key === 'confidence'" [ngClass]="confidenceClass" style="font-weight:600">{{ entry.value }}%</dd>
               </div>
             </dl>
           </section>
 
+          <!-- Right: source artifact + related items -->
           <aside class="detail-panel">
             <h3>Source Artifact</h3>
             <ng-container *ngIf="artifact; else noArtifact">
@@ -93,30 +106,39 @@ type RelatedItem = { item: KnowledgeItem; score: number }
                 <div class="artifact-icon">📄</div>
                 <div>
                   <h4>{{ artifact.title }}</h4>
-                  <p>{{ artifact.source }} by {{ artifact.author }}</p>
+                  <p *ngIf="artifact.author && artifact.author !== 'unknown'">by {{ artifact.author }}</p>
+                  <p>{{ artifact.source }}</p>
                 </div>
               </div>
             </ng-container>
             <ng-template #noArtifact>
               <p class="muted-text">No source artifact found.</p>
             </ng-template>
-            <div class="tag-row detail-tags">
-              <ng-container *ngIf="item.tags.length > 0; else untagged">
-                <span *ngFor="let tag of item.tags">#{{ tag }}</span>
-              </ng-container>
-              <ng-template #untagged><span>untagged</span></ng-template>
-            </div>
+
+            <!-- Related items moved here to fill the space -->
+            <ng-container *ngIf="relatedItems.length > 0">
+              <h4 style="margin:1.25rem 0 0.6rem;font-size:0.875rem;color:#344054">Related Items</h4>
+              <div class="related-list">
+                <a *ngFor="let r of relatedItems" class="related-row" [routerLink]="['/knowledge', r.item.id]">
+                  <span class="type-pill" style="font-size:0.7rem">{{ r.item.type }}</span>
+                  <span class="related-title">{{ r.item.title }}</span>
+                  <span class="conf-badge" [ngClass]="scoreClass(r.score)">{{ (r.score * 100).toFixed(0) }}%</span>
+                </a>
+              </div>
+            </ng-container>
           </aside>
         </div>
 
-        <section class="detail-panel">
+        <!-- Relationships: resolved name + link instead of raw ID -->
+        <section id="rels" class="detail-panel">
           <h3>Relationships</h3>
           <ng-container *ngIf="relationships.length > 0; else noRels">
             <div class="relationship-table">
               <div *ngFor="let edge of relationships">
                 <span>{{ edge.from === item.id ? 'Outgoing' : 'Incoming' }}</span>
                 <strong>{{ edge.type }}</strong>
-                <code>{{ edge.from === item.id ? edge.to : edge.from }}</code>
+                <a *ngIf="resolveNode(edge) as node" [routerLink]="node.route" class="rel-name-link">{{ node.label }}</a>
+                <span *ngIf="!resolveNode(edge)" class="muted-text" style="font-size:0.8rem">{{ edge.from === item.id ? edge.to : edge.from }}</span>
               </div>
             </div>
           </ng-container>
@@ -125,20 +147,10 @@ type RelatedItem = { item: KnowledgeItem; score: number }
           </ng-template>
         </section>
 
-        <section *ngIf="relatedItems.length > 0" class="detail-panel">
-          <h3>Related Items <span style="font-weight:400;color:#667085;font-size:0.85rem">via cross-source linking</span></h3>
-          <div class="relationship-table">
-            <div *ngFor="let r of relatedItems" style="grid-template-columns:80px minmax(0,1fr) 60px">
-              <span class="type-pill" style="font-size:0.72rem">{{ r.item.type }}</span>
-              <a [routerLink]="['/knowledge', r.item.id]" style="color:#667eea;text-decoration:none;font-weight:500;font-size:0.875rem">{{ r.item.title }}</a>
-              <span style="color:#667085;font-size:0.75rem;text-align:right">{{ (r.score * 100).toFixed(0) }}%</span>
-            </div>
-          </div>
-        </section>
-
+        <!-- Source preview with evidence highlighting -->
         <section *ngIf="artifact" class="detail-panel">
           <h3>Source Preview</h3>
-          <p class="source-preview">{{ artifact.content }}</p>
+          <div class="source-preview" [innerHTML]="highlightedContent"></div>
         </section>
       </ng-container>
     </div>
@@ -155,6 +167,42 @@ type RelatedItem = { item: KnowledgeItem; score: number }
       outline: none; border-color: #667eea;
       box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
     }
+    .hero-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.25rem 0; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      border-radius: 999px; font-size: 0.78rem; padding: 0.25rem 0.65rem;
+      font-weight: 500; white-space: nowrap;
+    }
+    .chip-neutral { background: #f2f4f7; color: #475467; }
+    .chip-tag { background: #ede9fe; color: #5b21b6; text-decoration: none; cursor: pointer; }
+    .chip-tag:hover { background: #ddd6fe; }
+    .chip-link { background: #e0f2fe; color: #0369a1; cursor: pointer; }
+    .chip-link:hover { background: #bae6fd; }
+    .chip-action { background: #f0fdf4; color: #15803d; cursor: pointer; border: 1px dashed #86efac; }
+    .chip-action:hover { background: #dcfce7; }
+    .conf-high { background: #dcfce7; color: #15803d; }
+    .conf-mid  { background: #fef9c3; color: #854d0e; }
+    .conf-low  { background: #fee2e2; color: #991b1b; }
+    .conf-bar-wrap { display:inline-block; width:80px; height:6px; background:#e5e7eb; border-radius:3px; vertical-align:middle; margin-left:0.5rem; overflow:hidden; }
+    .conf-bar { display:block; height:100%; border-radius:3px; transition:width 0.3s; }
+    .conf-bar.conf-high { background:#22c55e; }
+    .conf-bar.conf-mid  { background:#eab308; }
+    .conf-bar.conf-low  { background:#ef4444; }
+    .related-list { display: flex; flex-direction: column; gap: 0.4rem; }
+    .related-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.45rem 0.6rem; border-radius: 6px;
+      background: #f8fbfa; border: 1px solid #e5ecea;
+      text-decoration: none; color: inherit;
+      transition: border-color 0.15s;
+    }
+    .related-row:hover { border-color: #667eea; }
+    .related-title { flex: 1; font-size: 0.82rem; font-weight: 500; color: #1f2933; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .conf-badge { font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.4rem; border-radius: 4px; flex-shrink: 0; }
+    .rel-name-link { color: #667eea; text-decoration: none; font-size: 0.875rem; font-weight: 500; }
+    .rel-name-link:hover { text-decoration: underline; }
+    :host ::ng-deep .source-preview mark { background: #fef08a; border-radius: 2px; padding: 0 2px; }
+    .source-preview { color: #344054; line-height: 1.6; max-height: 360px; overflow: auto; white-space: pre-wrap; font-size: 0.875rem; }
   `]
 })
 export class KnowledgeDetailComponent implements OnInit {
@@ -166,6 +214,9 @@ export class KnowledgeDetailComponent implements OnInit {
   detailsParseError = ''
   private crossLinks: CrossLink[] = []
 
+  // Keys to suppress: duplicates of title (what), empty steps, internal fields
+  private readonly SKIP_KEYS = new Set(['what', 'steps', 'okf_original_id'])
+
   get item(): KnowledgeItem | undefined {
     return this.data?._item || this.data?.knowledge_items?.find((i: KnowledgeItem) => i.id === this.id)
   }
@@ -176,9 +227,41 @@ export class KnowledgeDetailComponent implements OnInit {
     if (!this.data || !this.item) return []
     return this.data.relationships.filter((e: Relationship) => e.from === this.item!.id || e.to === this.item!.id)
   }
-  get detailEntries(): { key: string; value: unknown }[] {
-    return Object.entries(this.item?.details || {}).map(([key, value]) => ({ key, value }))
+
+  // Deduplicated, filtered detail entries
+  get cleanDetailEntries(): { key: string; value: unknown }[] {
+    const details = this.item?.details || {}
+    return Object.entries(details)
+      .filter(([key, value]) => {
+        if (this.SKIP_KEYS.has(key)) return false
+        if (value === null || value === undefined || value === '') return false
+        if (Array.isArray(value) && value.length === 0) return false
+        // hide steps when it's a broken/empty string like '[]' or 'N/A'
+        if (key === 'steps' && String(value).trim().match(/^(\[\]|n\/a|none|-)$/i)) return false
+        return true
+      })
+      .map(([key, value]) => ({ key, value }))
   }
+
+  get detailEntries(): { key: string; value: unknown }[] { return this.cleanDetailEntries }
+
+  get confidence(): number | null {
+    const c = (this.item?.details as any)?.confidence
+    if (c === null || c === undefined || c === '') return null
+    const n = parseFloat(String(c))
+    return isNaN(n) ? null : Math.round(n > 1 ? n : n * 100)
+  }
+
+  get confidenceClass(): string {
+    const c = this.confidence
+    if (c === null) return ''
+    return c >= 75 ? 'conf-high' : c >= 45 ? 'conf-mid' : 'conf-low'
+  }
+
+  scoreClass(score: number): string {
+    return score >= 0.75 ? 'conf-high' : score >= 0.45 ? 'conf-mid' : 'conf-low'
+  }
+
   get relatedItems(): RelatedItem[] {
     if (!this.data || !this.item) return []
     const item = this.item
@@ -193,10 +276,47 @@ export class KnowledgeDetailComponent implements OnInit {
       .sort((a, b) => b.score - a.score)
   }
 
-  constructor(private route: ActivatedRoute, private http: HttpClient, public auth: AuthService) {}
+  // Resolve a relationship edge to a display label + route
+  resolveNode(edge: Relationship): { label: string; route: any[] } | null {
+    const otherId = edge.from === this.item?.id ? edge.to : edge.from
+    const ki = this.data?.knowledge_items?.find((i: KnowledgeItem) => i.id === otherId)
+    if (ki) return { label: ki.title, route: ['/knowledge', ki.id] }
+    const art = this.data?.artifacts?.find((a: Artifact) => a.id === otherId)
+    if (art) return { label: art.title, route: ['/knowledge'] }
+    return null
+  }
+
+  // Highlight evidence phrases from details in the source content
+  get highlightedContent(): string {
+    const content = this.artifact?.content
+    if (!content) return ''
+    const escaped = content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const details = this.item?.details as any
+    const phrases: string[] = []
+    for (const key of ['evidence', 'context', 'rationale', 'description']) {
+      const v = details?.[key]
+      if (typeof v === 'string' && v.trim().length > 8) phrases.push(v.trim())
+    }
+    if (phrases.length === 0) return `<span style="white-space:pre-wrap">${escaped}</span>`
+    let result = escaped
+    for (const phrase of phrases) {
+      const safe = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      try {
+        result = result.replace(new RegExp(safe, 'gi'), m => `<mark>${m}</mark>`)
+      } catch { /* skip malformed phrase */ }
+    }
+    return `<span style="white-space:pre-wrap">${result}</span>`
+  }
+
+  scrollTo(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  constructor(private route: ActivatedRoute, private _router: Router, private http: HttpClient, public auth: AuthService) {}
 
   ngOnInit() {
     this.id = this.route.snapshot.paramMap.get('id') || ''
+    if (!this.id) { this._router.navigate(['/knowledge']); return }
     this.load()
   }
 

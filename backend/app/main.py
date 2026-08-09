@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,8 +30,6 @@ from app.db import (
     QueryLog,
     Relationship,
     User,
-    Workspace,
-    ProviderConfig,
     get_session,
     init_db,
 )
@@ -71,7 +69,10 @@ neo4j_graph = Neo4jGraphStore()
 @app.on_event("startup")
 async def startup() -> None:
     await init_db()
-    neo4j_graph.ensure_vector_index()
+    if neo4j_graph.enabled:
+        neo4j_graph.ensure_vector_index()
+    else:
+        print("⚠️  Neo4j not configured - using SQLite fallback mode")
 
 
 @app.on_event("shutdown")
@@ -86,32 +87,17 @@ def shutdown() -> None:
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=60)
     password: str = Field(min_length=6)
-    workspace_id: str = Field(min_length=1, max_length=80)
-
-
-class WorkspaceSettingsRequest(BaseModel):
-    allow_cloud_providers: Optional[bool] = None
-    default_llm_provider: Optional[str] = None
-    default_embedding_provider: Optional[str] = None
-
-
-class ProviderConfigRequest(BaseModel):
-    provider_type: str = Field(min_length=1)
-    provider_name: str = Field(min_length=1)
-    model_name: Optional[str] = None
-    config_json: Dict[str, Any] = {}
-    api_key_ref: Optional[str] = None
-    is_active: bool = True
-
+    
 
 class ModelActionRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=120)
+    model_config = ConfigDict(protected_namespaces=())
 
 
 _RECOMMENDED_LOCAL_MODELS = {
     "llama3.1:8b": {"name": "Llama 3.1 8B", "size": "4.7 GB", "ramRequired": "8 GB+"},
     "mistral:7b": {"name": "Mistral 7B", "size": "4.1 GB", "ramRequired": "8 GB+"},
-    "llama3.1:70b": {"name": "Llama 3.1 70B", "size": "40 GB", "ramRequired": "64 GB+"},
+    "gpt-oss:20b": {"name": "GPT-OSS 20B", "size": "13 GB", "ramRequired": "164 GB+"},
 }
 
 
@@ -139,30 +125,6 @@ def _system_ram_gb() -> int:
             return 8
 
 
-async def _get_or_create_workspace(session: AsyncSession, workspace_id: str) -> Workspace:
-    workspace = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
-    if workspace:
-        return workspace
-    workspace = Workspace(
-        id=workspace_id,
-        name=workspace_id,
-        allow_cloud_providers=False,
-        default_llm_provider="ollama",
-        default_embedding_provider="local",
-        created_at=datetime.utcnow().isoformat(),
-    )
-    session.add(workspace)
-    await session.commit()
-    return workspace
-
-
-async def _get_workspace(session: AsyncSession, workspace_id: str) -> Workspace:
-    workspace = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
-    if workspace:
-        return workspace
-    return await _get_or_create_workspace(session, workspace_id)
-
-
 @app.post("/auth/register", status_code=201)
 async def register(
     body: RegisterRequest,
@@ -175,13 +137,11 @@ async def register(
         id=str(uuid.uuid4()),
         username=body.username,
         hashed_password=hash_password(body.password),
-        workspace_id=body.workspace_id,
         role="admin",
     )
     session.add(user)
     await session.commit()
-    await _get_or_create_workspace(session, body.workspace_id)
-    return {"user_id": user.id, "workspace_id": user.workspace_id}
+    return {"user_id": user.id}
 
 
 @app.post("/auth/token", response_model=TokenResponse)
@@ -193,222 +153,7 @@ async def login(
     user = result.scalar_one_or_none()
     if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    await _get_or_create_workspace(session, user.workspace_id)
-    return TokenResponse(access_token=create_token(user.id, user.workspace_id))
-
-
-@app.get("/workspace/settings")
-async def get_workspace_settings(
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> Dict[str, Any]:
-    workspace = await _get_or_create_workspace(session, current_user.workspace_id)
-    return {
-        "id": workspace.id,
-        "name": workspace.name,
-        "allow_cloud_providers": workspace.allow_cloud_providers,
-        "default_llm_provider": workspace.default_llm_provider,
-        "default_embedding_provider": workspace.default_embedding_provider,
-        "active_llm_provider": get_llm_provider(workspace).name,
-        "active_embedding_provider": get_embedding_provider(workspace).name,
-    }
-
-
-@app.patch("/workspace/settings")
-async def update_workspace_settings(
-    body: WorkspaceSettingsRequest,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> Dict[str, Any]:
-    workspace = await _get_or_create_workspace(session, current_user.workspace_id)
-    if body.allow_cloud_providers is not None:
-        workspace.allow_cloud_providers = body.allow_cloud_providers
-    if body.default_llm_provider is not None:
-        workspace.default_llm_provider = body.default_llm_provider.strip().lower()
-    if body.default_embedding_provider is not None:
-        workspace.default_embedding_provider = body.default_embedding_provider.strip().lower()
-    await session.commit()
-    return {
-        "id": workspace.id,
-        "allow_cloud_providers": workspace.allow_cloud_providers,
-        "default_llm_provider": workspace.default_llm_provider,
-        "default_embedding_provider": workspace.default_embedding_provider,
-        "active_llm_provider": get_llm_provider(workspace).name,
-        "active_embedding_provider": get_embedding_provider(workspace).name,
-    }
-
-
-@app.get("/workspace/provider-configs")
-async def list_provider_configs(
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> List[Dict[str, Any]]:
-    configs = (await session.execute(
-        select(ProviderConfig).where(ProviderConfig.workspace_id == current_user.workspace_id)
-    )).scalars().all()
-    return [
-        {
-            "id": c.id,
-            "workspace_id": c.workspace_id,
-            "provider_type": c.provider_type,
-            "provider_name": c.provider_name,
-            "model_name": c.model_name,
-            "config_json": c.config_json or {},
-            "api_key_ref": c.api_key_ref,
-            "is_active": c.is_active,
-            "created_at": c.created_at,
-        }
-        for c in configs
-    ]
-
-
-@app.post("/workspace/provider-configs", status_code=201)
-async def create_provider_config(
-    body: ProviderConfigRequest,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> Dict[str, Any]:
-    config = ProviderConfig(
-        workspace_id=current_user.workspace_id,
-        provider_type=body.provider_type.strip().lower(),
-        provider_name=body.provider_name.strip().lower(),
-        model_name=body.model_name,
-        config_json=body.config_json or {},
-        api_key_ref=body.api_key_ref,
-        is_active=body.is_active,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    session.add(config)
-    await session.commit()
-    return {
-        "id": config.id,
-        "workspace_id": config.workspace_id,
-        "provider_type": config.provider_type,
-        "provider_name": config.provider_name,
-        "model_name": config.model_name,
-        "config_json": config.config_json or {},
-        "api_key_ref": config.api_key_ref,
-        "is_active": config.is_active,
-        "created_at": config.created_at,
-    }
-
-
-@app.put("/workspace/provider-configs/{config_id}")
-async def update_provider_config(
-    config_id: str,
-    body: ProviderConfigRequest,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> Dict[str, Any]:
-    config = await session.get(ProviderConfig, config_id)
-    if not config or config.workspace_id != current_user.workspace_id:
-        raise HTTPException(status_code=404, detail="Provider config not found")
-    config.provider_type = body.provider_type.strip().lower()
-    config.provider_name = body.provider_name.strip().lower()
-    config.model_name = body.model_name
-    config.config_json = body.config_json or {}
-    config.api_key_ref = body.api_key_ref
-    config.is_active = body.is_active
-    await session.commit()
-    return {
-        "id": config.id,
-        "workspace_id": config.workspace_id,
-        "provider_type": config.provider_type,
-        "provider_name": config.provider_name,
-        "model_name": config.model_name,
-        "config_json": config.config_json or {},
-        "api_key_ref": config.api_key_ref,
-        "is_active": config.is_active,
-        "created_at": config.created_at,
-    }
-
-
-@app.delete("/workspace/provider-configs/{config_id}")
-async def delete_provider_config(
-    config_id: str,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> Response:
-    config = await session.get(ProviderConfig, config_id)
-    if not config or config.workspace_id != current_user.workspace_id:
-        raise HTTPException(status_code=404, detail="Provider config not found")
-    await session.delete(config)
-    await session.commit()
-    return Response(status_code=204)
-
-
-# ---------------------------------------------------------------------------
-# API key storage  (encrypted at rest with Fernet / SECRET_KEY)
-# ---------------------------------------------------------------------------
-
-def _fernet() -> "Fernet":
-    """Derive a stable Fernet key from SECRET_KEY using PBKDF2."""
-    import base64
-    import hashlib
-    from cryptography.fernet import Fernet
-    # 32-byte key derived from SECRET_KEY — deterministic so existing
-    # ciphertext can always be decrypted as long as SECRET_KEY is unchanged.
-    raw = hashlib.pbkdf2_hmac(
-        "sha256",
-        SECRET_KEY.encode(),
-        b"knowledge-hubs-api-key-salt",
-        iterations=100_000,
-        dklen=32,
-    )
-    return Fernet(base64.urlsafe_b64encode(raw))
-
-
-class ApiKeyRequest(BaseModel):
-    provider: str = Field(min_length=1, max_length=40)   # e.g. "openai"
-    api_key: str  = Field(min_length=1, max_length=512)
-
-
-@app.post("/workspace/api-key", status_code=201)
-async def store_api_key(
-    body: ApiKeyRequest,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> Dict[str, str]:
-    """
-    Encrypt the API key with Fernet (AES-128-CBC + HMAC-SHA256) and store
-    the ciphertext in ProviderConfig.config_json.  The plaintext key is
-    never written to disk or returned to the client.
-    Returns only the config_id as an opaque ref the frontend can store.
-    """
-    f = _fernet()
-    ciphertext = f.encrypt(body.api_key.encode()).decode()
-    provider_name = body.provider.strip().lower()
-
-    # Upsert: one active config per provider per workspace
-    existing = (await session.execute(
-        select(ProviderConfig).where(
-            ProviderConfig.workspace_id == current_user.workspace_id,
-            ProviderConfig.provider_type == "llm",
-            ProviderConfig.provider_name == provider_name,
-        )
-    )).scalar_one_or_none()
-
-    if existing:
-        existing.config_json = {"encrypted_key": ciphertext}
-        existing.api_key_ref = f"{provider_name}:configured"
-        existing.is_active = True
-        config_id = existing.id
-    else:
-        cfg = ProviderConfig(
-            workspace_id=current_user.workspace_id,
-            provider_type="llm",
-            provider_name=provider_name,
-            config_json={"encrypted_key": ciphertext},
-            api_key_ref=f"{provider_name}:configured",
-            is_active=True,
-            created_at=datetime.utcnow().isoformat(),
-        )
-        session.add(cfg)
-        await session.flush()   # populate cfg.id before commit
-        config_id = cfg.id
-
-    await session.commit()
-    return {"config_id": config_id, "provider": provider_name, "status": "stored"}
+    return TokenResponse(access_token=create_token(user.id))
 
 
 # ---------------------------------------------------------------------------
@@ -420,7 +165,7 @@ async def model_system_info(
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     ram_gb = _system_ram_gb()
-    tier = "llama3.1:70b" if ram_gb >= 64 else "llama3.1:8b" if ram_gb >= 8 else "mistral:7b"
+    tier = "gpt-oss:20b" if ram_gb >= 16 else "llama3.1:8b" if ram_gb >= 8 else "mistral:7b"
     return {"ramGb": ram_gb, "recommendedTier": tier, "platform": platform.system()}
 
 
@@ -441,16 +186,14 @@ async def list_local_models(
 @app.get("/models/status")
 async def model_status(
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    workspace = await _get_workspace(session, current_user.workspace_id)
-    llm = get_llm_provider(workspace)
-    embedding = get_embedding_provider(workspace)
+    llm = get_llm_provider()
+    embedding = get_embedding_provider()
     installed_names = {m.get("name", "") for m in await _ollama_models()}
+    llm_model = llm.name.split(":", 1)[-1] if ":" in llm.name else llm.name
     return {
-        "llm": {"provider": "local" if llm.is_local else "cloud", "model": llm.name.split(":", 1)[-1], "installed": llm.name.split(":", 1)[-1] in installed_names},
-        "embedding": {"provider": "local" if embedding.is_local else "openai", "model": embedding.name.split(":", 1)[-1], "installed": True},
-        "cloudEnabled": bool(workspace.allow_cloud_providers),
+        "llm": {"provider": "local" if llm.is_local else "cloud", "model": llm_model, "installed": llm_model in installed_names},
+        "embedding": {"provider": "local" if embedding.is_local else "openai", "model": embedding.name.split(":", 1)[-1] if ":" in embedding.name else embedding.name, "installed": True},
     }
 
 
@@ -507,23 +250,10 @@ async def remove_local_model(
 async def set_default_local_model(
     body: ModelActionRequest,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
     installed = {m.get("name", "") for m in await _ollama_models()}
     if body.model_id not in installed:
         raise HTTPException(status_code=400, detail="Install this model before making it the default")
-    workspace = await _get_workspace(session, current_user.workspace_id)
-    config = (await session.execute(select(ProviderConfig).where(
-        ProviderConfig.workspace_id == workspace.id,
-        ProviderConfig.provider_type == "llm",
-        ProviderConfig.provider_name == "ollama",
-    ))).scalar_one_or_none()
-    if config:
-        config.model_name = body.model_id
-        config.is_active = True
-    else:
-        session.add(ProviderConfig(workspace_id=workspace.id, provider_type="llm", provider_name="ollama", model_name=body.model_id, created_at=datetime.utcnow().isoformat()))
-    await session.commit()
     return {"model_id": body.model_id, "default": True}
 
 
@@ -546,12 +276,12 @@ async def consistency_check(
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
     """Compare SQLite vs Neo4j node counts to surface dual-store drift."""
-    ws = current_user.workspace_id
+    user_id = current_user.id
     sqlite_artifacts = (await session.execute(
-        select(Artifact).where(Artifact.workspace_id == ws)
+        select(Artifact).where(Artifact.user_id == user_id)
     )).scalars().all()
     sqlite_items = (await session.execute(
-        select(KnowledgeItem).where(KnowledgeItem.workspace_id == ws)
+        select(KnowledgeItem).where(KnowledgeItem.user_id == user_id)
     )).scalars().all()
 
     sqlite_artifact_ids = {a.id for a in sqlite_artifacts}
@@ -660,7 +390,7 @@ def _build_items(artifact_id: str, content: str, author: str, tags: List[str], c
 
 async def _persist_artifact(
     session: AsyncSession,
-    workspace_id: str,
+    user_id: str,
     artifact_id: str,
     title: str,
     content: str,
@@ -682,7 +412,7 @@ async def _persist_artifact(
     else:
         session.add(Artifact(
             id=artifact_id,
-            workspace_id=workspace_id,
+            user_id=user_id,
             title=title,
             content=content,
             source=source,
@@ -701,7 +431,7 @@ async def _persist_artifact(
     existing_items_result = await session.execute(
         select(KnowledgeItem).where(
             KnowledgeItem.artifact_id == artifact_id,
-            KnowledgeItem.workspace_id == workspace_id,
+            KnowledgeItem.user_id == user_id,
         )
     )
     for old in existing_items_result.scalars():
@@ -717,7 +447,7 @@ async def _persist_artifact(
         else:
             session.add(KnowledgeItem(
                 id=item["id"],
-                workspace_id=workspace_id,
+                user_id=user_id,
                 artifact_id=artifact_id,
                 title=item["title"],
                 type=item["type"],
@@ -734,7 +464,7 @@ async def _persist_artifact(
         for item in items
     ]
     existing_rels = await session.execute(
-        select(Relationship).where(Relationship.from_id == artifact_id, Relationship.workspace_id == workspace_id)
+        select(Relationship).where(Relationship.from_id == artifact_id, Relationship.user_id == user_id)
     )
     existing_rel_keys = {(r.from_id, r.to_id, r.type) for r in existing_rels.scalars()}
     for rel in relationships:
@@ -742,7 +472,7 @@ async def _persist_artifact(
         if key not in existing_rel_keys:
             session.add(Relationship(
                 id=str(uuid.uuid4()),
-                workspace_id=workspace_id,
+                user_id=user_id,
                 from_id=rel["from"],
                 to_id=rel["to"],
                 type=rel["type"],
@@ -761,12 +491,12 @@ async def list_knowledge(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    ws = current_user.workspace_id
-    artifacts = (await session.execute(select(Artifact).where(Artifact.workspace_id == ws))).scalars().all()
-    items = (await session.execute(select(KnowledgeItem).where(KnowledgeItem.workspace_id == ws))).scalars().all()
-    rels = (await session.execute(select(Relationship).where(Relationship.workspace_id == ws))).scalars().all()
-    playbooks = (await session.execute(select(Playbook).where(Playbook.workspace_id == ws))).scalars().all()
-
+    user_id = current_user.id
+    artifacts = (await session.execute(select(Artifact).where(Artifact.user_id == user_id))).scalars().all()
+    items = (await session.execute(select(KnowledgeItem).where(KnowledgeItem.user_id == user_id))).scalars().all()
+    rels = (await session.execute(select(Relationship).where(Relationship.user_id == user_id))).scalars().all()
+    playbooks = (await session.execute(select(Playbook).where(Playbook.user_id == user_id))).scalars().all()
+    
     return {
         "artifacts": [_artifact_dict(a) for a in artifacts],
         "knowledge_items": [_item_dict(i) for i in items],
@@ -799,7 +529,7 @@ async def import_okf_payload(
 
     items, relationships = await _persist_artifact(
         session=session,
-        workspace_id=current_user.workspace_id,
+        user_id=current_user.id,
         artifact_id=artifact_id,
         title=normalized["title"],
         content=normalized["content"],
@@ -810,7 +540,6 @@ async def import_okf_payload(
         created_at=created_at,
         metadata=metadata,
     )
-    workspace = await _get_workspace(session, current_user.workspace_id)
 
     for item in normalized["items"]:
         item_id = _stable_id("okf", f"{artifact_id}:{item['title']}")
@@ -825,7 +554,7 @@ async def import_okf_payload(
             "date": created_at,
             "tags": item.get("tags", normalized["tags"]),
             "details": normalize_item_details(raw_details, item_type, "okf"),
-            "workspace_id": current_user.workspace_id,
+            "user_id": current_user.id,
             "review_status": "pending",
         }
         existing = await session.get(KnowledgeItem, item_payload["id"])
@@ -836,7 +565,7 @@ async def import_okf_payload(
         else:
             session.add(KnowledgeItem(
                 id=item_payload["id"],
-                workspace_id=current_user.workspace_id,
+                user_id=current_user.id,
                 artifact_id=artifact_id,
                 title=item_payload["title"],
                 type=item_payload["type"],
@@ -850,7 +579,7 @@ async def import_okf_payload(
     for rel in normalized["relationships"]:
         session.add(Relationship(
             id=str(uuid.uuid4()),
-            workspace_id=current_user.workspace_id,
+            user_id=current_user.id,
             from_id=rel["source"],
             to_id=rel["target"],
             type=rel["type"],
@@ -858,8 +587,8 @@ async def import_okf_payload(
 
     await session.commit()
     neo4j_graph.upsert_artifact_graph(artifact_dict, items, relationships)
-    await _embed_and_store(items, session, workspace=workspace)
-    await _build_artifact_summary(session, current_user.workspace_id, artifact_dict, normalized["content"], workspace=workspace)
+    await _embed_and_store(items, session)
+    await _build_artifact_summary(session, current_user.id, artifact_dict, normalized["content"])
     return {"artifact": artifact_dict, "imported_items": len(normalized["items"]), "relationships": len(normalized["relationships"])}
 
 
@@ -868,14 +597,14 @@ async def export_okf(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    ws = current_user.workspace_id
-    artifacts = (await session.execute(select(Artifact).where(Artifact.workspace_id == ws))).scalars().all()
-    items = (await session.execute(select(KnowledgeItem).where(KnowledgeItem.workspace_id == ws))).scalars().all()
-    rels = (await session.execute(select(Relationship).where(Relationship.workspace_id == ws))).scalars().all()
+    user_id = current_user.id
+    artifacts = (await session.execute(select(Artifact).where(Artifact.user_id == user_id))).scalars().all()
+    items = (await session.execute(select(KnowledgeItem).where(KnowledgeItem.user_id == user_id))).scalars().all()
+    rels = (await session.execute(select(Relationship).where(Relationship.user_id == user_id))).scalars().all()
     artifact_payloads = [_artifact_dict(a) for a in artifacts]
     item_payloads = [_item_dict(i) for i in items]
     relationship_payloads = [{"from": r.from_id, "to": r.to_id, "type": r.type} for r in rels]
-    return export_okf_payload(ws, artifact_payloads, item_payloads, relationship_payloads)
+    return export_okf_payload(user_id, artifact_payloads, item_payloads, relationship_payloads)
 
 
 # ---------------------------------------------------------------------------
@@ -898,7 +627,7 @@ async def ingest_artifact(
 ) -> Dict[str, Any]:
     return await _ingest(
         session=session,
-        workspace_id=current_user.workspace_id,
+        user_id=current_user.id,
         title=request.title,
         content=request.content,
         source=request.source,
@@ -925,7 +654,7 @@ async def ingest_file(
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     return await _ingest(
         session=session,
-        workspace_id=current_user.workspace_id,
+        user_id=current_user.id,
         title=title,
         content=content,
         source="file",
@@ -955,7 +684,7 @@ async def ingest_url(
     content = await fetch_url(request.url)
     return await _ingest(
         session=session,
-        workspace_id=current_user.workspace_id,
+        user_id=current_user.id,
         title=request.title,
         content=content,
         source=request.url,
@@ -967,7 +696,7 @@ async def ingest_url(
 
 async def _ingest(
     session: AsyncSession,
-    workspace_id: str,
+    user_id: str,
     title: str,
     content: str,
     source: str,
@@ -980,28 +709,27 @@ async def _ingest(
     artifact_dict = {"id": artifact_id, "title": title, "content": content, "source": source, "source_type": source_type, "author": author, "tags": tags, "created_at": created_at}
     normalized = ingestion.normalize_format({**artifact_dict, "type": "text"})
     metadata = ingestion.extract_metadata(normalized)
-    items, relationships = await _persist_artifact(session, workspace_id, artifact_id, title, content, source, source_type, author, tags, created_at, metadata)
-    workspace = await _get_workspace(session, workspace_id)
+    items, relationships = await _persist_artifact(session, user_id, artifact_id, title, content, source, source_type, author, tags, created_at, metadata)
     neo4j_graph.upsert_artifact_graph(artifact_dict, items, relationships)
-    await _embed_and_store(items, session, workspace=workspace)
-    await _build_artifact_summary(session, workspace_id, artifact_dict, content, workspace=workspace)
+    await _embed_and_store(items, session)
+    await _build_artifact_summary(session, user_id, artifact_dict, content)
     return {"artifact": artifact_dict, "items": items, "relationships": relationships, "extracted_count": len(items)}
 
 
 async def _embed_and_store(
-    items: List[Dict[str, Any]], session: AsyncSession, workspace: Optional[Any] = None
+    items: List[Dict[str, Any]], session: AsyncSession
 ) -> None:
     """
     Embed extracted items and persist vectors to both Neo4j (primary) and
     SQLite (backup). Provenance columns (embedding_provider, embedding_dims)
     are written so a provider switch can be detected and a re-embed triggered.
     """
-    pairs = await embed_items(items, workspace=workspace)
+    pairs = await embed_items(items)
     if not pairs:
         return
-
-    provider_name = get_embedding_provider(workspace).name
-    provider_dims = get_embedding_provider(workspace).dimensions
+    
+    provider_name = get_embedding_provider().name
+    provider_dims = get_embedding_provider().dimensions
     for item_id, vector in pairs:
         ki = await session.get(KnowledgeItem, item_id)
         if ki:
@@ -1016,10 +744,9 @@ async def _embed_and_store(
 
 async def _build_artifact_summary(
     session: AsyncSession,
-    workspace_id: str,
+    user_id: str,
     artifact: Dict[str, Any],
     content: str,
-    workspace: Optional[Any] = None,
 ) -> None:
     """Generate and persist a condensed LLM summary for the artifact (summary index)."""
     from app.services.llm_extraction import _summarise_text
@@ -1027,15 +754,15 @@ async def _build_artifact_summary(
         select(ArtifactSummary).where(ArtifactSummary.artifact_id == artifact["id"])
     )).scalar_one_or_none()
 
-    summary_text = await _summarise_text(content, workspace=workspace)
+    summary_text = await _summarise_text(content)
     if not summary_text:
         return
 
-    summary_vec = await embed(summary_text, workspace=workspace)
+    summary_vec = await embed(summary_text)
     created_at  = datetime.utcnow().isoformat()
 
-    provider_name = get_embedding_provider(workspace).name if workspace else get_embedding_provider().name
-    provider_dims = get_embedding_provider(workspace).dimensions if workspace else get_embedding_provider().dimensions
+    provider_name = get_embedding_provider().name
+    provider_dims = get_embedding_provider().dimensions
     if existing:
         existing.summary   = summary_text
         existing.embedding = summary_vec
@@ -1043,7 +770,7 @@ async def _build_artifact_summary(
         existing.embedding_dims = provider_dims
     else:
         session.add(ArtifactSummary(
-            workspace_id=workspace_id,
+            user_id=user_id,
             artifact_id=artifact["id"],
             summary=summary_text,
             embedding=summary_vec,
@@ -1069,7 +796,7 @@ async def list_review_queue(
 ) -> List[Dict[str, Any]]:
     result = await session.execute(
         select(KnowledgeItem).where(
-            KnowledgeItem.workspace_id == current_user.workspace_id,
+            KnowledgeItem.user_id == current_user.id,
             KnowledgeItem.review_status == "pending",
         )
     )
@@ -1091,7 +818,7 @@ async def review_item(
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
     item = await session.get(KnowledgeItem, item_id)
-    if not item or item.workspace_id != current_user.workspace_id:
+    if not item or item.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Item not found")
     item.review_status = body.status
     item.review_note = body.note
@@ -1121,8 +848,7 @@ async def ingest_transcript(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    workspace = await _get_workspace(session, current_user.workspace_id)
-    llm_result = await extract_from_transcript(request.content, workspace=workspace)
+    llm_result = await extract_from_transcript(request.content)
 
     artifact_id = _stable_id("artifact", f"{request.title}:{request.content}")
     created_at = datetime.utcnow().isoformat()
@@ -1161,7 +887,7 @@ async def ingest_transcript(
     existing = await session.get(Artifact, artifact_id)
     if not existing:
         session.add(Artifact(
-            id=artifact_id, workspace_id=current_user.workspace_id,
+            id=artifact_id, user_id=current_user.id,
             title=request.title, content=request.content,
             source=request.source_type, source_type=request.source_type,
             author=request.author, tags=request.tags,
@@ -1186,7 +912,7 @@ async def ingest_transcript(
             ki.extraction_engine = "local_llm" if not llm_result.get("llm_error") else "regex"
         else:
             session.add(KnowledgeItem(
-                id=item["id"], workspace_id=current_user.workspace_id,
+                id=item["id"], user_id=current_user.id,
                 artifact_id=artifact_id, title=item["title"], type=item["type"],
                 author=item["author"], date=item["date"], tags=item["tags"],
                 details=item["details"], extraction_engine="local_llm" if not llm_result.get("llm_error") else "regex", review_status="pending",
@@ -1202,14 +928,14 @@ async def ingest_transcript(
     for rel in relationships:
         if (rel["from"], rel["to"], rel["type"]) not in existing_rel_keys:
             session.add(Relationship(
-                id=str(uuid.uuid4()), workspace_id=current_user.workspace_id,
+                id=str(uuid.uuid4()), user_id=current_user.id,
                 from_id=rel["from"], to_id=rel["to"], type=rel["type"],
             ))
 
     await session.commit()
     neo4j_graph.upsert_artifact_graph(artifact_dict, items, relationships)
-    await _embed_and_store(items, session, workspace=workspace)
-    await _build_artifact_summary(session, current_user.workspace_id, artifact_dict, request.content, workspace=workspace)
+    await _embed_and_store(items, session)
+    await _build_artifact_summary(session, current_user.id, artifact_dict, request.content)
 
     return {
         "artifact": artifact_dict,
@@ -1237,13 +963,13 @@ async def graphrag_query_endpoint(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    ws = current_user.workspace_id
+    user_id = current_user.id
     t0 = datetime.utcnow()
 
     all_items = (
         await session.execute(
             select(KnowledgeItem).where(
-                KnowledgeItem.workspace_id == ws,
+                KnowledgeItem.user_id == user_id,
                 KnowledgeItem.review_status != "rejected",
             )
         )
@@ -1252,20 +978,19 @@ async def graphrag_query_endpoint(
     fallback = [{**_item_dict(i), "embedding": i.embedding} for i in all_items]
 
     cross_links_rows = (
-        await session.execute(select(CrossLink).where(CrossLink.workspace_id == ws))
+        await session.execute(select(CrossLink).where(CrossLink.user_id == user_id))
     ).scalars().all()
     cross_links = [{"item_id_a": cl.item_id_a, "item_id_b": cl.item_id_b} for cl in cross_links_rows]
 
     # load artifact summaries for the summary index fallback
     summary_rows = (
-        await session.execute(select(ArtifactSummary).where(ArtifactSummary.workspace_id == ws))
+        await session.execute(select(ArtifactSummary).where(ArtifactSummary.user_id == user_id))
     ).scalars().all()
     artifact_summaries = [
         {"artifact_id": s.artifact_id, "title": "", "summary": s.summary, "embedding": s.embedding}
         for s in summary_rows
     ]
 
-    workspace = await _get_workspace(session, ws)
     result = await graphrag_query(
         question=request.question,
         neo4j_store=neo4j_graph,
@@ -1274,22 +999,19 @@ async def graphrag_query_endpoint(
         artifact_summaries=artifact_summaries,
         history=request.history or None,
         top_k=request.top_k,
-        workspace=workspace,
     )
 
     # persist query log
     latency_ms = int((datetime.utcnow() - t0).total_seconds() * 1000)
-    workspace = await _get_workspace(session, ws)
     session.add(QueryLog(
-        workspace_id=ws,
         user_id=current_user.id,
         question=request.question,
         sub_queries=result.get("sub_queries", []),
         hyde_doc=result.get("hyde_doc"),
         route=result.get("route"),
         retrieval_mode=result.get("retrieval_mode"),
-        llm_provider=get_llm_provider(workspace).name,
-        embedding_provider=get_embedding_provider(workspace).name,
+        llm_provider=get_llm_provider().name,
+        embedding_provider=get_embedding_provider().name,
         context_node_ids=[n.get("id") for n in result.get("context_nodes", [])],
         citations=result.get("citations", []),
         answer_snippet=result.get("answer", "")[:400],
@@ -1310,18 +1032,16 @@ async def run_cross_link(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    """Scan all knowledge items in the workspace and create cross-source links."""
-    ws = current_user.workspace_id
+    user_id = current_user.id
     all_items = (await session.execute(
-        select(KnowledgeItem).where(KnowledgeItem.workspace_id == ws)
+        select(KnowledgeItem).where(KnowledgeItem.user_id == user_id)
     )).scalars().all()
 
     item_dicts = [{"id": i.id, "artifact_id": i.artifact_id, "title": i.title} for i in all_items]
     links = find_cross_links(item_dicts)
 
-    # Remove stale cross-links for this workspace, re-insert fresh ones
     old_links = (await session.execute(
-        select(CrossLink).where(CrossLink.workspace_id == ws)
+        select(CrossLink).where(CrossLink.user_id == user_id)
     )).scalars().all()
     for old in old_links:
         await session.delete(old)
@@ -1330,7 +1050,7 @@ async def run_cross_link(
     for id_a, id_b, score in links:
         cl = CrossLink(
             id=str(uuid.uuid4()),
-            workspace_id=ws,
+            user_id=user_id,
             item_id_a=id_a,
             item_id_b=id_b,
             score=str(score),
@@ -1340,7 +1060,7 @@ async def run_cross_link(
 
         # Also persist as graph relationships
         session.add(Relationship(
-            id=str(uuid.uuid4()), workspace_id=ws,
+            id=str(uuid.uuid4()), user_id=user_id,
             from_id=id_a, to_id=id_b, type="RELATED_TO",
         ))
 
@@ -1354,7 +1074,7 @@ async def get_cross_links(
     session: AsyncSession = Depends(get_session),
 ) -> List[Dict[str, Any]]:
     result = await session.execute(
-        select(CrossLink).where(CrossLink.workspace_id == current_user.workspace_id)
+        select(CrossLink).where(CrossLink.user_id == current_user.id)
     )
     return [{"item_id_a": cl.item_id_a, "item_id_b": cl.item_id_b, "score": float(cl.score)}
             for cl in result.scalars()]
@@ -1374,17 +1094,16 @@ async def reembed_workspace(
     active embedding provider. Run this after switching EMBEDDING_PROVIDER
     to avoid mixing incompatible vector spaces.
     """
-    ws = current_user.workspace_id
-    workspace = await _get_workspace(session, ws)
+    user_id = current_user.id
     items = (
-        await session.execute(select(KnowledgeItem).where(KnowledgeItem.workspace_id == ws))
+        await session.execute(select(KnowledgeItem).where(KnowledgeItem.user_id == user_id))
     ).scalars().all()
 
     item_dicts = [_item_dict(i) for i in items]
-    pairs = await embed_items(item_dicts, workspace=workspace)
+    pairs = await embed_items(item_dicts)
     updated_items = 0
-    provider_name = get_embedding_provider(workspace).name
-    provider_dims = get_embedding_provider(workspace).dimensions
+    provider_name = get_embedding_provider().name
+    provider_dims = get_embedding_provider().dimensions
     for item_id, vector in pairs:
         ki = await session.get(KnowledgeItem, item_id)
         if ki:
@@ -1396,11 +1115,11 @@ async def reembed_workspace(
 
     # Re-embed artifact summaries
     summaries = (
-        await session.execute(select(ArtifactSummary).where(ArtifactSummary.workspace_id == ws))
+        await session.execute(select(ArtifactSummary).where(ArtifactSummary.user_id == user_id))
     ).scalars().all()
     updated_summaries = 0
     for s in summaries:
-        vec = await embed(s.summary, workspace=workspace)
+        vec = await embed(s.summary)
         if vec:
             s.embedding = vec
             s.embedding_provider = provider_name
@@ -1409,8 +1128,6 @@ async def reembed_workspace(
             updated_summaries += 1
 
     await session.commit()
-    provider_name = get_embedding_provider(workspace).name
-    provider_dims = get_embedding_provider(workspace).dimensions
     return {
         "provider": provider_name,
         "dimensions": provider_dims,
@@ -1432,15 +1149,15 @@ async def search_knowledge(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    ws = current_user.workspace_id
+    user_id = current_user.id
     q_lower = q.strip().lower()
 
-    items_q = select(KnowledgeItem).where(KnowledgeItem.workspace_id == ws)
+    items_q = select(KnowledgeItem).where(KnowledgeItem.user_id == user_id)
     if type:
         items_q = items_q.where(KnowledgeItem.type == type)
     all_items = (await session.execute(items_q)).scalars().all()
 
-    artifacts_q = select(Artifact).where(Artifact.workspace_id == ws)
+    artifacts_q = select(Artifact).where(Artifact.user_id == user_id)
     if source_type:
         artifacts_q = artifacts_q.where(Artifact.source_type == source_type)
     all_artifacts = (await session.execute(artifacts_q)).scalars().all()
@@ -1494,7 +1211,7 @@ async def create_playbook(
     playbook = curation.build_playbook(request.title, request.steps)
     session.add(Playbook(
         id=playbook["id"],
-        workspace_id=current_user.workspace_id,
+        user_id=current_user.id,
         title=playbook["title"],
         steps=playbook["steps"],
         category=playbook["category"],
@@ -1521,7 +1238,7 @@ async def update_artifact(
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
     artifact = await session.get(Artifact, artifact_id)
-    if not artifact or artifact.workspace_id != current_user.workspace_id:
+    if not artifact or artifact.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Artifact not found")
     if body.title is not None:
         artifact.title = body.title
@@ -1531,14 +1248,13 @@ async def update_artifact(
         artifact.content = body.content
         # re-extract items when content changes
         items, relationships = await _persist_artifact(
-            session, current_user.workspace_id, artifact_id,
+            session, current_user.id, artifact_id,
             artifact.title, body.content, artifact.source,
             artifact.source_type or "manual", artifact.author,
             artifact.tags or [], artifact.created_at, artifact.metadata_ or {},
         )
-        workspace = await _get_workspace(session, current_user.workspace_id)
         neo4j_graph.upsert_artifact_graph(_artifact_dict(artifact), items, relationships)
-        await _embed_and_store(items, session, workspace=workspace)
+        await _embed_and_store(items, session)
         return {**_artifact_dict(artifact), "items": items}
     await session.commit()
     return _artifact_dict(artifact)
@@ -1551,7 +1267,7 @@ async def delete_artifact(
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     artifact = await session.get(Artifact, artifact_id)
-    if not artifact or artifact.workspace_id != current_user.workspace_id:
+    if not artifact or artifact.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Artifact not found")
     for model, col in [
         (KnowledgeItem, KnowledgeItem.artifact_id),
@@ -1603,7 +1319,7 @@ async def get_item(
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
     item = await session.get(KnowledgeItem, item_id)
-    if not item or item.workspace_id != current_user.workspace_id:
+    if not item or item.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Item not found")
     return _item_dict(item)
 
@@ -1616,7 +1332,7 @@ async def update_item(
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
     item = await session.get(KnowledgeItem, item_id)
-    if not item or item.workspace_id != current_user.workspace_id:
+    if not item or item.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Item not found")
     if body.title is not None:
         item.title = body.title
@@ -1635,12 +1351,12 @@ async def delete_item(
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     item = await session.get(KnowledgeItem, item_id)
-    if not item or item.workspace_id != current_user.workspace_id:
+    if not item or item.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Item not found")
     rels = (await session.execute(
         select(Relationship).where(
             (Relationship.from_id == item_id) | (Relationship.to_id == item_id),
-            Relationship.workspace_id == current_user.workspace_id,
+            Relationship.user_id == current_user.id,
         )
     )).scalars().all()
     for rel in rels:
@@ -1665,7 +1381,6 @@ async def delete_item(
         )
     return Response(status_code=204)
 
-
 # ---------------------------------------------------------------------------
 # Graph
 # ---------------------------------------------------------------------------
@@ -1680,15 +1395,49 @@ async def knowledge_graph(
         if neo4j_data["nodes"]:
             return neo4j_data
 
-    ws = current_user.workspace_id
-    artifacts = (await session.execute(select(Artifact).where(Artifact.workspace_id == ws))).scalars().all()
-    items = (await session.execute(select(KnowledgeItem).where(KnowledgeItem.workspace_id == ws))).scalars().all()
-    rels = (await session.execute(select(Relationship).where(Relationship.workspace_id == ws))).scalars().all()
+    user_id = current_user.id
+    artifacts = (await session.execute(select(Artifact).where(Artifact.user_id == user_id))).scalars().all()
+    items = (await session.execute(select(KnowledgeItem).where(KnowledgeItem.user_id == user_id))).scalars().all()
+    rels = (await session.execute(select(Relationship).where(Relationship.user_id == user_id))).scalars().all()
 
     nodes = [{"id": a.id, "label": a.title, "type": "artifact"} for a in artifacts] + \
             [{"id": i.id, "label": i.title, "type": i.type} for i in items]
     edges = [{"from": r.from_id, "to": r.to_id, "type": r.type} for r in rels]
     return graph_builder.prepare_visualization_data({"nodes": nodes, "edges": edges})
+
+
+@app.get("/knowledge/{item_id}")
+async def get_knowledge_item(
+    item_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> Dict[str, Any]:
+    """Get a knowledge item by ID with fallback."""
+    item = await session.get(KnowledgeItem, item_id)
+    if item and item.user_id == current_user.id:
+        return _item_dict(item)
+
+    items = await session.execute(
+        select(KnowledgeItem).where(
+            KnowledgeItem.user_id == current_user.id,
+            KnowledgeItem.id.like(f"%{item_id.split('_')[-1]}")
+        )
+    )
+    item = items.scalar_one_or_none()
+    if item:
+        return _item_dict(item)
+
+    items = await session.execute(
+        select(KnowledgeItem).where(
+            KnowledgeItem.user_id == current_user.id,
+            KnowledgeItem.title.ilike(f"%{item_id}%")
+        )
+    )
+    item = items.scalar_one_or_none()
+    if item:
+        return _item_dict(item)
+
+    raise HTTPException(status_code=404, detail="Item not found")
 
 
 # ---------------------------------------------------------------------------

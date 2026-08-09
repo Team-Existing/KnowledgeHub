@@ -18,7 +18,6 @@ import { ProviderStatusBadgeComponent } from './components/provider-status-badge
           <a routerLink="/review">Review</a>
           <a routerLink="/graphrag">GraphRAG</a>
           <a routerLink="/settings/models">Models</a>
-          <a routerLink="/workspace-settings">Workspace</a>
           <app-provider-status-badge></app-provider-status-badge>
           <button style="padding:0.25rem 0.75rem;font-size:0.875rem;background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3)" (click)="logout()">Sign out</button>
         } @else {
