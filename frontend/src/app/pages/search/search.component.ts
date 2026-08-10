@@ -45,43 +45,39 @@ const ITEM_TYPES = ['decision', 'action-item', 'risk', 'best-practice', 'checkli
 
       @if (result) {
         @if (result.knowledge_items.length > 0) {
-          <section>
-            <h3 style="padding:0 0.25rem 0.5rem;font-size:0.85rem;color:#667085;text-transform:uppercase;letter-spacing:0.05em">
-              Knowledge Items ({{ result.knowledge_items.length }})
-            </h3>
-            <div class="knowledge-grid">
-              @for (item of result.knowledge_items; track item.id) {
-                <a class="knowledge-card knowledge-card-link" [routerLink]="['/knowledge', item.id]">
-                  <div class="card-topline">
-                    <span class="type-pill">{{ item.type }}</span>
-                    <span>{{ item.date | date }}</span>
-                  </div>
-                  <h3>{{ item.title }}</h3>
-                  <p>by {{ item.author }}</p>
-                  <div class="tag-row">@for (t of item.tags; track t) { <span>#{{ t }}</span> }</div>
-                </a>
-              }
-            </div>
+          <div style="padding:0 0.25rem 0.5rem;font-size:0.85rem;color:#667085;text-transform:uppercase;letter-spacing:0.05em;font-weight:600">
+            Knowledge Items ({{ result.knowledge_items.length }})
+          </div>
+          <section class="knowledge-grid">
+            @for (item of result.knowledge_items; track item.id) {
+              <a class="knowledge-card knowledge-card-link" [routerLink]="['/knowledge', item.id]">
+                <div class="card-topline">
+                  <span class="type-pill">{{ item.type }}</span>
+                  <span>{{ item.date | date }}</span>
+                </div>
+                <h3>{{ item.title }}</h3>
+                <p>by {{ item.author }}</p>
+                <div class="tag-row">@for (t of item.tags; track t) { <span>#{{ t }}</span> }</div>
+              </a>
+            }
           </section>
         }
         @if (result.artifacts.length > 0) {
-          <section>
-            <h3 style="padding:0 0.25rem 0.5rem;font-size:0.85rem;color:#667085;text-transform:uppercase;letter-spacing:0.05em">
-              Artifacts ({{ result.artifacts.length }})
-            </h3>
-            <div class="knowledge-grid">
-              @for (a of result.artifacts; track a.id) {
-                <div class="knowledge-card">
-                  <div class="card-topline">
-                    <span class="type-pill">{{ a.source_type }}</span>
-                    <span>{{ a.created_at | date }}</span>
-                  </div>
-                  <h3>{{ a.title }}</h3>
-                  <p>by {{ a.author }}</p>
-                  <div class="tag-row">@for (t of a.tags; track t) { <span>#{{ t }}</span> }</div>
+          <div style="padding:0 0.25rem 0.5rem;font-size:0.85rem;color:#667085;text-transform:uppercase;letter-spacing:0.05em;font-weight:600">
+            Artifacts ({{ result.artifacts.length }})
+          </div>
+          <section class="knowledge-grid">
+            @for (a of result.artifacts; track a.id) {
+              <div class="knowledge-card">
+                <div class="card-topline">
+                  <span class="type-pill">{{ a.source_type }}</span>
+                  <span>{{ a.created_at | date }}</span>
                 </div>
-              }
-            </div>
+                <h3>{{ a.title }}</h3>
+                <p>by {{ a.author }}</p>
+                <div class="tag-row">@for (t of a.tags; track t) { <span>#{{ t }}</span> }</div>
+              </div>
+            }
           </section>
         }
         @if (result.total === 0) {

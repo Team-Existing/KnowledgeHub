@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv(usecwd=True) or find_dotenv())
+
 import hashlib
 import os
 import platform

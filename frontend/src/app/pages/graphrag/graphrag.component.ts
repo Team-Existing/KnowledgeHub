@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms'
 import { HttpClient } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser'
+import { Router } from '@angular/router'
 import { AuthService, API_BASE } from '../../services/auth.service'
 import { ModelService } from '../../services/model.service'
 
@@ -213,7 +214,8 @@ export class GraphragComponent implements AfterViewChecked {
     private http: HttpClient, 
     public auth: AuthService, 
     public modelService: ModelService, 
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private router: Router
   ) {}
 
   isNoAnswer(content: string): boolean {
@@ -273,29 +275,7 @@ export class GraphragComponent implements AfterViewChecked {
   }
 
   goToItem(id: string) {
-    console.log('Opening item:', id);
-    let cleanId = id;
-    if (!id.includes('_')) {
-    // Try to find the full ID from context nodes
-    for (const msg of this.messages) {
-      if (msg.context_nodes) {
-        for (const node of msg.context_nodes) {
-          const nodeId = node.id || '';
-          if (nodeId.endsWith(id)) {
-            cleanId = nodeId;
-            break;
-          }
-        }
-      }
-      if (cleanId !== id) break;
-    }
-  }
-    const url = `/knowledge/${cleanId}`;
-    console.log('📍 Navigating to:', url);
-    
-    // Use router instead of window.open for better SPA navigation
-    // But since we want a new tab, use window.open
-    window.open(url, '_blank');
+    this.router.navigate(['/knowledge', id])
   }
     
   //Updated renderMarkdown to handle citations

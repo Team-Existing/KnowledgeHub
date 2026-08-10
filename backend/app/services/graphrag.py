@@ -563,22 +563,27 @@ def _extract_citations(answer: str, nodes: List[Dict[str, Any]]) -> List[str]:
     brackets = re.findall(r"\[([^\]]+)\]", answer)
     cited: List[Dict[str, str]] = []
     seen_ids = set()
+    short_map: Dict[str, Dict[str, Any]] = {}
     for node in nodes:
         nid = node.get("id", "")
         if not nid:
             continue
-        nid = node.get("id", "")
-        prefix = nid.split("_")[0]
-        for token in brackets:
-            if token == nid or nid.startswith(token) or token.startswith(prefix):
-                if nid not in seen_ids:
-                    seen_ids.add(nid)
-                    cited.append({
-                        "id": nid,
-                        "title": node.get("title") or node.get("label") or nid,
-                        "type": node.get("kind") or node.get("type") or "item"
-                    })
-                break
+        parts = nid.split("_")
+        if len(parts) >= 2:
+            short_map[parts[-1][:6]] = node
+    for token in brackets:
+        matched_node = next((n for n in nodes if n.get("id") == token), None)
+        if not matched_node:
+            matched_node = short_map.get(token[:6])
+        if matched_node:
+            nid = matched_node["id"]
+            if nid not in seen_ids:
+                seen_ids.add(nid)
+                cited.append({
+                    "id": nid,
+                    "title": matched_node.get("title") or matched_node.get("label") or nid,
+                    "type": matched_node.get("kind") or matched_node.get("type") or "item"
+                })
     return cited
 
 
@@ -702,7 +707,7 @@ async def graphrag_query(
     primary   = [n for n in reranked if "graph" not in n.get("retrieved_by", "")]
     graph_nbr = [n for n in reranked if "graph" in n.get("retrieved_by", "")]
 
-    context   = _build_context(summaries_used, primary, graph_nbr)
+    context   = _build_context_with_labels(summaries_used, primary, graph_nbr)
     answer    = await _generate(question, context, route, history)
     citations = _extract_citations(answer, reranked)
 
