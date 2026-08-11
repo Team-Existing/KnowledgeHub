@@ -851,7 +851,7 @@ async def ingest_transcript(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    llm_result = await extract_from_transcript(request.content)
+    llm_result = await extract_from_transcript(request.content, source_type=request.source_type)
 
     artifact_id = _stable_id("artifact", f"{request.title}:{request.content}")
     created_at = datetime.utcnow().isoformat()

@@ -49,6 +49,15 @@ async def fetch_url(url: str) -> str:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()
-            return response.text
+            return _extract_main_content(response.text) or response.text
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Could not fetch URL: {exc}")
+
+
+def _extract_main_content(html: str) -> Optional[str]:
+    """Strip HTML to main article text using trafilatura; returns None if extraction fails."""
+    try:
+        import trafilatura
+        return trafilatura.extract(html, include_comments=False, include_tables=True) or None
+    except Exception:
+        return None

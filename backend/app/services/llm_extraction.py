@@ -11,7 +11,8 @@ from app.services import llm_client
 # (llama3.1:8b class) which need more formatting guidance than GPT-4-class models.
 
 _EXTRACTION_SYSTEM = """\
-You are a meeting analyst. Extract structured knowledge from the transcript below.
+You are a knowledge analyst. Extract structured knowledge from the text below.
+The text may be a meeting transcript, an email thread, or a Slack conversation.
 
 OUTPUT RULES — follow exactly:
 1. Return ONLY a single JSON object. No markdown, no code fences, no explanation.
@@ -22,10 +23,10 @@ OUTPUT RULES — follow exactly:
   "risks": [{"risk": "...", "severity": "low|medium|high"}],
   "summary": "..."
 }
-3. decisions: things explicitly agreed or decided in the meeting.
-4. action_items: concrete tasks assigned to a person.
-5. risks: concerns, blockers, or uncertainties raised.
-6. summary: 2-3 sentences covering the main outcome.
+3. decisions: things explicitly agreed, decided, or confirmed — in any format.
+4. action_items: concrete tasks assigned or volunteered by a person.
+5. risks: concerns, blockers, open questions, or uncertainties raised.
+6. summary: 2-3 sentences covering the main outcome or thread conclusion.
 7. Use "" for any unknown field. Never use null.
 8. If nothing fits a category, use an empty array [].
 9. Do NOT wrap the JSON in ```json ... ``` or any other wrapper.\
@@ -48,13 +49,40 @@ def _extract_json(raw: str) -> Dict[str, Any]:
     return json.loads(cleaned)
 
 
-async def extract_from_transcript(text: str, workspace: Optional[Any] = None) -> Dict[str, Any]:
+def _preprocess(text: str, source_type: str = "transcript") -> str:
+    """
+    Normalise source-specific formatting before the LLM sees the content.
+    - email: strip quoted reply chains (lines starting with >) and common headers
+    - slack: convert "Username [timestamp]:" lines to "Username: "
+    - transcript: pass through unchanged
+    """
+    if source_type == "email":
+        lines = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            # drop quoted reply lines and common email header prefixes
+            if stripped.startswith(">") or re.match(r"^(From|To|Cc|Bcc|Date|Subject|Sent):?\ ", stripped, re.IGNORECASE):
+                continue
+            lines.append(line)
+        return "\n".join(lines).strip()
+
+    if source_type == "slack":
+        # "Username  [10:32 AM]" → "Username:"
+        text = re.sub(r"^(.+?)\s+\[\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AP]M)?\]\s*", r"\1: ", text, flags=re.MULTILINE)
+        return text.strip()
+
+    return text.strip()
+
+
+async def extract_from_transcript(text: str, source_type: str = "transcript", workspace: Optional[Any] = None) -> Dict[str, Any]:
+    cleaned = _preprocess(text, source_type)
     content = await llm_client.chat(
         messages=[
             {"role": "system", "content": _EXTRACTION_SYSTEM},
-            {"role": "user", "content": text[:12000]},
+            {"role": "user", "content": cleaned[:12000]},
         ],
         temperature=0,
+        max_tokens=1500,
         json_mode=True,
         workspace=workspace,
     )
