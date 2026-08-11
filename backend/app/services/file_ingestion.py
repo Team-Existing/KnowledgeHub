@@ -15,8 +15,10 @@ async def extract_text_from_upload(file: UploadFile) -> str:
         return _extract_pdf(content)
     if filename.endswith((".txt", ".md")):
         return content.decode("utf-8", errors="replace")
+    if filename.endswith((".docx", ".doc")):
+        return _extract_docx(content)
 
-    raise HTTPException(status_code=415, detail=f"Unsupported file type: {file.filename}")
+    raise HTTPException(status_code=415, detail=f"Unsupported file type: {file.filename}. Supported: PDF, TXT, MD, DOC, DOCX")
 
 
 def _extract_pdf(raw: bytes) -> str:
@@ -29,6 +31,15 @@ def _extract_pdf(raw: bytes) -> str:
         ).strip()
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Could not parse PDF: {exc}")
+
+
+def _extract_docx(raw: bytes) -> str:
+    try:
+        import docx
+        doc = docx.Document(io.BytesIO(raw))
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip()).strip()
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not parse DOC/DOCX: {exc}")
 
 
 async def fetch_url(url: str) -> str:

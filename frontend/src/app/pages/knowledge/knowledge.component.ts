@@ -69,7 +69,7 @@ type Transform = { x: number; y: number; k: number }
             <input [(ngModel)]="fileAuthor" placeholder="Author" />
             <input [(ngModel)]="fileTags" placeholder="Tags, comma separated" />
           </div>
-          <input type="file" accept=".pdf,.txt,.md" style="padding:0.5rem 0" (change)="onFileChange($event)" />
+          <input type="file" accept=".pdf,.txt,.md,.doc,.docx" style="padding:0.5rem 0" (change)="onFileChange($event)" />
           <div class="panel-actions">
             <span *ngIf="error" class="error-text">{{ error }}</span>
             <button class="primary" [disabled]="loading || !fileTitle" (click)="ingestFile()">
