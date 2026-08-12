@@ -1,8 +1,8 @@
 # Knowledge Hubs
 
-A **local-first knowledge graph engine** that converts raw team artifacts — meeting notes, retros, decision logs, project writeups — into structured, queryable operational memory. No SaaS dependency. No data leaves your machine unless you explicitly opt in to OpenAI.
+A **local-first knowledge graph engine** that converts raw team artifacts — meeting notes, retros, decision logs, project writeups — into structured, queryable operational memory. No SaaS dependency. No data leaves your machine.
 
-Under the hood: a **FastAPI** extraction pipeline writes to **Neo4j** (graph + vector store) with **SQLite** as a hot-standby fallback, served through an **Angular 17** SPA. LLM and embedding layers are fully swappable at runtime via env vars — default stack runs 100% offline with **Ollama** + **sentence-transformers**.
+Under the hood: a **FastAPI** extraction pipeline writes to **Neo4j** (graph + vector store) with **SQLite** as a hot-standby fallback, served through an **Angular 17** SPA. Runs 100% offline with **Ollama** (any local model) + **sentence-transformers**.
 
 ---
 
@@ -20,33 +20,38 @@ Under the hood: a **FastAPI** extraction pipeline writes to **Neo4j** (graph + v
 ## Architecture
 
 ```
-Knowledge Hubs
-├── backend/                  FastAPI + extraction pipeline
-│   └── app/
-│       ├── main.py           Routes, CRUD, ingestion orchestration
-│       ├── store.py          Neo4j persistence layer
-│       ├── db.py             SQLite models (SQLAlchemy async)
-│       ├── auth.py           JWT authentication
-│       └── services/
-│           ├── embeddings.py          sentence-transformers / OpenAI
-│           ├── llm_client.py          Ollama / OpenAI router
-│           ├── llm_extraction.py      LLM transcript extraction
-│           ├── graphrag.py            GraphRAG retrieval + generation
-│           ├── knowledge_extraction.py  Rule-based extraction
-│           ├── cross_source_linker.py   Cosine similarity cross-linking
-│           ├── graph_builder.py         Visualization payload builder
-│           ├── neo4j_graph.py           Neo4j graph + vector index
-│           └── okf.py                   OKF import/export
-└── frontend/                 Angular 17 SPA
-    └── src/app/pages/
-        ├── knowledge/         Ingest, browse, graph, artifact CRUD
-        ├── knowledge-detail/  Item detail, edit, relationships
-        ├── search/            Full-text + filtered search
-        ├── review/            Pending item review queue
-        ├── graphrag/          GraphRAG chat with conversation history
-        ├── workspace-settings/ Provider policy + config management
-        ├── model-manager/     Ollama model install/remove/set-default
-        └── onboarding/        First-run hardware detection + setup
+┌─────────────────────────────────────────────────────────────┐
+│                        Browser                              │
+│                    Angular 17 SPA                           │
+│  Ingest · Search · Graph · Review · GraphRAG · Settings     │
+└────────────────────────┬────────────────────────────────────┘
+                         │ HTTP (JWT)
+┌────────────────────────▼────────────────────────────────────┐
+│                   FastAPI Backend                           │
+│                                                             │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐  │
+│  │  Ingestion  │  │  Extraction  │  │     GraphRAG      │  │
+│  │  PDF/TXT/MD │  │  Rule-based  │  │  Vector retrieve  │  │
+│  │  URL / Text │  │  + LLM       │  │  + LLM rerank     │  │
+│  │  Transcript │  │              │  │  + cited answer   │  │
+│  │  Email      │  └──────────────┘  └───────────────────┘  │
+│  │  Slack      │                                            │
+│  └─────────────┘  ┌──────────────┐  ┌───────────────────┐  │
+│                   │  LLM Layer   │  │  Embedding Layer  │  │
+│                   │  (swappable) │  │  (swappable)      │  │
+│                   │  • Ollama    │  │  • sentence-      │  │
+│                   │    any model │  │    transformers   │  │
+│                   └──────────────┘  └───────────────────┘  │
+└──────────┬──────────────────────────────────────────────────┘
+           │
+    ┌──────┴──────┐
+    │             │
+┌───▼───┐   ┌────▼────┐
+│ Neo4j │   │ SQLite  │
+│ Graph │   │Fallback │
+│Vector │   │ Cosine  │
+│ Index │   │ Search  │
+└───────┘   └─────────┘
 ```
 
 ---
@@ -55,15 +60,15 @@ Knowledge Hubs
 
 | Layer | Default | Cloud Upgrade |
 |---|---|---|
-| LLM | Ollama `llama3.1:8b` | `LLM_PROVIDER=openai` |
-| Embeddings | `all-MiniLM-L6-v2` (dim=384) | `EMBEDDING_PROVIDER=openai` (dim=1536) |
+| LLM | Ollama (any model, e.g. `llama3.1:8b`, `mistral`, `phi3`) | — |
+| Embeddings | `all-MiniLM-L6-v2` (dim=384) | — |
 | Graph store | Neo4j | — |
 | Vector fallback | SQLite cosine search | — |
 | Backend | FastAPI + Uvicorn | — |
 | Frontend | Angular 17 | — |
 | Auth | JWT (8h expiry, PBKDF2 key derivation) | — |
 
-Set `ALLOW_CLOUD_PROVIDERS=false` to hard-lock the entire runtime to local-only — no OpenAI calls possible regardless of workspace config.
+Runs fully local — no cloud providers, no outbound calls.
 
 ---
 
@@ -71,26 +76,19 @@ Set `ALLOW_CLOUD_PROVIDERS=false` to hard-lock the entire runtime to local-only 
 
 ```bash
 # 1. env
-cp .env.example .env          # defaults work offline, no keys needed
+cd backend && cp .env.example .env   # then fill in your Neo4j credentials
 
 # 2. local LLM
 ollama pull llama3.1:8b
 
 # 3. backend
-cd backend && python -m venv .venv && .venv\Scripts\activate
+python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 
 # 4. frontend
-cd frontend && npm install && npm start
+cd ../frontend && npm install && npm start
 # → http://localhost:4200
-```
-
-Or just:
-
-```bash
-docker compose up --build
-# frontend → http://localhost:3000  |  backend → http://localhost:8000
 ```
 
 ---
@@ -125,11 +123,8 @@ SQLite commits first, then Neo4j cleanup is attempted. If Neo4j fails, the API r
 **Are artifact IDs stable across re-ingestion?**
 Yes. IDs are SHA-256 hashes of content, so re-ingesting the same document is fully idempotent — no duplicates, no re-extraction.
 
-**How is the OpenAI API key stored?**
-`POST /workspace/api-key` derives a Fernet key from `SECRET_KEY` via PBKDF2 (100k iterations) and stores only the AES-128 ciphertext in `ProviderConfig.config_json`. Plaintext is never written to disk or returned to the client.
-
-**What breaks if I switch embedding providers mid-flight?**
-The Neo4j vector index dimension changes (384 → 1536 for OpenAI). Changing the provider in workspace settings automatically triggers `POST /knowledge/reembed`, which re-vectorizes all items and artifact summaries and rebuilds the index. Old vectors are incompatible and will be replaced.
+**What breaks if I switch embedding models?**
+Changing the model triggers `POST /knowledge/reembed`, which re-vectorizes all items and artifact summaries and rebuilds the Neo4j vector index.
 
 **Is the GraphRAG retrieval semantic or keyword-based?**
 Both. The pipeline retrieves candidate nodes via vector similarity (cosine over stored embeddings), then reranks using the LLM before generating a grounded answer with citations. The retrieval mode is visible in the GraphRAG chat UI.
@@ -138,7 +133,7 @@ Both. The pipeline retrieves candidate nodes via vector similarity (cosine over 
 `POST /knowledge/link` runs pairwise cosine similarity across all knowledge item embeddings from different artifacts. Pairs above a similarity threshold are stored as cross-links and surfaced in item detail views. It's not automatic on ingest — you trigger it explicitly.
 
 **Can this run fully air-gapped?**
-Yes. Default stack: Ollama (local LLM) + sentence-transformers (local embeddings) + Neo4j (local graph) + SQLite (local fallback). Zero outbound calls. Set `ALLOW_CLOUD_PROVIDERS=false` to enforce this at the policy level.
+Yes. Ollama (local LLM) + sentence-transformers (local embeddings) + Neo4j (local graph) + SQLite (local fallback). Zero outbound calls by design.
 
 **What's OKF and why does it matter?**
 Open Knowledge Format — a structured JSON schema for portable knowledge payloads. Import/export endpoints are fully implemented, making workspace migration and air-gapped transfer possible via file. A frontend UI for drag-and-drop OKF transfer is planned.

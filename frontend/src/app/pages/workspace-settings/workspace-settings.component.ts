@@ -31,11 +31,11 @@ interface ProviderConfig {
         </label>
         <div class="form-row">
           <label>Default LLM provider</label>
-          <input [(ngModel)]="settings.default_llm_provider" placeholder="ollama or openai" />
+          <input [(ngModel)]="settings.default_llm_provider" placeholder="ollama" />
         </div>
         <div class="form-row">
           <label>Default embedding provider</label>
-          <input [(ngModel)]="settings.default_embedding_provider" placeholder="local or openai" />
+          <input [(ngModel)]="settings.default_embedding_provider" placeholder="local" />
         </div>
         <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem">
           <button class="primary" (click)="save()" [disabled]="saving || reembedding">
@@ -95,7 +95,7 @@ interface ProviderConfig {
         <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid #e5ecea">
           <h4 style="font-size:0.9rem;margin:0 0 0.75rem">Add configuration</h4>
           <div class="form-row"><label>Type</label><input [(ngModel)]="newConfig.provider_type" placeholder="llm or embedding" /></div>
-          <div class="form-row"><label>Name</label><input [(ngModel)]="newConfig.provider_name" placeholder="ollama, openai, local" /></div>
+          <div class="form-row"><label>Name</label><input [(ngModel)]="newConfig.provider_name" placeholder="ollama, local" /></div>
           <div class="form-row"><label>Model</label><input [(ngModel)]="newConfig.model_name" placeholder="e.g. gpt-4o-mini" /></div>
           <div class="form-row"><label>API Key Ref</label><input [(ngModel)]="newConfig.api_key_ref" placeholder="optional secret ref" /></div>
           <div class="form-row"><label><input type="checkbox" [(ngModel)]="newConfig.is_active" /> Active</label></div>

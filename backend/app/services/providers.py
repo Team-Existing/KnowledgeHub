@@ -31,11 +31,7 @@ EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "local").lower()
 OLLAMA_BASE  = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 
-OPENAI_API_KEY     = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL       = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_EMBED_MODEL = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-3-small")
 LOCAL_EMBED_MODEL  = os.getenv("LOCAL_EMBED_MODEL", "all-MiniLM-L6-v2")
-ALLOW_CLOUD_PROVIDERS = os.getenv("ALLOW_CLOUD_PROVIDERS", "false").lower() in ("1", "true", "yes")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -103,39 +99,7 @@ class OllamaProvider(LLMProvider):
             return None
 
 
-class OpenAILLMProvider(LLMProvider):
-    """Optional cloud LLM via OpenAI API."""
 
-    @property
-    def is_local(self) -> bool:
-        return False
-
-    @property
-    def name(self) -> str:
-        return f"openai:{OPENAI_MODEL}"
-
-    async def chat(
-        self,
-        messages: List[dict],
-        temperature: float = 0,
-        max_tokens: int = 1000,
-        json_mode: bool = False,
-    ) -> Optional[str]:
-        try:
-            from openai import AsyncOpenAI
-            kwargs: dict[str, Any] = dict(
-                model=OPENAI_MODEL,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            if json_mode:
-                kwargs["response_format"] = {"type": "json_object"}
-            r = await AsyncOpenAI(api_key=OPENAI_API_KEY).chat.completions.create(**kwargs)
-            return r.choices[0].message.content.strip()
-        except Exception as exc:
-            logger.warning("OpenAILLMProvider.chat() failed: %s", exc)
-            return None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -198,31 +162,7 @@ class LocalSentenceTransformerProvider(EmbeddingProvider):
             return [None] * len(texts)
 
 
-class OpenAIEmbeddingProvider(EmbeddingProvider):
-    """Optional cloud embeddings via OpenAI text-embedding-3-small."""
 
-    @property
-    def dimensions(self) -> int:
-        return 1536
-
-    @property
-    def is_local(self) -> bool:
-        return False
-
-    @property
-    def name(self) -> str:
-        return f"openai:{OPENAI_EMBED_MODEL}"
-
-    async def embed(self, texts: List[str]) -> List[Optional[List[float]]]:
-        try:
-            from openai import AsyncOpenAI
-            r = await AsyncOpenAI(api_key=OPENAI_API_KEY).embeddings.create(
-                model=OPENAI_EMBED_MODEL, input=[t[:8000] for t in texts]
-            )
-            return [d.embedding for d in r.data]
-        except Exception as exc:
-            logger.warning("OpenAIEmbeddingProvider.embed() failed: %s", exc)
-            return [None] * len(texts)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -235,49 +175,13 @@ def _normalize_provider(name: Optional[str], default: str) -> str:
     return name.strip().lower()
 
 
-def _workspace_allows_cloud(workspace: Optional[Any]) -> bool:
-    if not ALLOW_CLOUD_PROVIDERS:
-        return False
-    if workspace is None:
-        return True
-    return bool(getattr(workspace, "allow_cloud_providers", True))
-
-
 def _resolve_llm(workspace: Optional[Any] = None) -> LLMProvider:
-    configured_model = None
-    # A workspace's active Ollama config can override the process default.
-    # The database object is intentionally not queried here; callers pass the
-    # selected config as an attribute when available.
     configured_model = getattr(workspace, "ollama_model", None) if workspace is not None else None
-    if not _workspace_allows_cloud(workspace):
-        logger.info("Cloud providers disabled by admin kill-switch or workspace policy; using Ollama local provider")
-        return OllamaProvider(configured_model)
-
-    provider_name = _normalize_provider(
-        getattr(workspace, "default_llm_provider", None) or LLM_PROVIDER,
-        "ollama",
-    )
-    if provider_name == "openai" and OPENAI_API_KEY:
-        logger.info("LLM provider: OpenAI (%s)", OPENAI_MODEL)
-        return OpenAILLMProvider()
-
-    logger.info("LLM provider: Ollama (%s)", OLLAMA_MODEL)
+    logger.info("LLM provider: Ollama (%s)", configured_model or OLLAMA_MODEL)
     return OllamaProvider(configured_model)
 
 
 def _resolve_embedding(workspace: Optional[Any] = None) -> EmbeddingProvider:
-    if not _workspace_allows_cloud(workspace):
-        logger.info("Cloud providers disabled by admin kill-switch or workspace policy; using local sentence-transformers")
-        return LocalSentenceTransformerProvider()
-
-    provider_name = _normalize_provider(
-        getattr(workspace, "default_embedding_provider", None) or EMBEDDING_PROVIDER,
-        "local",
-    )
-    if provider_name == "openai" and OPENAI_API_KEY:
-        logger.info("Embedding provider: OpenAI (%s)", OPENAI_EMBED_MODEL)
-        return OpenAIEmbeddingProvider()
-
     logger.info("Embedding provider: local sentence-transformers (%s)", LOCAL_EMBED_MODEL)
     return LocalSentenceTransformerProvider()
 

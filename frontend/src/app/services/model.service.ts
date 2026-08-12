@@ -17,7 +17,7 @@ export interface LocalModel {
 export interface EmbeddingModel {
   id: string
   name: string
-  provider: 'local' | 'openai'
+  provider: 'local'
 }
 
 export interface ModelStatus {
@@ -27,7 +27,7 @@ export interface ModelStatus {
     installed?: boolean
   }
   embedding: {
-    provider: 'local' | 'openai'
+    provider: 'local'
     model?: string
     installed?: boolean
   }

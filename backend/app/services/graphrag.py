@@ -13,8 +13,7 @@ Stages
 8. LLM generation         – grounded answer with multi-turn history support
 
 Embedding and LLM calls are routed through embeddings.py / llm_client.py,
-which default to sentence-transformers + Ollama and upgrade to OpenAI when
-the appropriate env vars are set.
+which default to sentence-transformers + Ollama.
 """
 from __future__ import annotations
 

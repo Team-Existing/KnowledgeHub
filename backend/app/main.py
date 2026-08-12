@@ -196,7 +196,7 @@ async def model_status(
     llm_model = llm.name.split(":", 1)[-1] if ":" in llm.name else llm.name
     return {
         "llm": {"provider": "local" if llm.is_local else "cloud", "model": llm_model, "installed": llm_model in installed_names},
-        "embedding": {"provider": "local" if embedding.is_local else "openai", "model": embedding.name.split(":", 1)[-1] if ":" in embedding.name else embedding.name, "installed": True},
+        "embedding": {"provider": "local", "model": embedding.name.split(":", 1)[-1] if ":" in embedding.name else embedding.name, "installed": True},
     }
 
 

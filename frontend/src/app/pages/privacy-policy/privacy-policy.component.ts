@@ -24,17 +24,7 @@ import { RouterLink } from '@angular/router'
           <div class="highlight">✓ In local mode, zero bytes of your content leave this device.</div>
         </div>
 
-        <div class="card">
-          <h2>🔵 Cloud Mode (Opt-in)</h2>
-          <p>You can optionally switch to OpenAI for embeddings and/or LLM generation in Workspace Settings.</p>
-          <ul>
-            <li>Cloud providers are disabled by default — <code>ALLOW_CLOUD_PROVIDERS=false</code></li>
-            <li>Enabling cloud sends your text to OpenAI's API under their <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">privacy policy</a></li>
-            <li>The provider badge switches to <strong>🔵 Cloud</strong> so you always know when data is leaving</li>
-            <li>API keys are encrypted at rest using Fernet/AES-128 — the plaintext key is never stored on disk</li>
-          </ul>
-          <div class="warning">⚠ Review your cloud provider's data retention and training policies before enabling.</div>
-        </div>
+
 
         <div class="card">
           <h2>🗄 What Is Stored Locally</h2>

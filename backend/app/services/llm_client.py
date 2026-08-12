@@ -1,8 +1,5 @@
 """
-LLM client shim — routes all calls through the active LLMProvider.
-
-Public API is unchanged: callers import and call `chat(...)` as before.
-Provider selection (Ollama default / OpenAI optional) is handled in providers.py.
+LLM client shim — routes all calls through the active LLMProvider (Ollama).
 """
 from __future__ import annotations
 

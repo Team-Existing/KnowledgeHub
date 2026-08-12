@@ -21,6 +21,10 @@ __pycache__/
 .venv2/
 venv/
 
+# Local data — never commit user data or databases
+backend/data/*.db
+backend/data/*.json
+
 # Editor
 .idea/
 .vscode/
