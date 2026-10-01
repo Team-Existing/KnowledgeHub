@@ -1,0 +1,47 @@
+.detail-edit-grid { display: flex; flex-direction: column; gap: 1rem; }
+.form-row { display: flex; flex-direction: column; gap: 0.35rem; }
+.form-row label { font-size: 0.85rem; font-weight: 600; color: #344054; }
+.form-row input, .form-row textarea {
+  border: 1px solid #ddd; border-radius: 6px;
+  font-family: inherit; font-size: 0.875rem; padding: 0.6rem 0.75rem;
+}
+.form-row input:focus, .form-row textarea:focus {
+  outline: none; border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+}
+.hero-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.25rem 0; }
+.chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  border-radius: 999px; font-size: 0.78rem; padding: 0.25rem 0.65rem;
+  font-weight: 500; white-space: nowrap;
+}
+.chip-neutral { background: #f2f4f7; color: #475467; }
+.chip-tag { background: #ede9fe; color: #5b21b6; text-decoration: none; cursor: pointer; }
+.chip-tag:hover { background: #ddd6fe; }
+.chip-link { background: #e0f2fe; color: #0369a1; cursor: pointer; }
+.chip-link:hover { background: #bae6fd; }
+.chip-action { background: #f0fdf4; color: #15803d; cursor: pointer; border: 1px dashed #86efac; }
+.chip-action:hover { background: #dcfce7; }
+.conf-high { background: #dcfce7; color: #15803d; }
+.conf-mid  { background: #fef9c3; color: #854d0e; }
+.conf-low  { background: #fee2e2; color: #991b1b; }
+.conf-bar-wrap { display:inline-block; width:80px; height:6px; background:#e5e7eb; border-radius:3px; vertical-align:middle; margin-left:0.5rem; overflow:hidden; }
+.conf-bar { display:block; height:100%; border-radius:3px; transition:width 0.3s; }
+.conf-bar.conf-high { background:#22c55e; }
+.conf-bar.conf-mid  { background:#eab308; }
+.conf-bar.conf-low  { background:#ef4444; }
+.related-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.related-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.45rem 0.6rem; border-radius: 6px;
+  background: #f8fbfa; border: 1px solid #e5ecea;
+  text-decoration: none; color: inherit;
+  transition: border-color 0.15s;
+}
+.related-row:hover { border-color: #667eea; }
+.related-title { flex: 1; font-size: 0.82rem; font-weight: 500; color: #1f2933; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conf-badge { font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.4rem; border-radius: 4px; flex-shrink: 0; }
+.rel-name-link { color: #667eea; text-decoration: none; font-size: 0.875rem; font-weight: 500; }
+.rel-name-link:hover { text-decoration: underline; }
+:host ::ng-deep .source-preview mark { background: #fef08a; border-radius: 2px; padding: 0 2px; }
+.source-preview { color: #344054; line-height: 1.6; max-height: 360px; overflow: auto; white-space: pre-wrap; font-size: 0.875rem; }

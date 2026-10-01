@@ -1,0 +1,66 @@
+<div class="privacy-shell">
+  <div class="privacy-content">
+    <a routerLink="/knowledge" class="back-link">← Back to hub</a>
+    <h1>Data Privacy &amp; What Leaves Your Device</h1>
+    <p class="lead">Knowledge Hubs is local-first. There are no cloud AI providers: extraction, embeddings and answers are all computed on the machine running the backend.</p>
+
+    <div class="card">
+      <h2>🟢 Local Processing</h2>
+      <p>All AI processing uses <strong>sentence-transformers</strong> for embeddings and <strong>Ollama</strong> for LLM inference, both running locally.</p>
+      <ul>
+        <li>Embeddings are computed locally — no vectors are sent to an AI service</li>
+        <li>GraphRAG queries, extraction, and summarisation all run on-device</li>
+        <li>The provider badge shows <strong>🟢 Local</strong> on every AI-powered screen</li>
+      </ul>
+      <div class="highlight">✓ No content is sent to any AI provider.</div>
+    </div>
+
+    <div class="card">
+      <h2>🌐 Outbound Connections</h2>
+      <ul>
+        <li><strong>ArcadeDB</strong> — all your data goes wherever <code>ARCADEDB_URL</code> points. With ArcadeDB on this machine nothing leaves it; with a remote server, everything you ingest (including embeddings) is stored there</li>
+        <li><strong>URL ingestion</strong> — the server fetches the page you enter (private and loopback addresses are blocked)</li>
+        <li><strong>Model downloads</strong> — pulled from the Ollama registry when you install a model</li>
+      </ul>
+    </div>
+
+
+
+    <div class="card">
+      <h2>🗄 What Is Stored Locally</h2>
+      <ul>
+        <li><strong>ArcadeDB</strong> — the only data store: accounts, artifacts, knowledge items and the links between them, embeddings, search indexes and query logs</li>
+        <li><strong>Browser localStorage</strong> — your JWT auth token only</li>
+        <li><strong>sessionStorage</strong> — GraphRAG chat history (cleared when the tab closes)</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>🔑 Authentication</h2>
+      <ul>
+        <li>Passwords are hashed with bcrypt — never stored in plaintext</li>
+        <li>JWT tokens expire after 8 hours; the server rejects expired tokens and the app then signs you out</li>
+        <li>Tokens are stored in <code>localStorage</code> and cleared on logout or expiry</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>📦 Model Downloads</h2>
+      <ul>
+        <li>Models are pulled from the Ollama registry — only the model binary is downloaded</li>
+        <li>No user content is sent during model download</li>
+        <li>Models are stored on your machine and run entirely offline after download</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>🛡 Your Rights</h2>
+      <ul>
+        <li>You own all data you ingest — delete any artifact or item at any time via the UI or API</li>
+        <li>Full workspace export is available via <code>GET /knowledge/okf/export</code></li>
+        <li>No analytics, telemetry, or third-party tracking are included in this application</li>
+      </ul>
+    </div>
+
+  </div>
+</div>

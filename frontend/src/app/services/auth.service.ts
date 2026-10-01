@@ -1,9 +1,11 @@
 import { Injectable, signal, computed } from '@angular/core'
 import { HttpClient, HttpParams } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
+import { TokenResponse } from '../models/api'
 
 export const API_BASE = ''
 
+// The Authorization header is added by authInterceptor, not per call.
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private _token = signal<string | null>(localStorage.getItem('kh_token'))
@@ -12,15 +14,10 @@ export class AuthService {
 
   constructor(private http: HttpClient) {}
 
-  authHeaders(): Record<string, string> {
-    const t = this._token()
-    return t ? { Authorization: `Bearer ${t}` } : {}
-  }
-
   async login(username: string, password: string): Promise<void> {
     const body = new HttpParams().set('username', username).set('password', password)
-    const data: any = await firstValueFrom(
-      this.http.post(`${API_BASE}/auth/token`, body.toString(), {
+    const data = await firstValueFrom(
+      this.http.post<TokenResponse>(`${API_BASE}/auth/token`, body.toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       })
     )
@@ -28,10 +25,8 @@ export class AuthService {
     this._token.set(data.access_token)
   }
 
-  async register(username: string, password: string, workspace_id?: string): Promise<void> {
-    await firstValueFrom(
-      this.http.post(`${API_BASE}/auth/register`, { username, password, workspace_id: workspace_id || username })
-    )
+  async register(username: string, password: string): Promise<void> {
+    await firstValueFrom(this.http.post(`${API_BASE}/auth/register`, { username, password }))
   }
 
   async registerAndLogin(username: string, password: string): Promise<void> {
@@ -42,29 +37,5 @@ export class AuthService {
   logout(): void {
     localStorage.removeItem('kh_token')
     this._token.set(null)
-  }
-
-  async getWorkspaceSettings(): Promise<any> {
-    return firstValueFrom(this.http.get(`${API_BASE}/workspace/settings`, { headers: this.authHeaders() }))
-  }
-
-  async updateWorkspaceSettings(settings: any): Promise<any> {
-    return firstValueFrom(this.http.patch(`${API_BASE}/workspace/settings`, settings, { headers: this.authHeaders() }))
-  }
-
-  async listProviderConfigs(): Promise<any[]> {
-    return firstValueFrom(this.http.get<any[]>(`${API_BASE}/workspace/provider-configs`, { headers: this.authHeaders() }))
-  }
-
-  async createProviderConfig(body: any): Promise<any> {
-    return firstValueFrom(this.http.post(`${API_BASE}/workspace/provider-configs`, body, { headers: this.authHeaders() }))
-  }
-
-  async updateProviderConfig(id: string, body: any): Promise<any> {
-    return firstValueFrom(this.http.put(`${API_BASE}/workspace/provider-configs/${id}`, body, { headers: this.authHeaders() }))
-  }
-
-  async deleteProviderConfig(id: string): Promise<void> {
-    await firstValueFrom(this.http.delete(`${API_BASE}/workspace/provider-configs/${id}`, { headers: this.authHeaders() }))
   }
 }

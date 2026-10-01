@@ -1,0 +1,8 @@
+<button class="status-badge" [ngClass]="'badge-' + service.statusBadgeColor()"
+  (click)="togglePanel()">
+  {{ service.statusBadgeText() }}
+</button>
+@if (showPanel) {
+  <div class="overlay" (click)="togglePanel()"></div>
+  <app-model-privacy-panel (close)="togglePanel()"></app-model-privacy-panel>
+}

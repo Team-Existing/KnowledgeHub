@@ -1,0 +1,135 @@
+<div class="model-manager">
+  <h1>Model Manager</h1>
+  <p class="muted-text">
+    Knowledge Hubs supports three local models, all run by Ollama on this computer.
+    The one you choose is used for extraction and GraphRAG answers, and stays selected for your future sessions.
+  </p>
+
+  @if (successMsg) {
+    <div class="toast-success">{{ successMsg }}</div>
+  }
+
+  @if (!service.initialized()) {
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>Checking installed models…</p>
+    </div>
+  } @else {
+    <div class="info-card">
+      <div class="info-stat">
+        <div>
+          <p class="info-stat__label">Your model</p>
+          <p class="info-stat__value" [class.info-stat__value--muted]="!activeModel">
+            {{ activeModel?.name || 'None' }}
+          </p>
+        </div>
+        <span [class]="'info-pill info-pill--' + (activeModel ? 'ready' : 'none')">{{ activeModel ? 'Active' : 'Inactive' }}</span>
+      </div>
+      <div class="info-divider"></div>
+      <div class="info-stat">
+        <div>
+          <p class="info-stat__label">Downloaded</p>
+          <p class="info-stat__value">{{ installedCount }} of {{ models.length }}</p>
+        </div>
+      </div>
+      <div class="info-divider"></div>
+      <div class="info-stat">
+        <div>
+          <p class="info-stat__label">System RAM</p>
+          <p class="info-stat__value">{{ ramGb }} GB</p>
+        </div>
+      </div>
+    </div>
+
+    @if (!ollamaReachable) {
+      <div class="warning-banner">
+        ⚠ Ollama is not running. Start it (or run <code>ollama serve</code>) to download or use models.
+      </div>
+    }
+
+    <section class="models-section">
+      <div class="models-grid">
+        @for (model of models; track model.id) {
+          <div class="model-card" [class.is-installed]="model.installed" [class.ram-warn]="tooBig(model)">
+            <div class="model-card-top">
+              <div>
+                <h3>{{ model.name }}</h3>
+                <p class="model-meta">{{ model.size }} · needs {{ model.ramRequired }} RAM</p>
+              </div>
+              <div class="badge-group">
+                @if (model.active) { <span class="badge-default">In use</span> }
+                @else if (model.id === recommended && !model.installed) { <span class="badge-default">Recommended</span> }
+                <span [class]="'install-badge install-badge--' + (model.installed ? 'installed' : 'not-installed')">
+                  {{ model.installed ? '✓ Downloaded' : 'Not downloaded' }}
+                </span>
+              </div>
+            </div>
+            <p class="model-meta">{{ model.description }}</p>
+            @if (tooBig(model)) { <p class="model-meta">⚠ This computer has {{ ramGb }} GB RAM; it may run slowly.</p> }
+
+            @if (busyId === model.id && service.installProgress()) {
+              <div class="progress-wrap">
+                <div class="progress-header">
+                  <span class="progress-status">{{ service.installProgress()?.status || 'Connecting…' }}</span>
+                  <span class="progress-pct">{{ service.installProgress()?.percent ?? 0 }}%</span>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-bar" [style.width.%]="service.installProgress()?.percent ?? 0"></div>
+                </div>
+                @if (service.installProgress()?.total) {
+                  <p class="progress-bytes">
+                    {{ service.installProgress()!.completed / 1073741824 | number:'1.1-1' }} GB
+                    / {{ service.installProgress()!.total / 1073741824 | number:'1.1-1' }} GB
+                  </p>
+                }
+              </div>
+            } @else if (model.installed) {
+              <div class="model-actions">
+                @if (!model.active) {
+                  <button class="btn-primary" [disabled]="!!busyId" (click)="use(model)">Use this model</button>
+                }
+                <button class="btn-danger" [disabled]="!!busyId || installedCount === 1" (click)="remove(model)"
+                        [title]="installedCount === 1 ? 'At least one model must stay downloaded' : ''">
+                  {{ busyId === model.id ? 'Working…' : 'Remove' }}
+                </button>
+              </div>
+            } @else {
+              <button class="btn-primary" [disabled]="!!busyId || !ollamaReachable" (click)="install(model)">
+                {{ busyId ? 'Please wait…' : 'Download' }}
+              </button>
+            }
+
+            @if (errorId === model.id) {
+              <p class="error-text">{{ errorMsg }}</p>
+            }
+          </div>
+        }
+      </div>
+      @if (installedCount === 1) {
+        <p class="muted-text">At least one model must stay downloaded, so the only downloaded model can't be removed.</p>
+      }
+    </section>
+
+    <section class="ingest-panel">
+      <h3>Embeddings</h3>
+      <p class="muted-text">
+        Model: {{ service.modelStatus()?.embedding?.model || 'all-MiniLM-L6-v2' }}.
+        After changing <code>LOCAL_EMBED_MODEL</code> on the server, re-embed so search and GraphRAG
+        compare vectors from the same model.
+      </p>
+      <div class="panel-actions">
+        <button class="primary" (click)="reembed()" [disabled]="reembedding">
+          {{ reembedding ? 'Re-embedding…' : 'Re-embed knowledge base' }}
+        </button>
+      </div>
+      @if (reembedResult) {
+        <p class="muted-text">
+          Re-embedded {{ reembedResult.items_reembedded }} items and
+          {{ reembedResult.summaries_reembedded }} summaries with {{ reembedResult.provider }}
+          ({{ reembedResult.dimensions }} dimensions).
+        </p>
+      }
+      @if (reembedError) { <p class="error-text">{{ reembedError }}</p> }
+    </section>
+  }
+</div>

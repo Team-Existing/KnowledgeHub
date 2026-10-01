@@ -21,7 +21,7 @@ const rootRedirect = () => {
   const token = auth.token()
   const valid = !!token && !jwtExpired(token)
   if (!valid && token) {
-    // Clear the stale token so authGuard and authHeaders don't keep sending it
+    // Clear the stale token so authGuard and authInterceptor don't keep using it
     auth.logout()
   }
   return router.createUrlTree([valid ? '/knowledge' : '/onboarding'])
@@ -35,8 +35,9 @@ export const routes: Routes = [
   { path: 'knowledge/:id', loadComponent: () => import('./pages/knowledge-detail/knowledge-detail.component').then(m => m.KnowledgeDetailComponent), canActivate: [authGuard] },
   { path: 'review', loadComponent: () => import('./pages/review/review.component').then(m => m.ReviewComponent), canActivate: [authGuard] },
   { path: 'search', loadComponent: () => import('./pages/search/search.component').then(m => m.SearchComponent), canActivate: [authGuard] },
+  { path: 'decisions', loadComponent: () => import('./pages/decisions/decisions.component').then(m => m.DecisionsComponent), canActivate: [authGuard] },
+  { path: 'connectors', loadComponent: () => import('./pages/connectors/connectors.component').then(m => m.ConnectorsComponent), canActivate: [authGuard] },
   { path: 'graphrag', loadComponent: () => import('./pages/graphrag/graphrag.component').then(m => m.GraphragComponent), canActivate: [authGuard] },
-  { path: 'workspace-settings', loadComponent: () => import('./pages/workspace-settings/workspace-settings.component').then(m => m.WorkspaceSettingsComponent), canActivate: [authGuard] },
   { path: 'settings/models', loadComponent: () => import('./pages/model-manager/model-manager.component').then(m => m.ModelManagerComponent), canActivate: [authGuard] },
   { path: 'privacy-policy', loadComponent: () => import('./pages/privacy-policy/privacy-policy.component').then(m => m.PrivacyPolicyComponent) },
 ]

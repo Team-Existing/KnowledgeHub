@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 
 def _coerce_string(value: Any, fallback: str = "") -> str:
@@ -22,7 +22,7 @@ def _coerce_tags(value: Any) -> List[str]:
 def _safe_metadata(payload: Dict[str, Any]) -> Dict[str, Any]:
     metadata = dict(payload.get("metadata") or {})
     metadata.setdefault("format", "okf")
-    metadata.setdefault("generated_at", datetime.utcnow().isoformat())
+    metadata.setdefault("generated_at", datetime.now(timezone.utc).isoformat())
     return metadata
 
 
@@ -122,7 +122,7 @@ def export_okf_payload(workspace_id: str, artifacts: List[Dict[str, Any]], knowl
     return {
         "format": "okf",
         "version": "1.0",
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "workspace_id": workspace_id,
         "title": f"Knowledge export for {workspace_id}",
         "content": f"Exported {len(artifacts)} artifacts and {len(knowledge_items)} knowledge items from Knowledge Hubs.",

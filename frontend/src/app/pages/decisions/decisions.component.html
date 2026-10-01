@@ -1,0 +1,63 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h2>{{ register === 'decision' ? 'Decision log' : 'Risk register' }}</h2>
+      <p>{{ register === 'decision'
+        ? 'Every decision, newest first, with what replaced it.'
+        : 'Every risk, and whether it was mitigated or actually happened.' }}</p>
+    </div>
+    <div style="display:flex;gap:0.5rem">
+      <button [class.primary]="register === 'decision'" (click)="switchTo('decision')">Decisions</button>
+      <button [class.primary]="register === 'risk'" (click)="switchTo('risk')">Risks</button>
+    </div>
+  </section>
+
+  <section class="filters" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+    <input [(ngModel)]="query" placeholder="Filter by title or tag" style="flex:1;min-width:200px" />
+    <button [class.primary]="!statusFilter" (click)="statusFilter = ''">All ({{ rows.length }})</button>
+    @for (s of statuses; track s.status) {
+      <button [class.primary]="statusFilter === s.status" (click)="statusFilter = s.status">
+        {{ s.status }} ({{ s.count }})
+      </button>
+    }
+  </section>
+
+  @if (error) { <p class="error-text" style="padding:0 0.25rem">{{ error }}</p> }
+
+  @if (!loading && !error && rows.length === 0) {
+    <section class="empty-state">
+      <h3>No {{ register }}s yet</h3>
+      <p>Ingest meeting notes or connect a source of ADRs, pull requests or issues.</p>
+      <a class="detail-link" routerLink="/connectors">Set up a connector →</a>
+    </section>
+  }
+
+  <div class="review-list">
+    @for (r of visible; track r.item.id) {
+      <div class="review-card">
+        <div class="card-topline">
+          <span class="status-badge" [ngClass]="'status-' + r.item.status">{{ r.item.status }}</span>
+          <span class="muted-text">{{ r.item.date | date:'mediumDate' }}</span>
+          @if (r.item.review_status === 'pending') { <span class="engine-badge">needs review</span> }
+          @for (t of r.item.tags.slice(0, 3); track t) { <span class="engine-badge">#{{ t }}</span> }
+        </div>
+        <h3 style="margin:0.6rem 0 0.25rem;font-size:1rem">
+          <a [routerLink]="['/knowledge', r.item.id]" class="rel-name-link" style="font-size:1rem">{{ r.item.title }}</a>
+        </h3>
+        @if (r.item.details.why) { <p class="muted-text" style="font-size:0.85rem">{{ r.item.details.why }}</p> }
+        @for (x of r.replacedBy; track x.id) {
+          <p style="font-size:0.85rem;margin-top:0.35rem">↳ {{ verb(x.kind) }} by
+            <a [routerLink]="['/knowledge', x.id]" class="rel-name-link">{{ x.title }}</a></p>
+        }
+        @for (x of r.replaces; track x.id) {
+          <p style="font-size:0.85rem;margin-top:0.35rem" class="muted-text">{{ x.kind }}
+            <a [routerLink]="['/knowledge', x.id]" class="rel-name-link">{{ x.title }}</a></p>
+        }
+        @for (x of r.addressedBy; track x.id) {
+          <p style="font-size:0.85rem;margin-top:0.35rem">↳ {{ verb(x.kind) }} —
+            <a [routerLink]="['/knowledge', x.id]" class="rel-name-link">see linked item</a></p>
+        }
+      </div>
+    }
+  </div>
+</div>

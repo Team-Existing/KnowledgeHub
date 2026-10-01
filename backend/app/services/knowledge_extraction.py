@@ -22,16 +22,6 @@ class KnowledgeExtraction:
     best_practice_keywords = ("best practice", "recommended", "should always", "best way", "standard practice")
     lesson_keywords = ("learned", "lesson", "mistake", "next time", "retrospective")
     risk_keywords = ("risk", "concern", "issue", "problem", "blocker", "dependency")
-    success_keywords = ("success", "worked well", "effective", "achieved")
-
-    def extract_entities(self, text: str) -> Dict[str, List[str]]:
-        normalized_text = self._normalize_text(text)
-        return {
-            "people": self._extract_people(normalized_text),
-            "tools": self._extract_tools(normalized_text),
-            "projects": self._extract_projects(normalized_text),
-            "concepts": self._extract_concepts(normalized_text),
-        }
 
     def extract_decisions(self, text: str) -> List[Dict]:
         decisions = []
@@ -106,26 +96,6 @@ class KnowledgeExtraction:
                 }
                 risks.append(normalize_item_details(raw, "risk", "regex"))
         return self._dedupe_dicts(risks, "what")
-
-    def identify_success_factors(self, text: str) -> List[str]:
-        factors = []
-        for sentence in self._sentences(text):
-            if self._contains(sentence, self.success_keywords):
-                factors.append(sentence)
-        return _unique(factors)
-
-    def _extract_people(self, text: str) -> List[str]:
-        return _unique(re.findall(r"\b[A-Z][a-z]+ [A-Z][a-z]+\b", text))
-
-    def _extract_tools(self, text: str) -> List[str]:
-        common_tools = ["Python", "Docker", "Kubernetes", "AWS", "Git", "Jenkins", "Neo4j", "FastAPI", "Next.js"]
-        return [tool for tool in common_tools if re.search(rf"\b{re.escape(tool)}\b", text)]
-
-    def _extract_projects(self, text: str) -> List[str]:
-        return _unique(re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+Project\b", text))
-
-    def _extract_concepts(self, text: str) -> List[str]:
-        return _unique(re.findall(r"\b[A-Z]{2,}\b", text))
 
     def _extract_rationale(self, full_text: str, decision: str) -> str:
         match = re.search(r"\b(because|since|so that|in order to)\b", decision, re.IGNORECASE)

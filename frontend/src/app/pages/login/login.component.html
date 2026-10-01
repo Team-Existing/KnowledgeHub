@@ -1,0 +1,26 @@
+<div class="auth-shell">
+  <div class="auth-card" [class.wide]="stage === 'needs-model'">
+    <h2>Knowledge Hubs</h2>
+
+    @if (stage === 'checking') {
+      <p class="muted-text">Checking for a local AI model…</p>
+    } @else if (stage === 'needs-model' && catalog) {
+      <app-model-setup [catalog]="catalog" (installed)="onInstalled($event)" (retry)="checkModels()" />
+    } @else {
+      <p style="color:#999;font-size:0.875rem;margin-top:-0.25rem">{{ mode === 'login' ? 'Sign in to your workspace' : 'Create a new workspace' }}</p>
+      @if (justInstalled) { <p class="success-text">✓ {{ justInstalled }} is installed. Sign in to start.</p> }
+      <div class="form-stack">
+        <input placeholder="Username" [(ngModel)]="username" class="input-field" />
+        <input placeholder="Password" type="password" [(ngModel)]="password" class="input-field" (keydown.enter)="submit()" />
+      </div>
+      @if (sessionExpired && !error) { <p class="error-text">Your session expired. Please sign in again.</p> }
+      @if (error) { <p class="error-text">{{ error }}</p> }
+      <button class="btn-primary" [disabled]="loading || !username || !password" (click)="submit()">
+        {{ loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account' }}
+      </button>
+      <button class="btn-secondary" (click)="toggleMode()">
+        {{ mode === 'login' ? 'No account? Register' : 'Have an account? Sign in' }}
+      </button>
+    }
+  </div>
+</div>

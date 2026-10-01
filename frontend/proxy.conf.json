@@ -1,7 +1,6 @@
 {
   "/auth":      { "target": "http://localhost:8000", "secure": false },
   "/knowledge": { "target": "http://localhost:8000", "secure": false },
-  "/workspace": { "target": "http://localhost:8000", "secure": false },
   "/models":    { "target": "http://localhost:8000", "secure": false },
   "/health":    { "target": "http://localhost:8000", "secure": false }
 }

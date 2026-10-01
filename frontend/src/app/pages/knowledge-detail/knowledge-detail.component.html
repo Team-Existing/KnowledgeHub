@@ -1,0 +1,141 @@
+<div class="detail-shell">
+  <a class="back-link" routerLink="/knowledge">← Back to hub</a>
+
+  <ng-container *ngIf="error">
+    <section class="empty-state"><h3>Could not load this item</h3><p>{{ error }}</p></section>
+  </ng-container>
+
+  <ng-container *ngIf="!error && !item">
+    <section class="empty-state"><h3>{{ data ? 'Knowledge item not found' : 'Loading…' }}</h3></section>
+  </ng-container>
+
+  <ng-container *ngIf="!error && item">
+    <section class="detail-hero">
+      <div class="detail-title">
+        <span class="type-pill">{{ item.type }}</span>
+        <ng-container *ngIf="!editing; else editTitle">
+          <h2>{{ item.title }}</h2>
+        </ng-container>
+        <ng-template #editTitle>
+          <input [(ngModel)]="editedTitle" style="font-size:1.4rem;font-weight:600;width:100%" />
+        </ng-template>
+      </div>
+
+      <!-- Header chips: skip unknown author, make tags + relationships clickable -->
+      <div class="hero-chips">
+        <span *ngIf="item.author && item.author !== 'unknown'" class="chip chip-neutral">✍ {{ item.author }}</span>
+        <span class="chip chip-neutral">🗓 {{ item.date | date:'mediumDate' }}</span>
+        <span *ngIf="relationships.length > 0" class="chip chip-link" (click)="scrollTo('rels')">🔗 {{ relationships.length }} relationship{{ relationships.length === 1 ? '' : 's' }}</span>
+        <a *ngFor="let tag of item.tags" class="chip chip-tag" [routerLink]="['/search']" [queryParams]="{tag: tag}">#{{ tag }}</a>
+        <span *ngIf="item.tags.length === 0" class="chip chip-action" (click)="startEdit()">+ Add tags</span>
+        <span *ngIf="confidence !== null" class="chip" [ngClass]="confidenceClass">{{ confidence }}% confidence</span>
+        <span *ngIf="item.status" class="status-badge chip-link" [ngClass]="'status-' + item.status" (click)="scrollTo('history')">{{ item.status }}</span>
+      </div>
+
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <ng-container *ngIf="!editing">
+          <button (click)="startEdit()">Edit</button>
+          <button class="danger" (click)="deleteItem()" [disabled]="deleting">{{ deleting ? 'Deleting…' : 'Delete item' }}</button>
+        </ng-container>
+        <ng-container *ngIf="editing">
+          <button class="primary" (click)="saveItem()" [disabled]="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+          <button (click)="editing = false">Cancel</button>
+        </ng-container>
+        <span *ngIf="crudError" class="error-text">{{ crudError }}</span>
+      </div>
+    </section>
+
+    <!-- Edit form -->
+    <section *ngIf="editing" class="detail-panel">
+      <h3>Edit Item</h3>
+      <div class="detail-edit-grid">
+        <div class="form-row">
+          <label>Tags <span class="muted-text">(comma-separated)</span></label>
+          <input [(ngModel)]="editedTagsRaw" placeholder="tag1, tag2" />
+        </div>
+        <div class="form-row">
+          <label>Details <span class="muted-text">(JSON)</span></label>
+          <textarea [(ngModel)]="editedDetailsRaw" rows="6" style="font-family:monospace;font-size:0.8rem"></textarea>
+          <span *ngIf="detailsParseError" class="error-text">{{ detailsParseError }}</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="detail-grid">
+      <!-- Left: extracted details, deduplicated, steps hidden when empty -->
+      <section class="detail-panel">
+        <h3>Extracted Details</h3>
+        <p *ngIf="cleanDetailEntries.length === 0" class="muted-text">No structured detail was captured.</p>
+        <dl *ngIf="cleanDetailEntries.length > 0" class="detail-fields">
+          <div *ngFor="let entry of cleanDetailEntries">
+            <dt>
+              {{ humanize(entry.key) }}
+              <span *ngIf="entry.key === 'confidence'" class="conf-bar-wrap">
+                <span class="conf-bar" [style.width]="entry.value + '%'" [ngClass]="confidenceClass"></span>
+              </span>
+            </dt>
+            <dd *ngIf="entry.key !== 'confidence'">{{ formatValue(entry.value) }}</dd>
+            <dd *ngIf="entry.key === 'confidence'" [ngClass]="confidenceClass" style="font-weight:600">{{ entry.value }}%</dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- Right: source artifact + related items -->
+      <aside class="detail-panel">
+        <h3>Source Artifact</h3>
+        <ng-container *ngIf="artifact; else noArtifact">
+          <div class="artifact-summary">
+            <div class="artifact-icon">📄</div>
+            <div>
+              <h4>{{ artifact.title }}</h4>
+              <p *ngIf="artifact.author && artifact.author !== 'unknown'">by {{ artifact.author }}</p>
+              <p>{{ artifact.source }}</p>
+            </div>
+          </div>
+        </ng-container>
+        <ng-template #noArtifact>
+          <p class="muted-text">No source artifact found.</p>
+        </ng-template>
+
+        <!-- Related items moved here to fill the space -->
+        <ng-container *ngIf="relatedItems.length > 0">
+          <h4 style="margin:1.25rem 0 0.6rem;font-size:0.875rem;color:#344054">Related Items</h4>
+          <div class="related-list">
+            <a *ngFor="let r of relatedItems" class="related-row" [routerLink]="['/knowledge', r.item.id]">
+              <span class="type-pill" style="font-size:0.7rem">{{ r.item.type }}</span>
+              <span class="related-title">{{ r.item.title }}</span>
+              <span class="conf-badge" [ngClass]="scoreClass(r.score)">{{ (r.score * 100).toFixed(0) }}%</span>
+            </a>
+          </div>
+        </ng-container>
+      </aside>
+    </div>
+
+    <!-- Status, decision chain, lineage links and event history -->
+    <app-item-lineage [item]="item" [items]="data?.knowledge_items ?? []" (changed)="load()"></app-item-lineage>
+
+    <!-- Relationships: resolved name + link instead of raw ID -->
+    <section id="rels" class="detail-panel">
+      <h3>Relationships</h3>
+      <ng-container *ngIf="relationships.length > 0; else noRels">
+        <div class="relationship-table">
+          <div *ngFor="let edge of relationships">
+            <span>{{ edge.from === item.id ? 'Outgoing' : 'Incoming' }}</span>
+            <strong>{{ edge.type }}</strong>
+            <a *ngIf="resolveNode(edge) as node" [routerLink]="node.route" class="rel-name-link">{{ node.label }}</a>
+            <span *ngIf="!resolveNode(edge)" class="muted-text" style="font-size:0.8rem">{{ edge.from === item.id ? edge.to : edge.from }}</span>
+          </div>
+        </div>
+      </ng-container>
+      <ng-template #noRels>
+        <p class="muted-text">No relationships recorded for this item yet.</p>
+      </ng-template>
+    </section>
+
+    <!-- Source preview with evidence highlighting -->
+    <section *ngIf="artifact" class="detail-panel">
+      <h3>Source Preview</h3>
+      <div class="source-preview" [innerHTML]="highlightedContent"></div>
+    </section>
+  </ng-container>
+</div>

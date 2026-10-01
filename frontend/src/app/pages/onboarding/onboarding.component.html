@@ -1,0 +1,63 @@
+<div class="onboarding-container">
+  <div class="onboarding-content">
+    @if (step === 'welcome') {
+      <div class="step">
+        <h1>Welcome to Knowledge Hubs</h1>
+        <p class="step-number">Step 1 of {{ steps.length }}</p>
+        <div class="welcome-message">
+          <p>Knowledge Hubs runs fully on your machine.</p>
+          <p><strong>No API key needed.</strong></p>
+          <p>Your data stays private. All AI processing happens locally.</p>
+        </div>
+        <button class="btn-primary" [disabled]="checking" (click)="start()">
+          {{ checking ? 'Checking this computer…' : 'Get Started' }}
+        </button>
+        <p class="info-text">Already have an account? <a routerLink="/login">Sign in</a></p>
+      </div>
+    }
+
+    @if (step === 'model' && catalog) {
+      <div class="step">
+        <p class="step-number">Step {{ stepNumber }} of {{ steps.length }}</p>
+        <app-model-setup [catalog]="catalog" (installed)="onInstalled()" (retry)="refreshCatalog()" />
+      </div>
+    }
+
+    @if (step === 'account') {
+      <div class="step">
+        <h1>Create Your Account</h1>
+        <p class="step-number">Step {{ stepNumber }} of {{ steps.length }}</p>
+
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" [(ngModel)]="username" placeholder="Choose a username" class="input-field" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" [(ngModel)]="password" placeholder="Choose a password" class="input-field" />
+        </div>
+
+        @if (setupError) { <p class="error-text">{{ setupError }}</p> }
+
+        <div class="step-actions">
+          <button class="btn-secondary" (click)="step = 'welcome'">Back</button>
+          <button class="btn-primary" [disabled]="!username || !password || isCreating" (click)="createAccount()">
+            {{ isCreating ? 'Creating Account...' : 'Create Account' }}
+          </button>
+        </div>
+      </div>
+    }
+
+    @if (step === 'done') {
+      <div class="step">
+        <h1>You're All Set! 🎉</h1>
+        <div class="welcome-message">
+          <p>Your knowledge hub is ready to use.</p>
+          <p>Start by ingesting your first document or transcript. You can download or switch
+            models any time in <strong>Models</strong>.</p>
+        </div>
+        <button class="btn-primary" (click)="goToApp()">Go to Knowledge Hub</button>
+      </div>
+    }
+  </div>
+</div>

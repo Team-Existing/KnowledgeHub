@@ -7,8 +7,11 @@ get_embedding_provider() to obtain the active singleton.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import threading
+from contextvars import ContextVar
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
@@ -30,6 +33,9 @@ EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "local").lower()
 
 OLLAMA_BASE  = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+# Ollama's default context (2-4k tokens) silently truncates long prompts;
+# extraction sends up to ~3k tokens of input plus a 1.5k-token reply.
+OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
 
 LOCAL_EMBED_MODEL  = os.getenv("LOCAL_EMBED_MODEL", "all-MiniLM-L6-v2")
 
@@ -84,7 +90,11 @@ class OllamaProvider(LLMProvider):
                 "model": self.model,
                 "messages": messages,
                 "stream": False,
-                "options": {"temperature": temperature, "num_predict": max_tokens},
+                "options": {
+                    "temperature": temperature,
+                    "num_predict": max_tokens,
+                    "num_ctx": OLLAMA_NUM_CTX,
+                },
             }
             if json_mode:
                 payload["format"] = "json"
@@ -127,16 +137,19 @@ class LocalSentenceTransformerProvider(EmbeddingProvider):
     """Default local embeddings via sentence-transformers (all-MiniLM-L6-v2)."""
 
     _model: Any = None
+    _load_lock = threading.Lock()  # encode() now runs in worker threads
 
     def _load(self) -> Any:
-        if self.__class__._model is None:
+        with self._load_lock:
+            if self.__class__._model is not None:
+                return self.__class__._model
             try:
                 from sentence_transformers import SentenceTransformer
                 self.__class__._model = SentenceTransformer(LOCAL_EMBED_MODEL)
                 logger.info("sentence-transformers loaded: %s", LOCAL_EMBED_MODEL)
             except Exception as exc:
                 logger.warning("sentence-transformers unavailable: %s", exc)
-        return self.__class__._model
+            return self.__class__._model
 
     @property
     def dimensions(self) -> int:
@@ -150,7 +163,7 @@ class LocalSentenceTransformerProvider(EmbeddingProvider):
     def name(self) -> str:
         return f"local:{LOCAL_EMBED_MODEL}"
 
-    async def embed(self, texts: List[str]) -> List[Optional[List[float]]]:
+    def _encode(self, texts: List[str]) -> List[Optional[List[float]]]:
         model = self._load()
         if model is None:
             return [None] * len(texts)
@@ -160,6 +173,11 @@ class LocalSentenceTransformerProvider(EmbeddingProvider):
         except Exception as exc:
             logger.warning("LocalSentenceTransformerProvider.embed() failed: %s", exc)
             return [None] * len(texts)
+
+    async def embed(self, texts: List[str]) -> List[Optional[List[float]]]:
+        # encode() is CPU-bound and synchronous; run it (and the first-call
+        # model load) in a worker thread so it doesn't stall the event loop.
+        return await asyncio.to_thread(self._encode, texts)
 
 
 
@@ -175,10 +193,23 @@ def _normalize_provider(name: Optional[str], default: str) -> str:
     return name.strip().lower()
 
 
+# The signed-in user's chosen model for the current request (or background job).
+# Set by auth.get_current_user and by jobs that run on a user's behalf.
+_active_model: ContextVar[Optional[str]] = ContextVar("active_llm_model", default=None)
+
+
+def use_model(model_id: Optional[str]) -> None:
+    """Route this request's LLM calls to `model_id` (None = the OLLAMA_MODEL default)."""
+    _active_model.set(model_id or None)
+
+
+def active_model() -> str:
+    return _active_model.get() or OLLAMA_MODEL
+
+
 def _resolve_llm(workspace: Optional[Any] = None) -> LLMProvider:
     configured_model = getattr(workspace, "ollama_model", None) if workspace is not None else None
-    logger.info("LLM provider: Ollama (%s)", configured_model or OLLAMA_MODEL)
-    return OllamaProvider(configured_model)
+    return OllamaProvider(configured_model or active_model())
 
 
 def _resolve_embedding(workspace: Optional[Any] = None) -> EmbeddingProvider:

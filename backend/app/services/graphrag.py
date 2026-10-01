@@ -17,16 +17,21 @@ which default to sentence-transformers + Ollama.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import math
+import os
 import re
 import time
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from app.services import embeddings as emb
 from app.services import llm_client
+
+if TYPE_CHECKING:
+    from app.repositories.graph import GraphStore
 
 logger = logging.getLogger(__name__)
 
@@ -148,15 +153,17 @@ _ROUTE_EXEMPLARS: Dict[str, List[str]] = {
 _exemplar_vecs: Optional[Dict[str, List[List[float]]]] = None
 
 
-async def _get_exemplar_vecs() -> Dict[str]:
+async def _get_exemplar_vecs() -> Dict[str, List[List[float]]]:
     """Lazily embed route exemplars once and cache them."""
     global _exemplar_vecs
     if _exemplar_vecs is not None:
         return _exemplar_vecs
-    result: Dict[str] = {}
-    for route, phrases in _ROUTE_EXEMPLARS.items():
-        vecs = await emb.embed_batch(phrases)
-        result[route] = [v for v in vecs if v is not None]
+    phrases = [(route, p) for route, ps in _ROUTE_EXEMPLARS.items() for p in ps]
+    vecs = await emb.embed_batch([p for _, p in phrases])
+    result: Dict[str, List[List[float]]] = {route: [] for route in _ROUTE_EXEMPLARS}
+    for (route, _), vec in zip(phrases, vecs):
+        if vec is not None:
+            result[route].append(vec)
     _exemplar_vecs = result
     return result
 
@@ -168,14 +175,13 @@ def _cosine_simple(a: List[float], b: List[float]) -> float:
     return dot / (na * nb) if na and nb else 0.0
 
 
-async def _route_by_embedding(question: str) -> Optional[str]:
+async def _route_by_embedding(q_vec: Optional[List[float]]) -> Optional[str]:
     """
     Classify query intent using embedding similarity against route exemplars.
     Returns a route label when confidence is clear (best score > 0.55 and
     margin over second-best > 0.05), otherwise returns None so the caller
     can fall back to LLM classification.
     """
-    q_vec = await emb.embed(question)
     if q_vec is None:
         return None
     exemplars = await _get_exemplar_vecs()
@@ -201,9 +207,12 @@ def route_query(question: str) -> str:
     return "exploratory"
 
 
-async def route_query_llm(question: str) -> str:
+async def route_query_llm(question: str, q_vec: Optional[List[float]] = None) -> str:
+    """q_vec: the question's embedding, if the caller already has it."""
     # Phase 3: try embedding-similarity classifier first to save an LLM call
-    embedding_route = await _route_by_embedding(question)
+    if q_vec is None:
+        q_vec = await emb.embed(question)
+    embedding_route = await _route_by_embedding(q_vec)
     if embedding_route:
         return embedding_route
 
@@ -232,76 +241,15 @@ async def route_query_llm(question: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. BM25 index (in-memory)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _tokenise(text: str) -> List[str]:
-    return re.findall(r"[a-zA-Z0-9]{2,}", text.lower())
-
-
-def _build_bm25_scores(
-    query_tokens: List[str],
-    items: List[Dict[str, Any]],
-    k1: float = 1.5,
-    b: float = 0.75,
-) -> List[Tuple[float, Dict[str, Any]]]:
-    if not query_tokens or not items:
-        return []
-    corpus = [_tokenise(_item_text(i)) for i in items]
-    avg_dl = sum(len(d) for d in corpus) / max(len(corpus), 1)
-    df: Dict[str, int] = defaultdict(int)
-    for doc in corpus:
-        for t in set(doc):
-            df[t] += 1
-    N = len(corpus)
-    idf = {t: math.log((N - df[t] + 0.5) / (df[t] + 0.5) + 1) for t in df}
-    scored = []
-    for item, doc in zip(items, corpus):
-        tf_map: Dict[str, int] = defaultdict(int)
-        for t in doc:
-            tf_map[t] += 1
-        dl = len(doc)
-        score = sum(
-            idf[t] * (tf_map.get(t, 0) * (k1 + 1))
-            / (tf_map.get(t, 0) + k1 * (1 - b + b * dl / avg_dl))
-            for t in query_tokens if t in idf
-        )
-        if score > 0:
-            scored.append((score, item))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return scored
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 5. Cosine vector search (SQLite fallback)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _cosine(a: List[float], b: List[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(x * x for x in b))
-    return dot / (na * nb) if na and nb else 0.0
-
-
-def _sqlite_vector_search(
-    query_vec: List[float],
-    items: List[Dict[str, Any]],
-    top_k: int,
-) -> List[Tuple[float, Dict[str, Any]]]:
-    scored = [
-        (_cosine(query_vec, item["embedding"]), item)
-        for item in items
-        if item.get("embedding") and len(item["embedding"]) == len(query_vec)
-    ]
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return scored[:top_k]
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 6. Reciprocal Rank Fusion
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _rrf(ranked_lists: List[List[Dict[str, Any]]], k: int = 60) -> List[Dict[str, Any]]:
+    """
+    Fuse ranked lists with RRF. `rrf_score` is normalised to [0, 1] by the
+    best achievable score (rank 1 in every list), so thresholds mean the same
+    thing whether one list or several were fused.
+    """
     scores: Dict[str, float] = defaultdict(float)
     items_by_id: Dict[str, Dict[str, Any]] = {}
     for ranked in ranked_lists:
@@ -312,49 +260,33 @@ def _rrf(ranked_lists: List[List[Dict[str, Any]]], k: int = 60) -> List[Dict[str
             scores[iid] += 1.0 / (k + rank)
             items_by_id[iid] = item
     merged = sorted(items_by_id.values(), key=lambda i: scores[i["id"]], reverse=True)
+    max_score = len(ranked_lists) / (k + 1)
     for item in merged:
-        item["rrf_score"] = scores[item["id"]]
+        item["rrf_score"] = scores[item["id"]] / max_score if max_score else 0.0
     return merged
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 7. Graph expansion (SQLite cross-link fallback)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _sqlite_graph_expand(
-    seed_ids: List[str],
-    cross_links: List[Dict[str, Any]],
-    item_map: Dict[str, Dict[str, Any]],
-    seed_scores: Dict[str, float],
-) -> List[Dict[str, Any]]:
-    seen = set(seed_ids)
-    expanded: List[Dict[str, Any]] = []
-    for link in cross_links:
-        a, b = link["item_id_a"], link["item_id_b"]
-        candidate_id = b if a in seed_ids and b not in seen else (
-            a if b in seed_ids and a not in seen else None
-        )
-        source_id = a if candidate_id == b else b
-        if candidate_id and candidate_id in item_map:
-            seen.add(candidate_id)
-            expanded.append({
-                **item_map[candidate_id],
-                "rrf_score": seed_scores.get(source_id, 0.0) * 0.7,
-                "retrieved_by": "sqlite_graph",
-            })
-    return sorted(expanded, key=lambda n: n.get("rrf_score") or 0.0, reverse=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. LLM reranking
 # ─────────────────────────────────────────────────────────────────────────────
 
+# GRAPHRAG_RERANK=off skips the LLM rerank entirely (RRF order is used).
+RERANK_ENABLED = os.getenv("GRAPHRAG_RERANK", "on").lower() not in ("0", "off", "false", "no")
+# Only worth an LLM call when there is a real choice to make: with at most
+# top_n * RERANK_MIN_RATIO candidates, the RRF order is kept as-is.
+RERANK_MIN_RATIO = 2
+
+
+def should_rerank(n_candidates: int, top_n: int) -> bool:
+    return RERANK_ENABLED and n_candidates > top_n * RERANK_MIN_RATIO
+
+
 async def rerank(
     question: str,
     candidates: List[Dict[str, Any]],
     top_n: int = 8,
 ) -> List[Dict[str, Any]]:
-    if len(candidates) <= top_n:
+    if not should_rerank(len(candidates), top_n):
         return candidates[:top_n]
 
     snippets = [
@@ -414,7 +346,10 @@ def _build_context(
             title = n.get("title") or n.get("label", "")
             kind  = n.get("kind") or n.get("type", "")
             score = n.get("rrf_score") or n.get("score") or 0.0
-            lines.append(f"[{nid}] ({kind}) relevance={score:.3f}: {title}")
+            status = f" status={n['status']}" if n.get("status") else ""
+            lines.append(f"[{nid}] ({kind}{status}) relevance={score:.3f}: {title}")
+            for succ in n.get("replaced_by") or []:
+                lines.append(f"  replaced_by: [{succ['id']}] ({succ['kind']}) {succ.get('title') or ''}")
             for k, v in (n.get("details") or {}).items():
                 if isinstance(v, str) and v and k not in ("evidence", "confidence"):
                     lines.append(f"  {k}: {v}")
@@ -422,7 +357,8 @@ def _build_context(
     if graph_neighbours:
         lines = ["=== RELATED CONTEXT (graph) ==="]
         for n in graph_neighbours:
-            lines.append(f"[{n.get('id','?')}] ({n.get('kind') or n.get('type','')}): {n.get('title') or n.get('label','')}")
+            status = f" status={n['status']}" if n.get("status") else ""
+            lines.append(f"[{n.get('id','?')}] ({n.get('kind') or n.get('type','')}{status}): {n.get('title') or n.get('label','')}")
         parts.append("\n".join(lines))
     return "\n\n".join(parts)
 
@@ -440,7 +376,12 @@ async def _generate(
     system = _SYSTEM.get(route, _SYSTEM["factual"])
     system += """
     
-When citing sources, use the format [Title] where Title is the name of the artifact or knowledge item.
+When citing sources, copy the exact bracketed id shown before each context entry, e.g. [decision_1a2b3c4d5e6f].
+Never cite by title and never shorten or invent ids.
+
+Entries marked status=superseded or status=reversed are history, not current policy.
+Never present them as the current decision: give the decision that replaced them
+(named in "replaced_by") as current, and mention the older one only as background.
 
 Format your answer as a well-structured response:
 - Use bullet points for lists
@@ -501,17 +442,21 @@ def _format_fallback_answer(question: str, context: str) -> str:
             if len(parts) == 2:
                 meta = parts[0].strip()
                 content_text = parts[1].strip()
-                
-                # Extract type from meta
-                if "(best-practice)" in meta:
+
+                # Extract type (and lifecycle status, if any) from "[id] (type status=x) relevance=…"
+                m = re.match(r"\[[^\]]*\]\s*\(([\w-]+)(?:\s+status=(\w+))?\)", meta)
+                kind, status = (m.group(1), m.group(2)) if m else ("", None)
+                if status in ("superseded", "reversed"):
+                    content_text = f"{content_text} _({status})_"
+                if kind == "best-practice":
                     best_practices.append(content_text)
-                elif "(how-to)" in meta:
+                elif kind == "how-to":
                     how_tos.append(content_text)
-                elif "(lesson)" in meta:
+                elif kind == "lesson":
                     lessons.append(content_text)
-                elif "(decision)" in meta:
+                elif kind == "decision":
                     decisions.append(content_text)
-                elif "(risk)" in meta:
+                elif kind == "risk":
                     risks.append(content_text)
     
     # Build formatted answer
@@ -558,31 +503,39 @@ def _format_fallback_answer(question: str, context: str) -> str:
 # 11. Citation extraction
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _extract_citations(answer: str, nodes: List[Dict[str, Any]]) -> List[str]:
-    brackets = re.findall(r"\[([^\]]+)\]", answer)
+def _extract_citations(
+    answer: str,
+    nodes: List[Dict[str, Any]],
+    summaries: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, str]]:
+    """
+    Citation format is the full id in brackets — `[item_id]` for knowledge
+    items, `[artifact_id]` for artifact summaries — exactly as written by
+    _build_context. Only exact matches against the supplied context count.
+    """
+    by_id: Dict[str, Dict[str, str]] = {}
+    for n in nodes:
+        nid = n.get("id")
+        if nid:
+            by_id[nid] = {
+                "id": nid,
+                "title": n.get("title") or n.get("label") or nid,
+                "type": n.get("kind") or n.get("type") or "item",
+            }
+    for s in summaries or []:
+        aid = s.get("artifact_id")
+        if aid and aid not in by_id:
+            by_id[aid] = {"id": aid, "title": s.get("title") or aid, "type": "artifact"}
+
     cited: List[Dict[str, str]] = []
     seen_ids = set()
-    short_map: Dict[str, Dict[str, Any]] = {}
-    for node in nodes:
-        nid = node.get("id", "")
-        if not nid:
-            continue
-        parts = nid.split("_")
-        if len(parts) >= 2:
-            short_map[parts[-1][:6]] = node
-    for token in brackets:
-        matched_node = next((n for n in nodes if n.get("id") == token), None)
-        if not matched_node:
-            matched_node = short_map.get(token[:6])
-        if matched_node:
-            nid = matched_node["id"]
-            if nid not in seen_ids:
-                seen_ids.add(nid)
-                cited.append({
-                    "id": nid,
-                    "title": matched_node.get("title") or matched_node.get("label") or nid,
-                    "type": matched_node.get("kind") or matched_node.get("type") or "item"
-                })
+    for token in re.findall(r"\[([^\]]+)\]", answer):
+        # tolerate "[id1, id2]" groupings
+        for part in token.split(","):
+            cid = part.strip()
+            if cid in by_id and cid not in seen_ids:
+                seen_ids.add(cid)
+                cited.append(by_id[cid])
     return cited
 
 
@@ -592,81 +545,63 @@ def _extract_citations(answer: str, nodes: List[Dict[str, Any]]) -> List[str]:
 
 async def graphrag_query(
     question: str,
-    neo4j_store,
-    fallback_items: Optional[List[Dict[str, Any]]] = None,
-    cross_links:    Optional[List[Dict[str, Any]]] = None,
-    artifact_summaries: Optional[List[Dict[str, Any]]] = None,
-    history:        Optional[List[Dict[str, str]]] = None,
-    top_k:          int = 8,
+    store: GraphStore,
+    user_id: str,
+    history: Optional[List[Dict[str, str]]] = None,
+    top_k: int = 8,
 ) -> Dict[str, Any]:
     t0 = time.monotonic()
+    timings: Dict[str, int] = {}
+    mark = [t0]
 
-    transformed = await transform_query(question)
+    def lap(stage: str) -> None:
+        now = time.monotonic()
+        timings[stage] = int((now - mark[0]) * 1000)
+        mark[0] = now
+
+    async def embed_and_route() -> Tuple[Optional[List[float]], str]:
+        q_vec = await emb.embed(question)
+        return q_vec, await route_query_llm(question, q_vec)
+
+    # Query transformation (LLM) and routing depend only on the question, so
+    # they run concurrently; routing reuses the question embedding.
+    transformed, (q_vec, route) = await asyncio.gather(transform_query(question), embed_and_route())
     sub_queries  = transformed["sub_queries"]
     hyde_doc     = transformed["hyde_doc"]
+    lap("transform_route")
 
-    route = await route_query_llm(question)
+    # Every other text that needs an embedding goes in one batch.
+    hyde_texts = [hyde_doc] if hyde_doc != question else []
+    sub_texts = [sq for sq in sub_queries[1:3] if sq != question]
+    batch = hyde_texts + sub_texts
+    batch_vecs = await emb.embed_batch(batch) if batch else []
+    hyde_vec = batch_vecs[0] if hyde_texts and batch_vecs else None
+    sub_vecs = batch_vecs[len(hyde_texts):]
+    query_vecs = [v for v in (q_vec, hyde_vec) if v is not None]
+    lap("embed")
 
-    all_context_nodes: List[Dict[str, Any]] = []
-    retrieval_mode = "none"
-    summaries_used: List[Dict[str, Any]] = []
-
-    query_vecs = [v for v in [
-        await emb.embed(question),
-        await emb.embed(hyde_doc) if hyde_doc != question else None,
-    ] if v is not None]
-
-    # ── PRIMARY: Neo4j ──────────────────────────────────────────────────────
-    if neo4j_store.enabled and query_vecs:
-        vec_lists: List[List[Dict[str, Any]]] = []
-        for qv in query_vecs:
-            hits = neo4j_store.retrieve_for_rag(qv, top_k=top_k)
+    # Ranked lists to fuse: vector seeds + their graph neighbourhood for the
+    # question and HyDE vectors, plain vector hits for sub-queries, and a
+    # full-text keyword list for exact-term recall.
+    ranked_lists: List[List[Dict[str, Any]]] = []
+    for qv in query_vecs:
+        hits = await store.retrieve_for_rag(user_id, qv, top_k=top_k)
+        if hits:
+            ranked_lists.append(hits)
+    for sqv in sub_vecs:
+        if sqv:
+            hits = await store.vector_search(user_id, sqv, top_k=max(top_k // 2, 1))
             if hits:
-                vec_lists.append(hits)
-        for sq in sub_queries[1:3]:
-            sqv = await emb.embed(sq)
-            if sqv:
-                hits = neo4j_store.vector_search(sqv, top_k=top_k // 2)
-                if hits:
-                    vec_lists.append(hits)
-        if vec_lists:
-            all_context_nodes = _rrf(vec_lists)
-            retrieval_mode = "neo4j_graphrag_fusion"
-        if query_vecs:
-            summaries_used = neo4j_store.summary_vector_search(query_vecs[0], top_k=3)
+                ranked_lists.append([{**h, "retrieved_by": "vector"} for h in hits])
+    keyword_hits = await store.keyword_search(user_id, question, top_k=top_k)
+    if keyword_hits:
+        ranked_lists.append([{**h, "retrieved_by": "keyword"} for h in keyword_hits])
 
-    # ── FALLBACK: SQLite ────────────────────────────────────────────────────
-    if not all_context_nodes and fallback_items:
-        item_map = {i["id"]: i for i in fallback_items}
-        vec_lists = []
-        for qv in query_vecs:
-            hits = _sqlite_vector_search(qv, fallback_items, top_k)
-            if hits:
-                vec_lists.append([{**item, "score": score, "retrieved_by": "sqlite_vector"}
-                                   for score, item in hits])
-        q_tokens = _tokenise(question)
-        bm25_hits = _build_bm25_scores(q_tokens, fallback_items)
-        if bm25_hits:
-            vec_lists.append([{**item, "score": score, "retrieved_by": "bm25"}
-                               for score, item in bm25_hits[:top_k]])
-        if vec_lists:
-            fused = _rrf(vec_lists)
-            seed_ids    = [n["id"] for n in fused[:top_k]]
-            seed_scores = {n["id"]: n.get("rrf_score", 0.0) for n in fused[:top_k]}
-            neighbours: List[Dict[str, Any]] = []
-            if cross_links:
-                neighbours = _sqlite_graph_expand(seed_ids, cross_links, item_map, seed_scores)
-            seen = {n["id"] for n in fused}
-            for nb in neighbours:
-                if nb["id"] not in seen:
-                    seen.add(nb["id"])
-                    fused.append(nb)
-            all_context_nodes = fused
-            retrieval_mode = "sqlite_fusion_graph" if query_vecs else "bm25_graph"
-        if artifact_summaries and query_vecs:
-            sv = _sqlite_vector_search(query_vecs[0], artifact_summaries, 3)
-            summaries_used = [item for _, item in sv]
+    all_context_nodes: List[Dict[str, Any]] = _rrf(ranked_lists) if ranked_lists else []
+    retrieval_mode = "graph_vector_keyword" if all_context_nodes else "none"
+    summaries_used = await store.summary_search(user_id, query_vecs[0], top_k=3) if query_vecs else []
 
+    lap("retrieve")
     if not all_context_nodes:
         return {
             "answer": "No relevant knowledge found for this question.",
@@ -677,19 +612,23 @@ async def graphrag_query(
             "sub_queries": sub_queries,
             "retrieval_mode": "none",
             "latency_ms": int((time.monotonic() - t0) * 1000),
+            "timings_ms": timings,
         }
 
     reranked  = await rerank(question, all_context_nodes, top_n=top_k)
+    lap("rerank" if should_rerank(len(all_context_nodes), top_k) else "rerank_skipped")
 
-    # Drop nodes with negligible RRF scores to avoid surfacing unrelated content
-    _MIN_RRF = 0.005
-    reranked = [n for n in reranked if (n.get("rrf_score") or n.get("score") or 0.0) >= _MIN_RRF] or reranked[:3]
+    # rrf_score is normalised to [0, 1] (see _rrf): 1.0 = rank 1 in every list.
+    # Drop nodes with negligible scores to avoid surfacing unrelated content.
+    _MIN_RRF = 0.1
+    reranked = [n for n in reranked if (n.get("rrf_score") or 0.0) >= _MIN_RRF] or reranked[:3]
 
     # Threshold gate — if the best node doesn't clear the confidence floor,
     # the context is too weak to ground a reliable answer. Fail loudly rather
     # than letting the LLM stitch together an implied response from noise.
-    _CONFIDENCE_FLOOR = 0.02
-    top_score = (reranked[0].get("rrf_score") or reranked[0].get("score") or 0.0) if reranked else 0.0
+    # The LLM rerank may reorder nodes, so take the max rather than reranked[0].
+    _CONFIDENCE_FLOOR = 0.5
+    top_score = max((n.get("rrf_score") or 0.0 for n in reranked), default=0.0)
     if top_score < _CONFIDENCE_FLOOR:
         return {
             "answer": "The retrieved context does not contain sufficiently relevant information to answer this question reliably. Please add more relevant artifacts or rephrase your query.",
@@ -701,14 +640,24 @@ async def graphrag_query(
             "hyde_doc": hyde_doc,
             "retrieval_mode": retrieval_mode,
             "latency_ms": int((time.monotonic() - t0) * 1000),
+            "timings_ms": timings,
         }
+
+    # point stale decisions at whatever replaced them, so the answer uses the current one
+    stale = [n["id"] for n in reranked if n.get("status") in ("superseded", "reversed")]
+    if stale:
+        successors = await store.successors(user_id, stale)
+        for n in reranked:
+            if n["id"] in successors:
+                n["replaced_by"] = successors[n["id"]]
 
     primary   = [n for n in reranked if "graph" not in n.get("retrieved_by", "")]
     graph_nbr = [n for n in reranked if "graph" in n.get("retrieved_by", "")]
 
-    context   = _build_context_with_labels(summaries_used, primary, graph_nbr)
+    context   = _build_context(summaries_used, primary, graph_nbr)
     answer    = await _generate(question, context, route, history)
-    citations = _extract_citations(answer, reranked)
+    lap("generate")
+    citations = _extract_citations(answer, reranked, summaries_used)
 
     return {
         "answer": answer,
@@ -720,75 +669,5 @@ async def graphrag_query(
         "hyde_doc": hyde_doc,
         "retrieval_mode": retrieval_mode,
         "latency_ms": int((time.monotonic() - t0) * 1000),
+        "timings_ms": timings,
     }
-
-def _extract_citations_with_titles(answer: str, nodes: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    """Extract citations with human-readable titles."""
-    brackets = re.findall(r"\[([^\]]+)\]", answer)
-    cited: List[Dict[str, str]] = []
-    seen_ids = set()
-    
-    for node in nodes:
-        nid = node.get("id", "")
-        if not nid:
-            continue
-        
-    # Check if this node was cited
-        for token in brackets:
-            if token == nid or nid.startswith(token) or token == nid.split("_")[0]:
-                if nid not in seen_ids:
-                    seen_ids.add(nid)
-                    cited.append({
-                        "id": nid,
-                        "title": node.get("title") or node.get("label") or nid,
-                        "type": node.get("kind") or node.get("type") or "item"
-                    })
-                break
-    
-    return cited
-
-def _build_context_with_labels(
-    summaries: List[Dict[str, Any]],
-    ranked_items: List[Dict[str, Any]],
-    graph_neighbours: List[Dict[str, Any]],
-) -> str:
-    """Build context with human-readable labels instead of IDs."""
-    parts: List[str] = []
-    
-    if summaries:
-        lines = ["=== ARTIFACT SUMMARIES ==="]
-        for s in summaries:
-            title = s.get('title') or s.get('artifact_id', 'Untitled')
-            lines.append(f"📄 {title}: {s.get('summary', '')}")
-        parts.append("\n".join(lines))
-        
-    if ranked_items:
-        lines = ["=== KNOWLEDGE ITEMS ==="]
-        for n in ranked_items:
-            title = n.get('title') or n.get('label') or 'Untitled'
-            kind = n.get('kind') or n.get('type') or 'item'
-            score = n.get('rrf_score') or n.get('score') or 0.0
-            
-            # ✅ Use human-readable label with a short ID suffix
-            short_id = n.get('id', '').split('_')[-1][:6] if n.get('id') else '???'
-            label = f"[{short_id}]"
-            
-            lines.append(f"{label} ({kind}) relevance={score:.3f}: {title}")
-            
-            # Add details
-            for k, v in (n.get('details') or {}).items():
-                if isinstance(v, str) and v and k not in ("evidence", "confidence"):
-                    lines.append(f"  {k}: {v[:100]}")
-        parts.append("\n".join(lines))
-        
-    if graph_neighbours:
-        lines = ["=== RELATED CONTEXT (graph) ==="]
-        for n in graph_neighbours:
-            title = n.get('title') or n.get('label') or 'Untitled'
-            kind = n.get('kind') or n.get('type') or 'item'
-            short_id = n.get('id', '').split('_')[-1][:6] if n.get('id') else '???'
-            lines.append(f"[{short_id}] ({kind}): {title}")
-        parts.append("\n".join(lines))
-    
-    return "\n\n".join(parts)
-

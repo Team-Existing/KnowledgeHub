@@ -1,0 +1,21 @@
+.setup { display: flex; flex-direction: column; gap: 0.85rem; }
+.setup h2 { margin: 0; font-size: 1.2rem; }
+.options { display: flex; flex-direction: column; gap: 0.5rem; }
+.option {
+  display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.7rem 0.8rem;
+  border: 1px solid #e0e3eb; border-radius: 8px; cursor: pointer;
+}
+.option.selected { border-color: #667eea; background: #f5f6ff; }
+.option.disabled { cursor: default; opacity: 0.7; }
+.option input { margin-top: 0.25rem; }
+.option-body { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.85rem; }
+.option-title { font-weight: 600; font-size: 0.95rem; color: #1f2933; }
+.tag {
+  margin-left: 0.4rem; padding: 0.05rem 0.45rem; border-radius: 999px;
+  background: #e7f6ec; color: #15803d; font-size: 0.7rem; font-weight: 600;
+}
+.warn { color: #b45309; }
+.progress { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.82rem; }
+.progress-row { display: flex; justify-content: space-between; }
+.track { height: 8px; border-radius: 999px; background: #eceef3; overflow: hidden; }
+.bar { height: 100%; background: #667eea; transition: width 0.3s; }

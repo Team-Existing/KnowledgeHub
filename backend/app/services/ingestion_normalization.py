@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import hashlib
-from datetime import datetime
-from typing import Any, Dict, List
+from datetime import datetime, timezone
+from typing import Any, Dict
 
 
 class IngestionNormalization:
@@ -18,7 +17,7 @@ class IngestionNormalization:
     def extract_metadata(self, artifact: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "author": artifact.get("author", "unknown"),
-            "date": artifact.get("created_at", datetime.utcnow().isoformat()),
+            "date": artifact.get("created_at", datetime.now(timezone.utc).isoformat()),
             "tags": artifact.get("tags", []),
             "source": artifact.get("source"),
         }

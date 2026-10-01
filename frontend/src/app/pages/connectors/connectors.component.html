@@ -1,0 +1,116 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h2>Connectors</h2>
+      <p>Pull knowledge from where it already lives. Syncs only re-process documents that changed.</p>
+    </div>
+    <a class="back-link" routerLink="/decisions">Decision log →</a>
+  </section>
+
+  @if (error) { <p class="error-text" style="padding:0 0.25rem">{{ error }}</p> }
+
+  <!-- Add a source -->
+  <section class="ingest-panel">
+    <h3 style="font-size:1rem;margin-bottom:0.75rem">Add a source</h3>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      @for (k of kinds; track k.kind) {
+        <button [disabled]="!k.allowed" [title]="k.allowed ? '' : 'Only admins can add connectors that read local folders'"
+                (click)="openNew(k)">{{ k.label }}</button>
+      }
+    </div>
+
+    @if (formOpen && kind) {
+      <div class="form-stack" style="margin-top:1rem;max-width:640px">
+        <h4 style="font-size:0.95rem">{{ editingId ? 'Edit' : 'New' }}: {{ kind.label }}</h4>
+        <label class="form-row">
+          <span class="muted-text">Name</span>
+          <input [(ngModel)]="formName" />
+        </label>
+        @for (f of kind.fields; track f.name) {
+          <label class="form-row">
+            <span class="muted-text">{{ f.label }}@if (f.required) { * }</span>
+            @if (f.type === 'list') {
+              <textarea rows="2" [(ngModel)]="formValues[f.name]" placeholder="comma-separated"></textarea>
+            } @else {
+              <input [type]="f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'"
+                     [(ngModel)]="formValues[f.name]" autocomplete="off"
+                     [placeholder]="f.secret && editingId ? 'unchanged' : ''" />
+            }
+            @if (f.help) { <span class="field-help">{{ f.help }}</span> }
+          </label>
+        }
+        @if (kind.filesystem) {
+          <p class="field-help">Reads files on the machine running the backend. Set CONNECTOR_ROOTS to limit which folders are allowed.</p>
+        }
+        @if (formError) { <p class="error-text">{{ formError }}</p> }
+        <div style="display:flex;gap:0.5rem">
+          <button class="primary" [disabled]="saving || !formName" (click)="save()">{{ saving ? 'Saving…' : 'Save' }}</button>
+          <button (click)="formOpen = false">Cancel</button>
+        </div>
+      </div>
+    }
+  </section>
+
+  @if (connectors.length === 0 && !error) {
+    <section class="empty-state">
+      <h3>No sources connected</h3>
+      <p>Start with a folder of meeting transcripts or a repository of ADRs.</p>
+    </section>
+  }
+
+  <div class="connector-grid">
+    @for (c of connectors; track c.id) {
+      <div class="connector-card">
+        <div class="card-topline">
+          <span class="type-pill">{{ c.kind }}</span>
+          <span class="status-badge" [ngClass]="statusClass(c)" style="text-transform:none">{{ statusLabel(c) }}</span>
+        </div>
+        <h3>{{ c.name }}</h3>
+        <p class="muted-text" style="font-size:0.8rem;word-break:break-all">{{ summary(c) }}</p>
+        @if (c.last_sync_at) { <p class="muted-text" style="font-size:0.75rem">Last sync {{ c.last_sync_at | date:'medium' }}</p> }
+        @if (c.last_error) { <p class="error-text" style="font-size:0.8rem">{{ c.last_error }}</p> }
+
+        @if (c.last_result.fetched !== undefined) {
+          <div class="sync-stats">
+            <span>{{ c.last_result.fetched }} found</span>
+            <span>{{ c.last_result.created }} new</span>
+            <span>{{ c.last_result.updated }} updated</span>
+            <span>{{ c.last_result.unchanged }} unchanged</span>
+            <span>{{ c.last_result.items_extracted }} items</span>
+            @if (c.last_result.links_created) { <span>{{ c.last_result.links_created }} lineage links</span> }
+            @if (c.last_result.failed) { <span style="color:#b42318">{{ c.last_result.failed }} failed</span> }
+          </div>
+        }
+        @if (c.last_result.errors?.length) {
+          <details style="font-size:0.8rem">
+            <summary>Errors</summary>
+            <ul style="padding-left:1rem;margin-top:0.35rem">
+              @for (e of c.last_result.errors; track e.external_id) { <li><code>{{ e.external_id }}</code>: {{ e.error }}</li> }
+            </ul>
+          </details>
+        }
+
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="primary" [disabled]="busyId === c.id || c.last_status === 'running'" (click)="sync(c)">
+            {{ c.last_status === 'running' ? 'Syncing…' : 'Sync now' }}</button>
+          <button (click)="openEdit(c)">Edit</button>
+          <button (click)="toggleDocuments(c)">{{ documents[c.id] ? 'Hide' : 'Documents' }}</button>
+          <button class="danger" [disabled]="busyId === c.id" (click)="remove(c)">Remove</button>
+        </div>
+
+        @if (documents[c.id]; as docs) {
+          @if (docs.length === 0) { <p class="muted-text" style="font-size:0.8rem">Nothing synced yet.</p> }
+          <ul style="list-style:none;display:flex;flex-direction:column;gap:0.3rem;font-size:0.8rem;max-height:240px;overflow:auto">
+            @for (d of docs; track d.external_id) {
+              <li>
+                @if (isExternal(d.url)) { <a [href]="d.url" target="_blank" rel="noopener" class="rel-name-link" style="font-size:0.8rem">{{ d.title }}</a> }
+                @else { <span>{{ d.title }}</span> }
+                <span class="muted-text"> · {{ d.synced_at | date:'short' }}</span>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    }
+  </div>
+</div>

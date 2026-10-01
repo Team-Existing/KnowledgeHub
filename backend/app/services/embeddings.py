@@ -11,7 +11,7 @@ from typing import Any, List, Optional
 from app.services.providers import get_embedding_provider
 
 # Expose dimension and provider name as module-level constants
-# (used by neo4j_graph.py bootstrap and Phase 2 provenance tracking)
+# (used to size the ArcadeDB vector indexes and for embedding provenance)
 EMBEDDING_DIM: int = get_embedding_provider().dimensions
 EMBEDDING_PROVIDER_NAME: str = get_embedding_provider().name
 

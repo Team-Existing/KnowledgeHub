@@ -1,0 +1,66 @@
+<div class="chat-container">
+  <div class="chat-header">
+    <div>
+      <strong style="display:flex;align-items:center;gap:0.5rem">GraphRAG Assistant</strong>
+      <p style="color:#667085;font-size:0.8rem;margin-top:0.2rem">Graph-aware retrieval · answers grounded in your knowledge base</p>
+    </div>
+    <div class="chat-actions">
+      <span class="provider-badge" [ngClass]="'provider-' + modelService.statusBadgeColor()" [attr.aria-label]="modelService.statusBadgeText()">
+        {{ modelService.statusBadgeText() }}
+      </span>
+      <label style="font-size:0.8rem;color:#667085;display:flex;align-items:center;gap:0.4rem">
+        Top-K
+        <input type="number" min="1" max="20" [(ngModel)]="topK" style="width:52px;padding:0.25rem 0.4rem;font-size:0.8rem" />
+      </label>
+      <button (click)="confirmClear()" title="Clear chat">🗑</button>
+    </div>
+  </div>
+
+  <div class="messages" #messagesEl>
+    @if (messages.length === 0) {
+      <div style="text-align:center;color:#667085;margin-top:3rem">
+        <p>Ask a question about your knowledge base.</p>
+      </div>
+    }
+    @for (m of messages; track m.ts; let idx = $index) {
+      <div [class]="'message ' + m.role">
+        <div class="message-header">
+          <strong>{{ m.role === 'user' ? 'You' : 'Assistant' }}</strong>
+          <span class="timestamp">{{ fmt(m.ts) }}</span>
+        </div>
+        <!-- Use renderMarkdown with citations -->
+        <div style="line-height:1.6" [innerHTML]="renderMarkdown(m.content, m.citations)"></div>
+        
+        <!-- Citations section - use getCitations() helper -->
+        @if (m.role === 'assistant' && m.citations && m.citations.length > 0 && !isNoAnswer(m.content)) {
+          <div class="citations-section">
+            <details>
+              <summary>Sources ({{ m.citations.length }})</summary>
+              <ul class="citation-list">
+                @for (cite of getCitations(m.citations); track cite.id) {
+                  <li>
+                    <span class="citation-type">{{ cite.type }}</span>
+                    <span class="citation-title">{{ cite.title }}</span>
+                    <button (click)="goToItem(cite.id)" class="citation-link">View →</button>
+                  </li>
+                }
+              </ul>
+            </details>
+          </div>
+        }
+      </div>
+    }
+    @if (loading) {
+      <div class="typing-indicator" aria-live="polite" aria-atomic="true">
+        {{ pipelineStage }} <span class="latency-hint">Generating locally — no data leaves this device</span>
+      </div>
+    }
+    <div #bottomEl></div>
+  </div>
+
+  <div class="input-area">
+    <textarea rows="2" placeholder="Ask about decisions, risks, lessons, best practices…"
+      [(ngModel)]="input" (keydown)="onKey($event)" [disabled]="loading"></textarea>
+    <button class="primary" (click)="send()" [disabled]="loading || !input.trim()" title="Send">➤</button>
+  </div>
+</div>

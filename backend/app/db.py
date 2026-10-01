@@ -1,170 +1,53 @@
+"""ArcadeDB connection lifecycle and the per-request session dependency."""
 from __future__ import annotations
 
 import os
-import uuid
-from datetime import datetime
-from typing import AsyncGenerator
+from dataclasses import dataclass
+from typing import AsyncGenerator, Optional
 
-from sqlalchemy import JSON, Column, ForeignKey, Integer, String, Text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from app.arcadedb import ArcadeClient, ArcadeSession
+from app.schema import apply_schema
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/knowledge.db")
-
-engine = create_async_engine(DATABASE_URL, echo=False)
-SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+_client: Optional[ArcadeClient] = None
 
 
-class Base(DeclarativeBase):
-    pass
+@dataclass(frozen=True)
+class User:
+    id: str
+    username: str
+    role: str = "member"
+    llm_model: Optional[str] = None   # the user's chosen local LLM (see services/llm_catalog.py)
 
 
-def _uuid() -> str:
-    return str(uuid.uuid4())
+def get_client() -> ArcadeClient:
+    if _client is None:
+        raise RuntimeError("ArcadeDB is not initialised; init_db() runs at application startup")
+    return _client
 
 
-# ---------------------------------------------------------------------------
-# User / Auth
-# ---------------------------------------------------------------------------
-
-class User(Base):
-    __tablename__ = "users"
-    id = Column(String, primary_key=True, default=_uuid)
-    username = Column(String, unique=True, nullable=False, index=True)
-    hashed_password = Column(String, nullable=False)
-    role = Column(String, default="member")
-    created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
-
-
-# ---------------------------------------------------------------------------
-# Core Knowledge Tables
-# ---------------------------------------------------------------------------
-
-class Artifact(Base):
-    """Source documents or transcripts ingested by the user."""
-    __tablename__ = "artifacts"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, nullable=False, index=True)
-    title = Column(String, nullable=False)
-    content = Column(Text, nullable=False)
-    source = Column(String, default="manual")
-    source_type = Column(String, default="manual")
-    author = Column(String, default="unknown")
-    tags = Column(JSON, default=list)
-    extraction_engine = Column(String, default="regex")
-    created_at = Column(String, nullable=False)
-    metadata_ = Column("metadata", JSON, default=dict)
+async def init_db(embedding_dims: int, embedding_provider: str) -> None:
+    """Connect, create the database if needed, and apply the schema."""
+    global _client
+    _client = ArcadeClient(
+        url=os.getenv("ARCADEDB_URL", "http://localhost:2480"),
+        database=os.getenv("ARCADEDB_DATABASE", "knowledge_hubs"),
+        user=os.getenv("ARCADEDB_USER", "root"),
+        password=os.getenv("ARCADEDB_PASSWORD", ""),
+    )
+    await _client.ensure_database()
+    await apply_schema(_client, embedding_dims, embedding_provider)
 
 
-class KnowledgeItem(Base):
-    """Extracted knowledge: decisions, risks, action items, etc."""
-    __tablename__ = "knowledge_items"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, nullable=False, index=True)
-    artifact_id = Column(String, ForeignKey("artifacts.id", ondelete="CASCADE"), index=True)
-    title = Column(String, nullable=False)
-    type = Column(String, nullable=False)  # decision, risk, action-item, etc.
-    author = Column(String, default="unknown")
-    date = Column(String, nullable=False)
-    tags = Column(JSON, default=list)
-    details = Column(JSON, default=dict)
-    extraction_engine = Column(String, default="regex")
-    embedding = Column(JSON, nullable=True)
-    embedding_provider = Column(String, nullable=True)
-    embedding_dims = Column(Integer, nullable=True)
-    review_status = Column(String, default="pending")
-    review_note = Column(Text, default="")
+async def close_db() -> None:
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
 
 
-class Relationship(Base):
-    """Graph relationships between knowledge items and artifacts."""
-    __tablename__ = "relationships"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, nullable=False, index=True)
-    from_id = Column(String, nullable=False, index=True)
-    to_id = Column(String, nullable=False, index=True)
-    type = Column(String, nullable=False)  # CONTAINS, RELATED_TO, etc.
-
-
-class CrossLink(Base):
-    """Cross-source links between knowledge items from different artifacts."""
-    __tablename__ = "cross_links"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, nullable=False, index=True)
-    item_id_a = Column(String, ForeignKey("knowledge_items.id", ondelete="CASCADE"), nullable=False, index=True)
-    item_id_b = Column(String, ForeignKey("knowledge_items.id", ondelete="CASCADE"), nullable=False, index=True)
-    score = Column(String, nullable=False)  # Similarity score as string
-
-
-# ---------------------------------------------------------------------------
-# Playbooks
-# ---------------------------------------------------------------------------
-
-class Playbook(Base):
-    """Curated playbooks or workflows."""
-    __tablename__ = "playbooks"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, nullable=False, index=True)
-    title = Column(String, nullable=False)
-    steps = Column(JSON, default=list)
-    category = Column(String, default="general")
-
-
-# ---------------------------------------------------------------------------
-# Summaries (for GraphRAG summary index)
-# ---------------------------------------------------------------------------
-
-class ArtifactSummary(Base):
-    """LLM-generated summary of an artifact for the summary index."""
-    __tablename__ = "artifact_summaries"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, nullable=False, index=True)
-    artifact_id = Column(String, ForeignKey("artifacts.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
-    summary = Column(Text, nullable=False)
-    embedding = Column(JSON, nullable=True)
-    embedding_provider = Column(String, nullable=True)
-    embedding_dims = Column(Integer, nullable=True)
-    created_at = Column(String, nullable=False)
-
-
-# ---------------------------------------------------------------------------
-# Observability / Query Logs
-# ---------------------------------------------------------------------------
-
-class QueryLog(Base):
-    """Persists every GraphRAG query for observability."""
-    __tablename__ = "query_logs"
-    id = Column(String, primary_key=True, default=_uuid)
-    user_id = Column(String, nullable=False, index=True)
-    question = Column(Text, nullable=False)
-    sub_queries = Column(JSON, default=list)
-    hyde_doc = Column(Text, nullable=True)
-    route = Column(String, nullable=True)
-    retrieval_mode = Column(String, nullable=True)
-    llm_provider = Column(String, nullable=True)
-    embedding_provider = Column(String, nullable=True)
-    context_node_ids = Column(JSON, default=list)
-    citations = Column(JSON, default=list)
-    answer_snippet = Column(Text, nullable=True)
-    latency_ms = Column(Integer, nullable=True)
-    created_at = Column(String, nullable=False)
-
-
-# ---------------------------------------------------------------------------
-# Session Helper
-# ---------------------------------------------------------------------------
-
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    async with SessionLocal() as session:
+async def get_session() -> AsyncGenerator[ArcadeSession, None]:
+    session = ArcadeSession(get_client())
+    try:
         yield session
-
-
-# ---------------------------------------------------------------------------
-# Database Initialization
-# ---------------------------------------------------------------------------
-
-async def init_db() -> None:
-    """Create all tables if they don't exist."""
-    async with engine.begin() as conn:
-        # Create all tables
-        await conn.run_sync(Base.metadata.create_all)
+    finally:
+        await session.close()   # rolls back anything left uncommitted

@@ -1,0 +1,111 @@
+<section id="history" class="detail-panel">
+  <h3>History &amp; lineage</h3>
+
+  @if (error) { <p class="error-text">{{ error }}</p> }
+
+  @if (lineage) {
+    <!-- Lifecycle status (decisions and risks only) -->
+    @if (hasStatus) {
+      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem">
+        <span class="muted-text">Status</span>
+        <span class="status-badge" [ngClass]="'status-' + lineage.status">{{ lineage.status }}</span>
+        <select [(ngModel)]="declared" style="width:auto" aria-label="Declare status">
+          <option value="">Automatic (from links)</option>
+          @for (s of lineage.declarable_statuses; track s) { <option [value]="s">{{ s }}</option> }
+        </select>
+        <input [(ngModel)]="statusNote" placeholder="Why? (optional)" style="flex:1;min-width:160px" />
+        <button [disabled]="busy || declared === (lineage.declared_status ?? '')" (click)="saveStatus()">Set status</button>
+      </div>
+    }
+
+    <!-- Evolution chain: every decision connected by supersedes / reverses / amends, oldest first -->
+    @if (lineage.chain.length) {
+      <h4 style="font-size:0.875rem;margin-bottom:0.5rem">How this decision evolved</h4>
+      <ol class="timeline" style="margin-bottom:1rem">
+        @for (c of lineage.chain; track c.id) {
+          <li [class.current]="c.id === item.id">
+            <span class="when">{{ c.date | date:'mediumDate' }}</span>
+            @if (c.id === item.id) { <strong>{{ c.title }}</strong> }
+            @else { <a [routerLink]="['/knowledge', c.id]" class="rel-name-link">{{ c.title }}</a> }
+            <span class="status-badge" [ngClass]="'status-' + c.status" style="margin-left:0.4rem">{{ c.status }}</span>
+          </li>
+        }
+      </ol>
+    }
+
+    <!-- Direct links -->
+    @if (lineage.links.outgoing.length || lineage.links.incoming.length) {
+      <div class="lineage-list" style="margin-bottom:1rem">
+        @for (l of lineage.links.incoming; track l.item.id) {
+          <div class="lineage-row">
+            <strong>{{ phrase(l, 'in') }}</strong>
+            <a class="grow" [routerLink]="['/knowledge', l.item.id]">{{ l.item.title }}</a>
+            @if (l.item.status) { <span class="status-badge" [ngClass]="'status-' + l.item.status">{{ l.item.status }}</span> }
+            @if (l.note) { <span class="muted-text" title="Note">“{{ l.note }}”</span> }
+            @if (l.origin !== 'manual') { <span class="engine-badge">{{ l.origin }}</span> }
+            <button class="link-btn" title="Remove link" [disabled]="busy" (click)="removeLink(l.item.id)">✕</button>
+          </div>
+        }
+        @for (l of lineage.links.outgoing; track l.item.id) {
+          <div class="lineage-row">
+            <strong>{{ phrase(l, 'out') }}</strong>
+            <a class="grow" [routerLink]="['/knowledge', l.item.id]">{{ l.item.title }}</a>
+            @if (l.item.status) { <span class="status-badge" [ngClass]="'status-' + l.item.status">{{ l.item.status }}</span> }
+            @if (l.note) { <span class="muted-text" title="Note">“{{ l.note }}”</span> }
+            @if (l.origin !== 'manual') { <span class="engine-badge">{{ l.origin }}</span> }
+            <button class="link-btn" title="Remove link" [disabled]="busy" (click)="removeLink(l.item.id)">✕</button>
+          </div>
+        }
+      </div>
+    } @else if (options.length) {
+      <p class="muted-text" style="margin-bottom:1rem">Not linked to other decisions, risks or lessons yet.</p>
+    }
+
+    <!-- Suggestions from similar items in other sources -->
+    @if (suggestions.length) {
+      <h4 style="font-size:0.875rem;margin-bottom:0.5rem">Possibly related over time</h4>
+      <div class="lineage-list" style="margin-bottom:1rem">
+        @for (s of suggestions; track s.item.id) {
+          <div class="lineage-row">
+            <span>{{ suggestionPhrase(s) }}</span>
+            <a class="grow" [routerLink]="['/knowledge', s.item.id]">{{ s.item.title }}</a>
+            <span class="muted-text">{{ s.item.date | date:'mediumDate' }}</span>
+            <span class="conf-badge" title="Similarity">{{ (s.score * 100).toFixed(0) }}%</span>
+            <button [disabled]="busy" (click)="acceptSuggestion(s)">Link</button>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Manual link -->
+    @if (options.length) {
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
+        <select [(ngModel)]="optionKey" (ngModelChange)="targetId = ''" style="width:auto" aria-label="Link type">
+          <option value="">Add a link…</option>
+          @for (o of options; track o.key) { <option [value]="o.key">{{ o.label }}</option> }
+        </select>
+        @if (selectedOption) {
+          <select [(ngModel)]="targetId" style="flex:1;min-width:200px" aria-label="Linked item">
+            <option value="">Choose {{ selectedOption.otherTypes?.join(' / ') || 'an item' }}…</option>
+            @for (c of targetCandidates; track c.id) {
+              <option [value]="c.id">{{ c.date | date:'shortDate' }} · {{ c.type }} · {{ c.title }}</option>
+            }
+          </select>
+          <input [(ngModel)]="note" placeholder="Note (optional)" style="min-width:140px" />
+          <button class="primary" [disabled]="busy || !targetId" (click)="addLink()">Link</button>
+        }
+      </div>
+    }
+
+    <!-- Event history -->
+    <h4 style="font-size:0.875rem;margin-bottom:0.5rem">Timeline</h4>
+    <ol class="timeline">
+      <li><span class="when">{{ item.date | date:'medium' }}</span>Extracted ({{ item.extraction_engine }})</li>
+      @for (e of lineage.events; track $index) {
+        <li><span class="when">{{ e.at | date:'medium' }}</span>{{ describe(e) }}</li>
+      }
+    </ol>
+  } @else if (!error) {
+    <p class="muted-text">Loading…</p>
+  }
+</section>

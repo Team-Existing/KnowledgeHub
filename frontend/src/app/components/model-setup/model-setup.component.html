@@ -1,0 +1,59 @@
+@if (!catalog.ollamaReachable) {
+  <div class="setup">
+    <h2>Ollama isn't running</h2>
+    <p class="muted-text">
+      Knowledge Hubs runs its AI on your machine through Ollama.
+      Install it from <a href="https://ollama.com" target="_blank" rel="noopener">ollama.com</a>,
+      start it, then try again.
+    </p>
+    <button class="primary" (click)="retry.emit()">Retry</button>
+  </div>
+} @else {
+  <div class="setup">
+    <h2>Download a local AI model</h2>
+    <p class="muted-text">
+      None of the supported models is on this computer yet. Pick one to continue —
+      it runs entirely on your machine. You can add the others later in Model Manager.
+    </p>
+
+    <div class="options">
+      @for (m of catalog.models; track m.id) {
+        <label class="option" [class.selected]="selected === m.id" [class.disabled]="installing">
+          <input type="radio" name="model" [value]="m.id" [(ngModel)]="selected" [disabled]="installing" />
+          <span class="option-body">
+            <span class="option-title">
+              {{ m.name }}
+              @if (m.id === catalog.recommended) { <span class="tag">Recommended for your RAM</span> }
+            </span>
+            <span class="muted-text">{{ m.description }}</span>
+            <span class="muted-text">{{ m.size }} download · needs {{ m.ramRequired }} RAM</span>
+            @if (tooBig(m.minRamGb)) {
+              <span class="warn">This computer has {{ catalog.ramGb }} GB RAM — it may run slowly.</span>
+            }
+          </span>
+        </label>
+      }
+    </div>
+
+    @if (installing) {
+      <div class="progress">
+        <div class="progress-row">
+          <span>{{ service.installProgress()?.status || 'Starting download…' }}</span>
+          <span>{{ service.installProgress()?.percent ?? 0 }}%</span>
+        </div>
+        <div class="track"><div class="bar" [style.width.%]="service.installProgress()?.percent ?? 0"></div></div>
+        @if (service.installProgress()?.total) {
+          <span class="muted-text">
+            {{ service.installProgress()!.completed / 1073741824 | number:'1.1-1' }} /
+            {{ service.installProgress()!.total / 1073741824 | number:'1.1-1' }} GB
+          </span>
+        }
+      </div>
+    }
+    @if (error) { <p class="error-text">{{ error }}</p> }
+
+    <button class="primary" [disabled]="!selected || installing" (click)="download()">
+      {{ installing ? 'Downloading…' : 'Download and continue' }}
+    </button>
+  </div>
+}

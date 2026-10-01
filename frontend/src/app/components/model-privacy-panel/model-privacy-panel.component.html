@@ -1,0 +1,57 @@
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Model &amp; Privacy</span>
+    <button class="close-btn" (click)="close.emit()" aria-label="Close">✕</button>
+  </div>
+
+  <div class="panel-body">
+
+    <!-- LLM status -->
+    <div class="section">
+      <p class="section-label">LLM</p>
+      <div class="row">
+        <span class="row-key">Provider</span>
+        <span class="pill" [class]="providerClass()">{{ service.currentLlmProvider() }}</span>
+      </div>
+      <div class="row">
+        <span class="row-key">Model</span>
+        <span class="row-val">{{ service.currentLlmModel() }}</span>
+      </div>
+      <div class="row">
+        <span class="row-key">Status</span>
+        @if (service.modelStatus()?.llm?.installed) {
+          <span class="pill pill-green">● Installed</span>
+        } @else {
+          <span class="pill pill-red">● Not installed</span>
+        }
+      </div>
+    </div>
+
+    <!-- Embedding status -->
+    @if (service.modelStatus()?.embedding) {
+      <div class="section">
+        <p class="section-label">Embeddings</p>
+        <div class="row">
+          <span class="row-key">Provider</span>
+          <span class="row-val">{{ service.modelStatus()?.embedding?.provider }}</span>
+        </div>
+        <div class="row">
+          <span class="row-key">Model</span>
+          <span class="row-val">{{ service.modelStatus()?.embedding?.model || 'all-MiniLM-L6-v2' }}</span>
+        </div>
+      </div>
+    }
+
+    <!-- Actions -->
+    <div class="section">
+      <p class="section-label">Actions</p>
+      <button class="action-btn" (click)="goTo('/settings/models')">
+        <span>🤖</span> Manage local models
+      </button>
+      <button class="action-btn secondary" (click)="goTo('/privacy-policy')">
+        <span>🔒</span> Data privacy policy
+      </button>
+    </div>
+
+  </div>
+</div>
