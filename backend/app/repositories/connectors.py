@@ -8,7 +8,8 @@ from app.arcadedb import ArcadeSession
 
 Row = Dict[str, Any]
 
-_FIELDS = "id, user_id, kind, name, config, created_at, last_sync_at, last_status, last_error, last_result"
+_FIELDS = ("id, user_id, kind, name, config, created_at, created_by_name, last_sync_at, last_status, "
+           "last_error, last_result")
 
 
 def synced_document_id(connector_id: str, external_id: str) -> str:

@@ -40,6 +40,9 @@
                 @for (cite of getCitations(m.citations); track cite.id) {
                   <li>
                     <span class="citation-type">{{ cite.type }}</span>
+                    @if (cite.status === 'superseded' || cite.status === 'reversed') {
+                      <span class="status-badge" [ngClass]="'status-' + cite.status" title="This decision was replaced; see the item for what replaced it">{{ cite.status }}</span>
+                    }
                     <span class="citation-title">{{ cite.title }}</span>
                     <button (click)="goToItem(cite.id)" class="citation-link">View →</button>
                   </li>

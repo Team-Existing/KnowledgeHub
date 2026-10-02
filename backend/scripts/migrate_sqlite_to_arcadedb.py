@@ -40,6 +40,7 @@ load_dotenv(find_dotenv(usecwd=True))
 from app.arcadedb import ArcadeClient, ArcadeSession  # noqa: E402
 from app.repositories._common import tag_fields  # noqa: E402
 from app.schema import apply_schema  # noqa: E402
+from app.usernames import username_key  # noqa: E402
 
 BATCH = 500
 
@@ -117,7 +118,8 @@ async def migrate(sqlite_path: str, client: ArcadeClient, embedding_dims: Option
         await session.commit()
 
     await insert_all("User", [{
-        "id": u["id"], "username": u["username"], "hashed_password": u["hashed_password"],
+        "id": u["id"], "username": u["username"], "username_key": username_key(u["username"]),
+        "hashed_password": u["hashed_password"],
         "role": u.get("role") or "member", "created_at": u.get("created_at"),
     } for u in users])
 

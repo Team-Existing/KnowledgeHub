@@ -1,0 +1,12 @@
+# Context for deploy/lb.Dockerfile (the repository root): only the frontend
+# sources and the Caddyfile are needed; never send secrets or local data.
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/dist
+**/.angular
+backend
+.git
+deploy/.env
+deploy/sources

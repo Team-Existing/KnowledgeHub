@@ -102,7 +102,7 @@
     <ol class="timeline">
       <li><span class="when">{{ item.date | date:'medium' }}</span>Extracted ({{ item.extraction_engine }})</li>
       @for (e of lineage.events; track $index) {
-        <li><span class="when">{{ e.at | date:'medium' }}</span>{{ describe(e) }}</li>
+        <li><span class="when">{{ e.at | date:'medium' }}</span>{{ describe(e) }}@if (e.actor) { <span class="muted-text"> — {{ e.actor }}</span> }</li>
       }
     </ol>
   } @else if (!error) {

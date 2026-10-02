@@ -443,3 +443,64 @@ async def reembed_all(session: ArcadeSession, user_id: str) -> Dict[str, Any]:
         "items_reembedded": updated_items,
         "summaries_reembedded": updated_summaries,
     }
+
+
+async def copy_artifact(
+    session: ArcadeSession, source_space: str, target_space: str, artifact_id: str, shared_by: str,
+) -> Dict[str, Any]:
+    """
+    Share an artifact into another space (e.g. personal -> group): the artifact,
+    its items with their review state, statuses and vectors, and CONTAINS
+    edges. No LLM or embedding calls. Ids are derived from the source, so
+    sharing the same artifact again updates the copy instead of duplicating it.
+    Lineage links aren't copied (their other ends may not exist there).
+    """
+    artifacts = ArtifactRepository(session)
+    source = await session.query_one(
+        "SELECT FROM Artifact WHERE id = :id AND user_id = :u", {"id": artifact_id, "u": source_space})
+    if not source:
+        raise ValueError("Artifact not found")
+    new_id = stable_id(target_space, "artifact", f"shared:{source_space}:{artifact_id}")
+    metadata = {**(source.get("metadata") or {}),
+                "shared_from": {"space_id": source_space, "artifact_id": artifact_id,
+                                "by": shared_by, "at": _now()}}
+    await artifacts.upsert(
+        target_space, new_id, title=source["title"], content=source["content"], source=source.get("source") or "",
+        source_type=source.get("source_type") or "manual", author=source.get("author") or "unknown",
+        tags=source.get("tags") or [], created_at=source.get("created_at") or _now(), metadata=metadata,
+        extraction_engine=source.get("extraction_engine") or "regex",
+    )
+    if source.get("summary"):
+        await artifacts.set_summary(target_space, new_id, source["summary"], source.get("summary_embedding"),
+                                    source.get("summary_embedding_provider") or "",
+                                    source.get("summary_embedding_dims") or 0)
+
+    items_repo = KnowledgeItemRepository(session)
+    rows = await session.query(
+        "SELECT FROM KnowledgeItem WHERE artifact_id = :a AND user_id = :u ORDER BY @rid",
+        {"a": artifact_id, "u": source_space})
+    items: List[Item] = []
+    for row in rows:
+        item = {
+            "id": stable_id(target_space, row["id"].split("_")[0], f"{new_id}:{row['id']}"),
+            "artifact_id": new_id, "title": row["title"], "type": row["type"],
+            "author": row.get("author") or "unknown", "date": row.get("date") or _now(),
+            "tags": row.get("tags") or [], "details": row.get("details") or {},
+            "review_status": row.get("review_status") or "pending",
+        }
+        items.append(item)
+    await items_repo.sync_for_artifact(target_space, new_id, items, source.get("extraction_engine") or "regex")
+    for row, item in zip(rows, items):
+        await items_repo.update(target_space, item["id"], {
+            "review_status": row.get("review_status") or "pending",
+            "review_note": row.get("review_note") or "",
+            "declared_status": row.get("declared_status"),
+            "extraction_engine": row.get("extraction_engine") or "regex",
+        })
+        if row.get("embedding"):
+            await items_repo.set_embedding(target_space, item["id"], row["embedding"],
+                                           row.get("embedding_provider") or "", row.get("embedding_dims") or 0)
+    await RelationshipRepository(session).ensure_contains(target_space, new_id, [i["id"] for i in items])
+    await lineage.refresh_statuses(session, target_space)
+    await session.commit()
+    return {"artifact_id": new_id, "items": len(items)}

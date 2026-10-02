@@ -1,0 +1,102 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h2>Users</h2>
+      <p>Admins manage accounts, the machine's shared models, and folder connectors. Members manage only their own knowledge.</p>
+    </div>
+  </section>
+
+  @if (error) { <p class="error-text" style="padding:0 0.25rem">{{ error }}</p> }
+  @if (notice) { <p class="muted-text" style="padding:0 0.25rem">{{ notice }}</p> }
+
+  <section class="ingest-panel">
+    <h3 style="font-size:1rem;margin-bottom:0.75rem">Create an account</h3>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+      <input [(ngModel)]="newUsername" placeholder="Username" autocomplete="off" style="flex:1;min-width:160px"
+             [title]="usernameRules" />
+      <input [(ngModel)]="newPassword" type="password" placeholder="Initial password (6+ characters)"
+             autocomplete="new-password" style="flex:1;min-width:200px" />
+      <select [(ngModel)]="newRole" style="width:auto" aria-label="Role">
+        @for (r of roles; track r) { <option [value]="r">{{ r }}</option> }
+      </select>
+      <button class="primary" [disabled]="creating || !usernameOk || newPassword.length < 6" (click)="create()">
+        {{ creating ? 'Creating…' : 'Create' }}</button>
+    </div>
+    <p class="field-help" [class.error-text]="newUsername && !usernameOk" style="margin-top:0.4rem">{{ usernameRules }}</p>
+  </section>
+
+  <!-- Inactivity retention -->
+  @if (retention) {
+    <section class="ingest-panel">
+      <h3 style="font-size:1rem;margin-bottom:0.5rem">Inactive accounts and groups</h3>
+      @if (retention.enabled) {
+        <p class="field-help">Accounts and groups unused for {{ retention.inactive_days }} days are deleted with all their data.
+          Checked every {{ retention.check_hours }} h@if (retention.last_run) {; last run {{ retention.last_run.ran_at | date:'medium' }}}.
+          The last server admin is never deleted.</p>
+      } @else {
+        <p class="field-help">Automatic deletion is <strong>off</strong> on this server (RETENTION_ENABLED=false). The lists below show what it would delete.</p>
+      }
+
+      <h4 style="font-size:0.875rem;margin:0.75rem 0 0.4rem">Due for deletion now ({{ dueCount }})</h4>
+      @if (dueCount === 0) { <p class="muted-text" style="font-size:0.85rem">Nothing is due.</p> }
+      <div class="lineage-list">
+        @for (u of retention.due.users; track u.id) {
+          <div class="lineage-row"><span class="type-pill">account</span><span class="grow">{{ u.username }}</span>
+            <span class="muted-text">last active {{ u.last_active_at | date:'mediumDate' }}</span></div>
+        }
+        @for (g of retention.due.groups; track g.id) {
+          <div class="lineage-row"><span class="type-pill">group</span><span class="grow">{{ g.name }}</span>
+            <span class="muted-text">{{ g.members }} member{{ g.members === 1 ? '' : 's' }} · last active {{ g.last_active_at | date:'mediumDate' }}</span></div>
+        }
+      </div>
+      @if (dueCount > 0) {
+        <button class="danger" style="margin-top:0.6rem" [disabled]="running" (click)="runRetention()">
+          {{ running ? 'Deleting…' : 'Delete these now' }}</button>
+      }
+
+      @if (retention.upcoming.users.length || retention.upcoming.groups.length) {
+        <h4 style="font-size:0.875rem;margin:0.9rem 0 0.4rem">Due within 30 days</h4>
+        <div class="lineage-list">
+          @for (u of retention.upcoming.users; track u.id) {
+            <div class="lineage-row"><span class="type-pill">account</span><span class="grow">{{ u.username }}</span>
+              <span class="muted-text">on {{ u.deletes_on | date:'mediumDate' }} unless they sign in</span></div>
+          }
+          @for (g of retention.upcoming.groups; track g.id) {
+            <div class="lineage-row"><span class="type-pill">group</span><span class="grow">{{ g.name }}</span>
+              <span class="muted-text">on {{ g.deletes_on | date:'mediumDate' }} unless a member uses it</span></div>
+          }
+        </div>
+      }
+
+      @if (retention.last_run && (retention.last_run.users_deleted.length || retention.last_run.groups_deleted.length || retention.last_run.skipped.length)) {
+        <details style="margin-top:0.75rem;font-size:0.8rem">
+          <summary>Last run: {{ retention.last_run.users_deleted.length }} account(s), {{ retention.last_run.groups_deleted.length }} group(s) deleted</summary>
+          @if (retention.last_run.users_deleted.length) { <p>Accounts: {{ retention.last_run.users_deleted.join(', ') }}</p> }
+          @if (retention.last_run.groups_deleted.length) { <p>Groups: {{ retention.last_run.groups_deleted.join(', ') }}</p> }
+          @for (s of retention.last_run.skipped; track $index) { <p>Skipped {{ s.user ?? s.group }}: {{ s.reason }}</p> }
+        </details>
+      }
+    </section>
+  }
+
+  <div class="review-list">
+    @for (u of users; track u.id) {
+      <div class="review-card" style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+        <strong style="flex:1;min-width:140px">{{ u.username }}
+          @if (u.id === auth.me()?.id) { <span class="muted-text">(you)</span> }
+        </strong>
+        <span class="muted-text" style="font-size:0.8rem">joined {{ u.created_at | date:'mediumDate' }}</span>
+        <span class="muted-text" style="font-size:0.8rem" [title]="u.last_login_at ? 'Last sign-in ' + (u.last_login_at | date:'medium') : 'Never signed in'">
+          active {{ u.last_active_at | date:'mediumDate' }}</span>
+        @if (retention?.enabled && u.deletes_on) {
+          <span class="muted-text" style="font-size:0.8rem" title="Deleted with all its data if it stays inactive until then">
+            · expires {{ u.deletes_on | date:'mediumDate' }}</span>
+        }
+        <select [ngModel]="u.role" (ngModelChange)="setRole(u, $event)" [disabled]="busyId === u.id"
+                style="width:auto" [attr.aria-label]="'Role of ' + u.username">
+          @for (r of roles; track r) { <option [value]="r">{{ r }}</option> }
+        </select>
+      </div>
+    }
+  </div>
+</div>

@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Dict
 
 import httpx
 import pytest
 
-from app.services.connectors import base
 from app.services.connectors.base import ConfigField, ConnectorError, validate_config
 from app.services.connectors.git_adr import parse_adr
 from app.services.connectors.parsers import adf_to_text, captions_to_transcript
@@ -164,37 +166,20 @@ def artifacts(client, headers):
     return client.get("/knowledge", headers=headers).json()
 
 
-@pytest.fixture
-def mock_http(monkeypatch) -> Callable[[Callable[[httpx.Request], httpx.Response]], list]:
-    """Route every connector HTTP call to a handler; returns the list of requests seen."""
-    def install(handler):
-        seen = []
-
-        def wrapped(request: httpx.Request) -> httpx.Response:
-            seen.append(request)
-            return handler(request)
-
-        def make_client(**kwargs):
-            return httpx.AsyncClient(transport=httpx.MockTransport(wrapped), **kwargs)
-        monkeypatch.setattr(base, "make_client", make_client)
-        return seen
-    return install
-
-
 # ── folder ──────────────────────────────────────────────────────────────────
 
-def test_folder_sync_is_idempotent_and_updates_in_place(client, alice, tmp_path: Path):
+def test_folder_sync_is_idempotent_and_updates_in_place(client, admin, tmp_path: Path):
     (tmp_path / "meetings").mkdir()
     (tmp_path / "meetings" / "standup.vtt").write_text(VTT, encoding="utf-8")
     notes = tmp_path / "notes.md"
     notes.write_text("We decided to freeze deploys on Fridays. Risk: hotfixes get delayed.", encoding="utf-8")
     (tmp_path / "image.png").write_bytes(b"\x89PNG")
 
-    conn = create(client, alice, "folder", {"path": str(tmp_path)})
-    first = sync(client, alice, conn["id"])["last_result"]
+    conn = create(client, admin, "folder", {"path": str(tmp_path)})
+    first = sync(client, admin, conn["id"])["last_result"]
     assert (first["fetched"], first["created"], first["failed"]) == (2, 2, 0)
 
-    data = artifacts(client, alice)
+    data = artifacts(client, admin)
     by_source = {a["source_type"]: a for a in data["artifacts"]}
     assert set(by_source) == {"transcript", "file"}
     assert "Ana Lopez: We decided to ship the beta on Friday" in by_source["transcript"]["content"]
@@ -202,49 +187,83 @@ def test_folder_sync_is_idempotent_and_updates_in_place(client, alice, tmp_path:
     note_artifact = by_source["file"]
     assert any(i["type"] == "decision" for i in data["knowledge_items"] if i["artifact_id"] == note_artifact["id"])
 
-    second = sync(client, alice, conn["id"])["last_result"]
+    second = sync(client, admin, conn["id"])["last_result"]
     assert (second["unchanged"], second["created"], second["updated"]) == (2, 0, 0)
 
     notes.write_text("We decided to freeze deploys on Fridays and Mondays.", encoding="utf-8")
-    third = sync(client, alice, conn["id"])["last_result"]
+    third = sync(client, admin, conn["id"])["last_result"]
     assert (third["updated"], third["unchanged"]) == (1, 1)
-    after = artifacts(client, alice)
+    after = artifacts(client, admin)
     assert len(after["artifacts"]) == 2                                   # updated, not duplicated
     edited = next(a for a in after["artifacts"] if a["id"] == note_artifact["id"])
     assert "Mondays" in edited["content"]
 
-    docs = client.get(f"/connectors/{conn['id']}/documents", headers=alice).json()
+    docs = client.get(f"/connectors/{conn['id']}/documents", headers=admin).json()
     assert {d["external_id"] for d in docs} == {"meetings/standup.vtt", "notes.md"}
 
 
-def test_folder_path_must_exist_and_respect_roots(client, alice, tmp_path, monkeypatch):
-    conn = create(client, alice, "folder", {"path": str(tmp_path / "missing")})
-    client.post(f"/connectors/{conn['id']}/sync", headers=alice)
-    status = next(c for c in client.get("/connectors", headers=alice).json() if c["id"] == conn["id"])
-    assert status["last_status"] == "error" and "not found" in status["last_error"]
+def test_folder_path_must_exist_and_stay_inside_connector_roots(client, admin, tmp_path, monkeypatch):
+    # checked when the connector is saved, not only at sync time
+    r = client.post("/connectors", headers=admin, json={"kind": "folder", "name": "x",
+                                                         "config": {"path": str(tmp_path / "missing")}})
+    assert r.status_code == 400 and "not found" in r.json()["detail"]
 
-    monkeypatch.setenv("CONNECTOR_ROOTS", str(tmp_path / "allowed"))
-    conn = create(client, alice, "folder", {"path": str(tmp_path)})
-    client.post(f"/connectors/{conn['id']}/sync", headers=alice)
-    status = next(c for c in client.get("/connectors", headers=alice).json() if c["id"] == conn["id"])
-    assert "CONNECTOR_ROOTS" in status["last_error"]
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    monkeypatch.setenv("CONNECTOR_ROOTS", str(allowed))
+    for path in (str(tmp_path), str(allowed / ".." ), "C:/Windows" if os.name == "nt" else "/etc"):
+        r = client.post("/connectors", headers=admin, json={"kind": "folder", "name": "x", "config": {"path": path}})
+        assert r.status_code == 400 and "CONNECTOR_ROOTS" in r.json()["detail"], path
+    assert client.post("/connectors", headers=admin, json={"kind": "folder", "name": "x",
+                                                            "config": {"path": str(allowed)}}).status_code == 201
+
+    # a connector saved before the roots were narrowed can't sync outside them either
+    monkeypatch.setenv("CONNECTOR_ROOTS", str(tmp_path))
+    conn = create(client, admin, "folder", {"path": str(tmp_path)})
+    monkeypatch.setenv("CONNECTOR_ROOTS", str(allowed))
+    client.post(f"/connectors/{conn['id']}/sync", headers=admin)
+    status = next(c for c in client.get("/connectors", headers=admin).json() if c["id"] == conn["id"])
+    assert status["last_status"] == "error" and "CONNECTOR_ROOTS" in status["last_error"]
 
 
-def test_filesystem_connectors_need_admin(client, make_user, db_query):
-    from jose import jwt
-    from app.auth import ALGORITHM, SECRET_KEY
-    headers = make_user()
-    user_id = jwt.decode(headers["Authorization"].split()[1], SECRET_KEY, algorithms=[ALGORITHM])["sub"]
-    db_query("UPDATE User SET role = 'member' WHERE id = :id", id=user_id)
-    r = client.post("/connectors", headers=headers, json={"kind": "folder", "name": "x", "config": {"path": "C:/"}})
+def test_folder_connectors_are_disabled_without_connector_roots(client, admin, tmp_path, monkeypatch):
+    monkeypatch.delenv("CONNECTOR_ROOTS")
+    kinds = {k["kind"]: k for k in client.get("/connectors/kinds", headers=admin).json()}
+    assert kinds["folder"]["allowed"] is False and "CONNECTOR_ROOTS" in kinds["folder"]["disabled_reason"]
+    assert kinds["github"]["allowed"] is True
+    r = client.post("/connectors", headers=admin, json={"kind": "folder", "name": "x", "config": {"path": str(tmp_path)}})
     assert r.status_code == 403
-    kinds = {k["kind"]: k for k in client.get("/connectors/kinds", headers=headers).json()}
-    assert kinds["folder"]["allowed"] is False and kinds["github"]["allowed"] is True
+
+
+def test_symlinks_cannot_escape_the_folder(client, admin, tmp_path):
+    inside, outside = tmp_path / "inside", tmp_path / "outside"
+    inside.mkdir(); outside.mkdir()
+    (outside / "secret.md").write_text("We decided the root password is hunter2.", encoding="utf-8")
+    (inside / "ok.md").write_text("We decided to use tabs.", encoding="utf-8")
+    try:
+        os.symlink(outside / "secret.md", inside / "linked.md")
+        os.symlink(outside, inside / "linked_dir", target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:   # Windows without symlink privilege
+        pytest.skip(f"cannot create symlinks here: {exc}")
+    conn = create(client, admin, "folder", {"path": str(inside)})
+    sync(client, admin, conn["id"])
+    docs = {d["external_id"] for d in client.get(f"/connectors/{conn['id']}/documents", headers=admin).json()}
+    assert docs == {"ok.md"}
+    assert not any("hunter2" in a["content"] for a in artifacts(client, admin)["artifacts"])
+
+
+def test_filesystem_connectors_need_admin(client, make_user, tmp_path):
+    member = make_user()
+    r = client.post("/connectors", headers=member, json={"kind": "folder", "name": "x", "config": {"path": str(tmp_path)}})
+    assert r.status_code == 403
+    kinds = {k["kind"]: k for k in client.get("/connectors/kinds", headers=member).json()}
+    assert kinds["folder"]["allowed"] is False and kinds["git_adr"]["allowed"] is False
+    assert kinds["github"]["allowed"] is True
 
 
 # ── git ADRs → decisions with lineage ───────────────────────────────────────
 
-def test_git_adr_sync_creates_decisions_and_supersede_links(client, alice, tmp_path):
+def test_git_adr_sync_creates_decisions_and_supersede_links(client, admin, tmp_path):
     adr_dir = tmp_path / "docs" / "adr"
     adr_dir.mkdir(parents=True)
     (adr_dir / "0001-use-mysql-for-billing.md").write_text(
@@ -257,11 +276,11 @@ def test_git_adr_sync_creates_decisions_and_supersede_links(client, alice, tmp_p
     (adr_dir / "0003-use-postgresql-for-billing.md").write_text(NYGARD_ADR, encoding="utf-8")
     (adr_dir / "README.md").write_text("# ADRs\n", encoding="utf-8")
 
-    conn = create(client, alice, "git_adr", {"path": str(tmp_path), "web_url": "https://git.example/acme/blob/main"})
-    result = sync(client, alice, conn["id"])["last_result"]
+    conn = create(client, admin, "git_adr", {"path": str(tmp_path), "web_url": "https://git.example/acme/blob/main"})
+    result = sync(client, admin, conn["id"])["last_result"]
     assert (result["created"], result["links_created"]) == (3, 1)
 
-    reg = client.get("/knowledge/register", headers=alice).json()
+    reg = client.get("/knowledge/register", headers=admin).json()
     by_title = {i["title"]: i for i in reg["items"]}
     mysql = by_title["ADR-0001: Use MySQL for billing"]
     pg = by_title["ADR-0003: Use PostgreSQL for billing"]
@@ -272,15 +291,70 @@ def test_git_adr_sync_creates_decisions_and_supersede_links(client, alice, tmp_p
     assert pg["details"]["why"] == "MySQL lacks the JSON features we need."
     assert any(e["from"] == pg["id"] and e["to"] == mysql["id"] and e["kind"] == "supersedes" and e["origin"] == "git_adr"
                for e in reg["edges"])
-    adr_artifact = next(a for a in artifacts(client, alice)["artifacts"] if a["id"] == mysql["artifact_id"])
+    adr_artifact = next(a for a in artifacts(client, admin)["artifacts"] if a["id"] == mysql["artifact_id"])
     assert adr_artifact["source"] == "https://git.example/acme/blob/main/docs/adr/0001-use-mysql-for-billing.md"
 
     # re-sync: nothing new, link not duplicated
-    again = sync(client, alice, conn["id"])["last_result"]
+    again = sync(client, admin, conn["id"])["last_result"]
     assert (again["unchanged"], again["links_created"]) == (3, 0)
 
 
-# ── GitHub / Jira / Linear (mocked HTTP) ────────────────────────────────────
+@pytest.mark.skipif(not shutil.which("git"), reason="git is not installed")
+def test_git_adr_dates_and_authors_come_from_real_git_history(client, admin, tmp_path):
+    """No mocks: a real repository, real commits, real `git log`."""
+    adr_dir = tmp_path / "docs" / "decisions"
+    adr_dir.mkdir(parents=True)
+
+    def git(*args, date=None, author="Ana Lopez <ana@example.com>"):
+        env = {**os.environ, "GIT_AUTHOR_NAME": author.split(" <")[0], "GIT_AUTHOR_EMAIL": author.split("<")[1][:-1],
+               "GIT_COMMITTER_NAME": "ci", "GIT_COMMITTER_EMAIL": "ci@example.com"}
+        if date:
+            env.update(GIT_AUTHOR_DATE=date, GIT_COMMITTER_DATE=date)
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True, env=env)
+
+    git("init", "-q")
+    # no "Date:" line, so the date must come from the commit that added the file
+    (adr_dir / "0001-use-kafka.md").write_text(
+        "# 1. Use Kafka\n\n## Status\n\nAccepted\n\n## Decision\n\nWe will use Kafka for events.\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-q", "-m", "ADR 1", date="2022-04-05T10:00:00+00:00")
+    (adr_dir / "0002-use-nats.md").write_text(
+        "# 2. Use NATS\n\n## Status\n\nAccepted\n\nSupersedes [ADR-0001](0001-use-kafka.md)\n\n"
+        "## Decision\n\nWe will move events to NATS.\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-q", "-m", "ADR 2", date="2024-09-01T09:30:00+00:00", author="Ben Ode <ben@example.com>")
+
+    conn = create(client, admin, "git_adr", {"path": str(tmp_path)})
+    result = sync(client, admin, conn["id"])["last_result"]
+    assert (result["created"], result["links_created"]) == (2, 1)
+
+    items = {i["title"]: i for i in client.get("/knowledge/register", headers=admin).json()["items"]}
+    kafka, nats = items["ADR-0001: Use Kafka"], items["ADR-0002: Use NATS"]
+    assert kafka["date"].startswith("2022-04-05") and nats["date"].startswith("2024-09-01")
+    assert kafka["details"]["who"] == "Ana Lopez" and nats["details"]["who"] == "Ben Ode"
+    assert kafka["status"] == "superseded" and nats["status"] == "active"
+
+
+def test_hostile_repo_config_does_not_run_programs(client, admin, tmp_path):
+    """A scanned repo's .git/config must not make the server execute anything."""
+    if not shutil.which("git"):
+        pytest.skip("git is not installed")
+    subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+    canary = tmp_path / "pwned.txt"
+    hook = f'echo pwned > "{canary.as_posix()}"'
+    with open(tmp_path / ".git" / "config", "a", encoding="utf-8") as fh:
+        fh.write(f"[core]\n\tfsmonitor = {hook}\n\tpager = {hook}\n")
+    (tmp_path / "adr").mkdir()
+    (tmp_path / "adr" / "0001-x.md").write_text("# 1. X\n\n## Decision\n\nWe will X.\n", encoding="utf-8")
+    conn = create(client, admin, "git_adr", {"path": str(tmp_path)})
+    sync(client, admin, conn["id"])
+    assert not canary.exists()
+
+
+# ── GitHub / Jira / Linear: offline contract tests (mocked HTTP) ────────────
+# These pin down request shapes, pagination and error handling (401s, GraphQL
+# errors) that a live service can't be made to produce on demand. The same
+# connectors run against the real services in test_live_integrations.py.
 
 def test_github_sync_ingests_merged_prs_with_discussion(client, alice, mock_http):
     def handler(request: httpx.Request) -> httpx.Response:
@@ -300,11 +374,12 @@ def test_github_sync_ingests_merged_prs_with_discussion(client, alice, mock_http
         return httpx.Response(404)
     seen = mock_http(handler)
 
-    conn = create(client, alice, "github", {"repo": "acme/api", "token": "ghp_secret123"})
+    conn = create(client, alice, "github", {"repo_url": "https://github.com/acme/api", "token": "ghp_secret123"})
     assert conn["config"]["token"] == "********"
     result = sync(client, alice, conn["id"])["last_result"]
     assert (result["fetched"], result["created"]) == (1, 1)
     assert seen[0].headers["Authorization"] == "Bearer ghp_secret123"
+    assert {r.url.host for r in seen} == {"api.github.com"}
 
     art = next(a for a in artifacts(client, alice)["artifacts"] if a["source_type"] == "github_pr")
     assert art["title"] == "PR #7: Switch queue to Kafka"
@@ -356,44 +431,145 @@ def test_linear_sync_and_auth_errors(client, alice, mock_http):
             "pageInfo": {"hasNextPage": False, "endCursor": None}}}})
     mock_http(handler)
 
-    bad = create(client, alice, "linear", {"api_key": "lin_api_bad", "team_key": "ENG"})
+    bad = create(client, alice, "linear", {"api_url": LINEAR, "api_key": "lin_api_bad", "team_key": "ENG"})
     client.post(f"/connectors/{bad['id']}/sync", headers=alice)
     status = next(c for c in client.get("/connectors", headers=alice).json() if c["id"] == bad["id"])
     assert status["last_status"] == "error" and "refused the credentials" in status["last_error"]
 
     # fixing the key via PATCH; a masked secret in a later PATCH keeps the stored one
-    r = client.patch(f"/connectors/{bad['id']}", headers=alice, json={"config": {"api_key": "lin_api_good", "team_key": "ENG"}})
+    r = client.patch(f"/connectors/{bad['id']}", headers=alice, json={"config": {"api_url": LINEAR, "api_key": "lin_api_good", "team_key": "ENG"}})
     assert r.status_code == 200 and r.json()["config"]["api_key"] == "********"
-    client.patch(f"/connectors/{bad['id']}", headers=alice, json={"config": {"api_key": "********", "team_key": "ENG"}})
+    client.patch(f"/connectors/{bad['id']}", headers=alice, json={"config": {"api_url": LINEAR, "api_key": "********", "team_key": "ENG"}})
     result = sync(client, alice, bad["id"])["last_result"]
     assert result["created"] == 1
     art = next(a for a in artifacts(client, alice)["artifacts"] if a["source_type"] == "linear")
     assert art["title"] == "ENG-3: Adopt feature flags"
 
 
+# ── only the addresses the user provided are ever contacted ──────────────────
+
+LINEAR = "https://api.linear.app/graphql"
+
+
+@pytest.mark.parametrize("link, repo, api", [
+    ("https://github.com/acme/api", "acme/api", "https://api.github.com"),
+    ("https://github.com/acme/api.git", "acme/api", "https://api.github.com"),
+    ("https://github.com/acme/api/tree/main/docs", "acme/api", "https://api.github.com"),
+    ("https://git.acme.internal/platform/billing", "platform/billing", "https://git.acme.internal/api/v3"),
+])
+def test_github_api_address_comes_from_the_users_link(link, repo, api):
+    from app.services.connectors import github
+    assert github.resolve({"repo_url": link})[:2] == (repo, api)
+
+
+def test_connectors_have_no_built_in_endpoints():
+    from app.services.connectors import REGISTRY
+    for module in REGISTRY.values():
+        for field in module.FIELDS:
+            assert not (isinstance(field.default, str) and field.default.startswith("http")), \
+                f"{module.KIND}.{field.name} defaults to {field.default}"
+    for kind in ("github", "jira", "linear"):
+        assert any(f.required and "url" in f.name for f in REGISTRY[kind].FIELDS), kind
+
+
+@pytest.mark.parametrize("kind, config", [
+    ("github", {"repo_url": "acme/api"}),                         # not a link
+    ("github", {"repo_url": "https://github.com/acme"}),          # not a repository
+    ("github", {"repo_url": "ftp://github.com/acme/api"}),
+    ("linear", {"api_key": "k"}),                                 # no address at all
+    ("jira", {"base_url": "acme.atlassian.net", "api_token": "t"}),
+])
+def test_addresses_are_required_and_checked_when_saving(client, alice, kind, config):
+    r = client.post("/connectors", headers=alice, json={"kind": kind, "name": "x", "config": config})
+    assert r.status_code == 400, r.text
+
+
+def test_github_enterprise_requests_go_only_to_that_host(client, alice, mock_http):
+    seen = mock_http(lambda request: httpx.Response(200, json=[]))
+    conn = create(client, alice, "github", {"repo_url": "https://git.acme.internal/platform/billing"})
+    sync(client, alice, conn["id"])
+    assert seen and {(r.url.host, r.url.path) for r in seen} == \
+        {("git.acme.internal", "/api/v3/repos/platform/billing/pulls")}
+
+
+def test_urls_returned_by_a_service_cannot_redirect_the_connector(client, alice, mock_http):
+    """A comments_url pointing at another host is refused before any request is sent."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/repos/acme/api/pulls":
+            return httpx.Response(200, json=[{
+                "number": 1, "title": "t", "body": "b", "merged_at": "2025-01-01T00:00:00Z", "user": {"login": "a"},
+                "comments_url": "https://collector.evil.example/steal"}])
+        return httpx.Response(404)
+    seen = mock_http(handler)
+    conn = create(client, alice, "github", {"repo_url": "https://github.com/acme/api", "token": "ghp_secret"})
+    client.post(f"/connectors/{conn['id']}/sync", headers=alice)
+    status = next(c for c in client.get("/connectors", headers=alice).json() if c["id"] == conn["id"])
+    assert status["last_status"] == "error" and "Refused to contact collector.evil.example" in status["last_error"]
+    assert {r.url.host for r in seen} == {"api.github.com"}      # the token never went to the other host
+
+
+def test_redirects_to_other_hosts_are_refused(client, alice, mock_http):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "jira.acme.io":
+            return httpx.Response(302, headers={"Location": "https://elsewhere.example/rest/api/2/search"})
+        return httpx.Response(200, json={"issues": []})
+    seen = mock_http(handler)
+    conn = create(client, alice, "jira", {"base_url": "https://jira.acme.io", "api_token": "t", "jql": "x"})
+    client.post(f"/connectors/{conn['id']}/sync", headers=alice)
+    status = next(c for c in client.get("/connectors", headers=alice).json() if c["id"] == conn["id"])
+    assert status["last_status"] == "error" and "elsewhere.example" in status["last_error"]
+    assert {r.url.host for r in seen} == {"jira.acme.io"}
+
+
+def test_old_connectors_are_moved_to_explicit_addresses(client, alice, db_query):
+    import uuid
+    from app import migrations
+    from app.arcadedb import ArcadeSession
+    from app.db import get_client
+    me = client.get("/auth/me", headers=alice).json()
+    ids = {k: f"conn_old_{k}_{uuid.uuid4().hex[:6]}" for k in ("gh", "ghe", "lin")}
+    for key, kind, config in [("gh", "github", {"repo": "acme/api", "api_url": "https://api.github.com"}),
+                              ("ghe", "github", {"repo": "plat/billing", "api_url": "https://git.acme.internal/api/v3"}),
+                              ("lin", "linear", {"team_key": "ENG"})]:
+        db_query("INSERT INTO Connector CONTENT :d", d={"id": ids[key], "user_id": me["id"], "kind": kind,
+                                                       "name": key, "config": config})
+
+    async def go():
+        session = ArcadeSession(get_client())
+        try:
+            return await migrations.migrate_connector_addresses(session)
+        finally:
+            await session.close()
+    assert client.portal.call(go) >= 3
+    cfg = {k: db_query("SELECT config FROM Connector WHERE id = :id", id=i)[0]["config"] for k, i in ids.items()}
+    assert cfg["gh"]["repo_url"] == "https://github.com/acme/api" and "repo" not in cfg["gh"]
+    assert cfg["ghe"]["repo_url"] == "https://git.acme.internal/plat/billing"
+    assert cfg["lin"]["api_url"] == LINEAR
+
+
 # ── management and isolation ────────────────────────────────────────────────
 
-def test_connector_validation_and_isolation(client, alice, bob, tmp_path):
-    assert client.post("/connectors", headers=alice, json={"kind": "dropbox", "name": "x"}).status_code == 400
-    assert client.post("/connectors", headers=alice, json={"kind": "jira", "name": "x",
+def test_connector_validation_and_isolation(client, admin, bob, tmp_path):
+    assert client.post("/connectors", headers=admin, json={"kind": "dropbox", "name": "x"}).status_code == 400
+    assert client.post("/connectors", headers=admin, json={"kind": "jira", "name": "x",
                                                             "config": {"base_url": "https://j"}}).status_code == 400
     (tmp_path / "a.md").write_text("We decided to use tabs.", encoding="utf-8")
-    conn = create(client, alice, "folder", {"path": str(tmp_path)})
+    conn = create(client, admin, "folder", {"path": str(tmp_path)})
     assert conn["id"] not in {c["id"] for c in client.get("/connectors", headers=bob).json()}
     for method, path in [("POST", f"/connectors/{conn['id']}/sync"), ("PATCH", f"/connectors/{conn['id']}"),
                          ("DELETE", f"/connectors/{conn['id']}"), ("GET", f"/connectors/{conn['id']}/documents")]:
         assert client.request(method, path, headers=bob, json={}).status_code == 404, path
 
 
-def test_delete_connector_optionally_removes_its_artifacts(client, alice, tmp_path):
+def test_delete_connector_optionally_removes_its_artifacts(client, admin, tmp_path):
     (tmp_path / "a.md").write_text("We decided to use tabs.", encoding="utf-8")
-    keep = create(client, alice, "folder", {"path": str(tmp_path)}, name="keep")
-    sync(client, alice, keep["id"])
-    assert client.delete(f"/connectors/{keep['id']}", headers=alice).status_code == 204
-    assert len(artifacts(client, alice)["artifacts"]) == 1
+    keep = create(client, admin, "folder", {"path": str(tmp_path)}, name="keep")
+    sync(client, admin, keep["id"])
+    assert client.delete(f"/connectors/{keep['id']}", headers=admin).status_code == 204
+    assert len(artifacts(client, admin)["artifacts"]) == 1
 
-    drop = create(client, alice, "folder", {"path": str(tmp_path)}, name="drop")
-    sync(client, alice, drop["id"])
-    assert len(artifacts(client, alice)["artifacts"]) == 2      # separate connector, separate artifact
-    assert client.delete(f"/connectors/{drop['id']}?delete_artifacts=true", headers=alice).status_code == 204
-    assert len(artifacts(client, alice)["artifacts"]) == 1
+    drop = create(client, admin, "folder", {"path": str(tmp_path)}, name="drop")
+    sync(client, admin, drop["id"])
+    assert len(artifacts(client, admin)["artifacts"]) == 2      # separate connector, separate artifact
+    assert client.delete(f"/connectors/{drop['id']}?delete_artifacts=true", headers=admin).status_code == 204
+    assert len(artifacts(client, admin)["artifacts"]) == 1

@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.arcadedb import ArcadeSession
 from app.auth import get_current_user
+from app.rbac import Permission, require
 from app.db import User, get_session
 from app.repositories import UserRepository
 from app.services import llm_catalog
@@ -140,8 +141,9 @@ async def model_status(current_user: User = Depends(get_current_user)) -> Dict[s
 
 @router.post("/install")
 async def install_local_model(
-    body: ModelActionRequest, current_user: User = Depends(get_current_user),
+    body: ModelActionRequest, current_user: User = Depends(require(Permission.MANAGE_MODELS)),
 ) -> StreamingResponse:
+    """Admins only: models live in the machine's one Ollama, shared by every account."""
     _require_catalog_model(body.model_id)
     await _installed_or_503()
     return _pull_stream(body.model_id)
@@ -150,7 +152,7 @@ async def install_local_model(
 @router.post("/remove")
 async def remove_local_model(
     body: ModelActionRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require(Permission.MANAGE_MODELS)),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     _require_catalog_model(body.model_id)

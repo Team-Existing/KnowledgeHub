@@ -12,7 +12,9 @@ from typing import List
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 
-from app.services.connectors.base import ConfigField, ConnectorError, FetchResult, Row, SourceDocument, checked_directory
+from app.services.connectors.base import (
+    ConfigField, ConnectorError, FetchResult, Row, SourceDocument, checked_directory, walk_files,
+)
 from app.services.connectors.parsers import captions_to_transcript
 from app.services.file_ingestion import MAX_UPLOAD_BYTES, _extract_docx, _extract_pdf
 
@@ -39,10 +41,8 @@ def _matches(name: str, patterns: List[str]) -> bool:
 
 def _list_files(root: Path, patterns: List[str], limit: int) -> List[Path]:
     found: List[Path] = []
-    for path in sorted(root.rglob("*")):
-        if any(part in _SKIP_DIRS for part in path.relative_to(root).parts[:-1]):
-            continue
-        if path.is_file() and _matches(path.name, patterns):
+    for path in walk_files(root, _SKIP_DIRS):
+        if _matches(path.name, patterns):
             found.append(path)
             if len(found) >= limit:
                 break

@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Iterator, List, Literal, Optional, Set
 
 import httpx
 
@@ -90,9 +90,43 @@ def validate_config(fields: List[ConfigField], raw: Row) -> Row:
     return out
 
 
-def make_client(**kwargs: Any) -> httpx.AsyncClient:
-    """Every connector HTTP call goes through here; tests replace it with a MockTransport client."""
-    return httpx.AsyncClient(timeout=30, follow_redirects=True, **kwargs)
+def user_url(raw: str, label: str) -> httpx.URL:
+    """A URL the user typed into the connector: http(s) with a host, nothing else."""
+    try:
+        url = httpx.URL(str(raw).strip())
+    except Exception:
+        raise ConnectorError(f"{label} is not a valid URL")
+    if url.scheme not in ("http", "https") or not url.host:
+        raise ConnectorError(f"{label} must be a full http(s) address, e.g. https://example.com")
+    return url
+
+
+def host_guard(allowed_hosts: Set[str]):
+    """
+    Request hook: refuse any request whose host isn't one the user gave this
+    connector — including redirects and URLs that come back inside API
+    responses (e.g. a "comments_url" pointing somewhere else).
+    """
+    allowed = {h.lower() for h in allowed_hosts}
+
+    async def check(request: httpx.Request) -> None:
+        if request.url.host.lower() not in allowed:
+            raise ConnectorError(
+                f"Refused to contact {request.url.host}: this connector may only reach {', '.join(sorted(allowed))}"
+            )
+    return check
+
+
+def make_client(allowed_hosts: Set[str], transport: Optional[httpx.AsyncBaseTransport] = None,
+                **kwargs: Any) -> httpx.AsyncClient:
+    """
+    Every connector HTTP call goes through here, confined to `allowed_hosts`
+    (derived from the addresses in the connector's own config). Connectors have
+    no built-in endpoints, so nothing is contacted that a user didn't provide.
+    Tests pass a MockTransport; everything else (redirects, the guard) is the same.
+    """
+    return httpx.AsyncClient(timeout=30, follow_redirects=True, transport=transport,
+                             event_hooks={"request": [host_guard(allowed_hosts)]}, **kwargs)
 
 
 async def get_json(client: httpx.AsyncClient, method: str, url: str, what: str, **kwargs: Any) -> Any:
@@ -111,19 +145,54 @@ async def get_json(client: httpx.AsyncClient, method: str, url: str, what: str, 
 
 
 def allowed_roots() -> List[Path]:
-    """CONNECTOR_ROOTS (os.pathsep-separated) limits which directories filesystem connectors may read."""
+    """
+    CONNECTOR_ROOTS (os.pathsep-separated: ';' on Windows, ':' elsewhere) lists the
+    only directories filesystem connectors may read. Unset = filesystem
+    connectors are disabled entirely (fail closed).
+    """
     raw = os.getenv("CONNECTOR_ROOTS", "")
     return [Path(p).expanduser().resolve() for p in raw.split(os.pathsep) if p.strip()]
 
 
+def filesystem_disabled_reason() -> Optional[str]:
+    if not allowed_roots():
+        return "Folder connectors are disabled on this server until an administrator sets CONNECTOR_ROOTS"
+    return None
+
+
+def is_within(path: Path, root: Path) -> bool:
+    """Whether `path`, after resolving symlinks and '..', is `root` or inside it."""
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):   # broken or looping symlink
+        return False
+    return resolved == root or root in resolved.parents
+
+
 def checked_directory(raw_path: str) -> Path:
+    reason = filesystem_disabled_reason()
+    if reason:
+        raise ConnectorError(reason)
     path = Path(raw_path).expanduser()
     if not path.is_absolute():
         raise ConnectorError("Path must be absolute")
     path = path.resolve()
+    if not any(is_within(path, r) for r in allowed_roots()):
+        raise ConnectorError("Path is outside the directories allowed by CONNECTOR_ROOTS")
     if not path.is_dir():
         raise ConnectorError(f"Directory not found: {path}")
-    roots = allowed_roots()
-    if roots and not any(path == r or r in path.parents for r in roots):
-        raise ConnectorError("Path is outside the directories allowed by CONNECTOR_ROOTS")
     return path
+
+
+def walk_files(root: Path, skip_dirs: Set[str] = frozenset()) -> Iterator[Path]:
+    """
+    Files under `root`, sorted, without following directory symlinks; file
+    symlinks pointing outside `root` are skipped, so a link can't pull in
+    files from outside the allowed directories.
+    """
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = sorted(d for d in dirnames if d not in skip_dirs)
+        for name in sorted(filenames):
+            path = Path(dirpath) / name
+            if is_within(path, root) and path.is_file():
+                yield path

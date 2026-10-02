@@ -8,6 +8,7 @@ ADR itself, or else from the commit that added the file.
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import shutil
 from datetime import datetime, timezone
@@ -16,7 +17,9 @@ from typing import Dict, List, Optional, Tuple
 
 from starlette.concurrency import run_in_threadpool
 
-from app.services.connectors.base import ConfigField, ConnectorError, FetchResult, Row, SourceDocument, checked_directory
+from app.services.connectors.base import (
+    ConfigField, ConnectorError, FetchResult, Row, SourceDocument, checked_directory, is_within, walk_files,
+)
 
 KIND = "git_adr"
 LABEL = "Git repository — Architecture Decision Records"
@@ -141,9 +144,14 @@ async def _git_first_commit(root: Path, rel_path: str) -> Tuple[Optional[str], O
     if not shutil.which("git"):
         return None, None
     try:
+        # The repository is untrusted input: its own .git/config could otherwise make git run
+        # programs (fsmonitor, hooks, pager). Override those and skip system-wide config.
         proc = await asyncio.create_subprocess_exec(
-            "git", "-C", str(root), "log", "--diff-filter=A", "--follow", "--format=%aI|%an", "--", rel_path,
+            "git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=", "-c", "core.pager=cat",
+            "--no-pager", "-C", str(root), "log", "--no-ext-diff", "--no-textconv",
+            "--diff-filter=A", "--follow", "--format=%aI|%an", "--", rel_path,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+            env={**os.environ, "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"},
         )
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
     except (OSError, asyncio.TimeoutError):
@@ -158,11 +166,13 @@ async def _git_first_commit(root: Path, rel_path: str) -> Tuple[Optional[str], O
 def _list_adrs(root: Path, dirs: List[str], limit: int) -> List[Path]:
     found: List[Path] = []
     for d in dirs:
-        base = (root / d).resolve()
-        if root not in base.parents and base != root:
-            continue   # "../" in a configured folder must not escape the repository
+        base = root / d
+        if not is_within(base, root):
+            continue   # "../" or a symlink in a configured folder must not escape the repository
+        base = base.resolve()
         if base.is_dir():
-            found += [p for p in sorted(base.rglob("*.md")) if p.name.lower() not in _SKIP_NAMES]
+            found += [p for p in walk_files(base, {".git"})
+                      if p.suffix.lower() == ".md" and p.name.lower() not in _SKIP_NAMES]
     unique = list(dict.fromkeys(found))
     return unique[:limit]
 

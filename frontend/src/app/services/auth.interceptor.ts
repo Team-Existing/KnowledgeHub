@@ -3,6 +3,7 @@ import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http'
 import { Router } from '@angular/router'
 import { catchError, throwError } from 'rxjs'
 import { API_BASE, AuthService } from './auth.service'
+import { SpaceService } from './space.service'
 
 /** True for requests to our own API — never leak the token to other hosts. */
 export function isApiRequest(url: string): boolean {
@@ -25,17 +26,26 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   const auth = inject(AuthService)
   const router = inject(Router)
+  const spaces = inject(SpaceService)
   const token = auth.token()
-  const authed = token && !req.headers.has('Authorization')
-    ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
-    : req
+  const headers: Record<string, string> = {}
+  if (token && !req.headers.has('Authorization')) headers['Authorization'] = `Bearer ${token}`
+  // which space (personal or group) the request acts in; see SpaceService
+  const space = spaces.activeId()
+  if (token && space && !req.headers.has('X-Space')) headers['X-Space'] = space
+  const authed = Object.keys(headers).length ? req.clone({ setHeaders: headers }) : req
 
   return next(authed).pipe(
     catchError((err: unknown) => {
       if (err instanceof HttpErrorResponse && err.status === 401 && token &&
           !AUTH_ENDPOINTS.some(path => req.url.startsWith(path))) {
         auth.logout()
+        spaces.reset()
         router.navigate(['/login'], { queryParams: { expired: 1 } })
+      } else if (err instanceof HttpErrorResponse && err.status === 403 &&
+                 err.error?.detail === 'You are not a member of that group') {
+        // removed from the active group (or it was deleted): go back to the personal space
+        spaces.fallBackToPersonal()
       }
       return throwError(() => err)
     }),

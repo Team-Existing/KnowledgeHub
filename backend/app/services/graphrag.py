@@ -522,6 +522,8 @@ def _extract_citations(
                 "title": n.get("title") or n.get("label") or nid,
                 "type": n.get("kind") or n.get("type") or "item",
             }
+            if n.get("status"):
+                by_id[nid]["status"] = n["status"]   # e.g. "superseded": shown next to the source
     for s in summaries or []:
         aid = s.get("artifact_id")
         if aid and aid not in by_id:

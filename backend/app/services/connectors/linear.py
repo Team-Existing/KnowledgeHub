@@ -1,24 +1,27 @@
-"""Linear issues (description + comments) updated in the last N days, optionally for one team."""
+"""
+Linear issues (description + comments) updated in the last N days, optionally
+for one team. The API address is part of the connector's config, not built in.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from app.services.connectors import base
-from app.services.connectors.base import ConfigField, ConnectorError, FetchResult, Row, SourceDocument
+from app.services.connectors.base import ConfigField, ConnectorError, FetchResult, Row, SourceDocument, user_url
 
 KIND = "linear"
 LABEL = "Linear — issues and comments"
 FILESYSTEM = False
 FIELDS = [
+    ConfigField("api_url", "Linear API address", required=True,
+                help="Linear's GraphQL endpoint: https://api.linear.app/graphql"),
     ConfigField("api_key", "Personal API key", type="password", required=True, secret=True,
                 help="Linear → Settings → Security & access → Personal API keys"),
     ConfigField("team_key", "Team key (optional)", help="e.g. ENG; empty = all teams you can see"),
     ConfigField("days", "Look back (days)", type="number", default=30),
     ConfigField("max_items", "Max issues per sync", type="number", default=50),
 ]
-
-API_URL = "https://api.linear.app/graphql"
 
 _QUERY = """
 query Issues($first: Int!, $after: String, $filter: IssueFilter) {
@@ -61,6 +64,10 @@ def _issue_document(issue: Dict[str, Any]) -> SourceDocument:
     )
 
 
+def check(config: Row) -> None:
+    user_url(config["api_url"], "Linear API address")
+
+
 async def fetch(config: Row) -> FetchResult:
     since = (datetime.now(timezone.utc) - timedelta(days=config["days"])).isoformat()
     issue_filter: Dict[str, Any] = {"updatedAt": {"gt": since}}
@@ -71,9 +78,10 @@ async def fetch(config: Row) -> FetchResult:
     issues: List[Dict[str, Any]] = []
     after = None
     # personal API keys go in the Authorization header as-is (no "Bearer")
-    async with base.make_client(headers={"Authorization": config["api_key"]}) as client:
+    api = user_url(config["api_url"], "Linear API address")
+    async with base.make_client({api.host}, headers={"Authorization": config["api_key"]}) as client:
         while len(issues) < limit:
-            data = await base.get_json(client, "POST", API_URL, "Linear", json={
+            data = await base.get_json(client, "POST", str(api), "Linear", json={
                 "query": _QUERY,
                 "variables": {"first": min(limit - len(issues), 50), "after": after, "filter": issue_filter},
             })

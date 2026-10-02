@@ -35,3 +35,7 @@ backend/data/*.json
 *.pem
 *.key
 *.crt
+
+# deployment secrets and local connector data
+deploy/.env
+deploy/sources/

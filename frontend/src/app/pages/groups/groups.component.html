@@ -1,0 +1,130 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h2>Groups</h2>
+      <p>Share knowledge with a group. You also keep your own space, which only you can see.</p>
+    </div>
+  </section>
+
+  @if (error) { <p class="error-text" style="padding:0 0.25rem">{{ error }}</p> }
+  @if (notice) { <p class="space-banner">{{ notice }}</p> }
+
+  <!-- Invitations waiting for me -->
+  @if (spaces.invitations().length) {
+    <section class="ingest-panel">
+      <h3 style="font-size:1rem;margin-bottom:0.75rem">Invitations</h3>
+      <div class="lineage-list">
+        @for (inv of spaces.invitations(); track inv.group_id) {
+          <div class="lineage-row">
+            <span class="grow"><strong>{{ inv.group_name }}</strong>
+              <span class="muted-text"> · invited by {{ inv.invited_by ?? 'someone' }} · {{ inv.member_count }} member{{ inv.member_count === 1 ? '' : 's' }}</span></span>
+            <button class="success" [disabled]="busy" (click)="respond(inv.group_id, true)">Accept</button>
+            <button [disabled]="busy" (click)="respond(inv.group_id, false)">Decline</button>
+          </div>
+        }
+      </div>
+    </section>
+  }
+
+  <!-- Create -->
+  <section class="ingest-panel">
+    <h3 style="font-size:1rem;margin-bottom:0.75rem">Create a group</h3>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <input [(ngModel)]="newName" placeholder="Group name, e.g. Platform team" style="flex:1;min-width:220px" maxlength="80" />
+      <button class="primary" [disabled]="busy || !newName.trim()" (click)="create()">Create</button>
+    </div>
+    <p class="field-help" style="margin-top:0.4rem">You'll be the group's admin: you invite people and manage membership.</p>
+  </section>
+
+  <div class="detail-grid">
+    <!-- My groups -->
+    <section class="detail-panel">
+      <h3>Your groups</h3>
+      @if (groups.length === 0) { <p class="muted-text">You're not in any group yet.</p> }
+      <div class="lineage-list">
+        @for (g of groups; track g.id) {
+          <div class="lineage-row" [style.border-color]="selected?.id === g.id ? '#667eea' : ''">
+            <a class="grow" href="" (click)="$event.preventDefault(); select(g)">{{ g.name }}</a>
+            <span class="engine-badge">{{ g.role }}</span>
+            <span class="muted-text">{{ g.member_count }} member{{ g.member_count === 1 ? '' : 's' }}</span>
+            @if (g.deletes_on) {
+              <span class="muted-text" style="font-size:0.75rem"
+                    title="A group nobody uses for a year is deleted with everything in it. Any member's activity resets this.">
+                expires {{ g.deletes_on | date:'mediumDate' }} if unused</span>
+            }
+            <button [disabled]="spaces.activeId() === g.id" (click)="open(g)">
+              {{ spaces.activeId() === g.id ? 'Current space' : 'Open' }}</button>
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- Selected group -->
+    <section class="detail-panel">
+      @if (!selected) {
+        <h3>Members</h3>
+        <p class="muted-text">Select a group to see its members.</p>
+      } @else {
+        <h3>{{ selected.name }}</h3>
+
+        @if (isAdmin) {
+          <h4 style="font-size:0.875rem;margin:0.25rem 0 0.5rem">Invite people</h4>
+          <input [(ngModel)]="query" (ngModelChange)="onQuery($event)" placeholder="Search users by name"
+                 autocomplete="off" style="width:100%" />
+          @if (candidates.length) {
+            <div class="lineage-list" style="margin-top:0.5rem">
+              @for (c of candidates; track c.id) {
+                <div class="lineage-row">
+                  <span class="grow">{{ c.username }}</span>
+                  @if (c.status === 'active') { <span class="muted-text">member</span> }
+                  @else if (c.status === 'invited') { <span class="muted-text">invited</span> }
+                  @else { <button class="primary" [disabled]="busy" (click)="invite(c)">Invite</button> }
+                </div>
+              }
+            </div>
+          } @else if (query.trim()) {
+            <p class="muted-text" style="margin-top:0.4rem;font-size:0.8rem">No matching users.</p>
+          }
+        }
+
+        <h4 style="font-size:0.875rem;margin:1rem 0 0.5rem">Members ({{ active.length }})</h4>
+        <div class="lineage-list">
+          @for (m of active; track m.user_id) {
+            <div class="lineage-row">
+              <span class="grow">{{ m.username }}@if (m.user_id === auth.me()?.id) { <span class="muted-text"> (you)</span> }</span>
+              <span class="engine-badge">{{ m.role }}</span>
+              @if (isAdmin && m.role !== 'admin') {
+                <button class="link-btn" title="Remove from group" [disabled]="busy" (click)="remove(m)">✕</button>
+              }
+            </div>
+          }
+        </div>
+
+        @if (isAdmin && pending.length) {
+          <h4 style="font-size:0.875rem;margin:1rem 0 0.5rem">Invitations</h4>
+          <div class="lineage-list">
+            @for (m of pending; track m.user_id) {
+              <div class="lineage-row">
+                <span class="grow">{{ m.username }}</span>
+                <span class="muted-text">{{ m.status }}</span>
+                @if (m.status === 'invited') {
+                  <button class="link-btn" title="Cancel invitation" [disabled]="busy" (click)="remove(m)">✕</button>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1.25rem;align-items:center">
+          @if (isAdmin) {
+            <input [(ngModel)]="renameTo" style="flex:1;min-width:160px" maxlength="80" aria-label="Group name" />
+            <button [disabled]="busy || !renameTo.trim() || renameTo === selected.name" (click)="rename()">Rename</button>
+            <button class="danger" [disabled]="busy" (click)="deleteGroup()">Delete group</button>
+          } @else {
+            <button class="danger" [disabled]="busy" (click)="leave()">Leave group</button>
+          }
+        </div>
+      }
+    </section>
+  </div>
+</div>

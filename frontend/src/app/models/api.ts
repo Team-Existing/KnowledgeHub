@@ -60,11 +60,25 @@ export interface Relationship {
   type: string
 }
 
+export interface PlaybookStep {
+  text: string
+  item_id?: string          // optional link to a knowledge item (e.g. a how-to)
+}
+
+/** GET /knowledge/playbooks, POST /knowledge/playbooks */
 export interface Playbook {
   id: string
   title: string
-  steps: Record<string, unknown>[]
+  steps: PlaybookStep[]
   category: string
+}
+
+/** GET /health (public) */
+export interface HealthResponse {
+  status: 'healthy' | 'degraded'
+  storage: string
+  database: string
+  arcadedb: 'connected' | 'unreachable'
 }
 
 /** GET /knowledge */
@@ -126,9 +140,11 @@ export interface Citation {
   id: string
   title: string
   type: string
+  status?: ItemStatus       // e.g. "superseded" when the cited decision was replaced
 }
 export interface ContextNode {
   id: string
+  status?: ItemStatus | null
   title?: string
   label?: string
   kind?: string
@@ -156,6 +172,94 @@ export interface ReembedResult {
   dimensions: number
   items_reembedded: number
   summaries_reembedded: number
+}
+
+/** GET /auth/me — permissions mirror backend/app/rbac.py */
+export type Role = 'admin' | 'member'
+export type Permission = 'manage_users' | 'manage_models' | 'use_filesystem_connectors'
+export interface Me {
+  id: string
+  username: string
+  role: Role | string
+  permissions: Permission[]
+  llm_model: string | null
+}
+
+/** GET /admin/users */
+export interface AdminUser {
+  id: string
+  username: string
+  role: Role | string
+  created_at: string
+  last_login_at: string | null
+  last_active_at: string | null
+  deletes_on: string | null       // when the account is deleted if it stays inactive
+}
+
+/** GET /admin/retention — inactivity retention (backend/app/services/retention.py) */
+export interface RetentionUser { id: string; username: string; role: string; last_active_at: string; deletes_on: string | null }
+export interface RetentionGroup { id: string; name: string; members: number; last_active_at: string; deletes_on: string | null }
+export interface RetentionReport {
+  ran_at: string
+  inactive_days: number
+  users_deleted: string[]
+  groups_deleted: string[]
+  skipped: Array<{ user?: string; group?: string; reason: string }>
+}
+export interface RetentionStatus {
+  enabled: boolean
+  inactive_days: number
+  check_hours: number
+  last_run: RetentionReport | null
+  due: { users: RetentionUser[]; groups: RetentionGroup[] }
+  upcoming: { users: RetentionUser[]; groups: RetentionGroup[] }   // due within 30 days
+}
+
+/** GET /spaces — personal first, then the groups you're an active member of */
+export interface SpaceInfo {
+  id: string
+  kind: 'personal' | 'group'
+  name: string
+  role: 'owner' | 'admin' | 'member' | string
+  member_count?: number
+}
+
+/** GET /groups */
+export interface Group {
+  id: string
+  name: string
+  role: 'admin' | 'member' | string
+  status: string
+  member_count: number
+  created_at: string
+  last_active_at: string
+  deletes_on: string | null       // deleted with everything in it if nobody uses it until then
+}
+
+/** GET /groups/{id}/members (admins also see invited / declined) */
+export interface GroupMember {
+  user_id: string
+  username: string
+  role: 'admin' | 'member' | string
+  status: 'active' | 'invited' | 'declined' | string
+  invited_by: string | null
+  since: string
+}
+
+/** GET /groups/{id}/candidates */
+export interface Candidate {
+  id: string
+  username: string
+  status: string | null      // null = never invited
+}
+
+/** GET /invitations */
+export interface Invitation {
+  group_id: string
+  group_name: string
+  invited_by: string | null
+  invited_at: string
+  member_count: number
 }
 
 /** POST /auth/token */
@@ -200,6 +304,7 @@ export interface ItemEvent {
   kind: 'reviewed' | 'edited' | 'linked' | 'unlinked' | 'status_changed' | 'status_declared' | string
   at: string
   detail: Record<string, any>
+  actor?: string | null     // who did it; empty for automatic changes (e.g. a derived status)
 }
 
 /** GET /knowledge/items/{id}/lineage */
@@ -253,10 +358,12 @@ export interface ConnectorKind {
   label: string
   filesystem: boolean
   allowed: boolean
+  disabled_reason: string | null
+  needs_credentials_key: boolean      // the server has no CREDENTIALS_KEY, so secrets can't be stored
   fields: ConnectorField[]
 }
 
-export type SyncStatus = 'never' | 'running' | 'ok' | 'partial' | 'error' | 'interrupted'
+export type SyncStatus = 'never' | 'queued' | 'running' | 'ok' | 'partial' | 'error' | 'interrupted'
 
 export interface SyncResult {
   fetched?: number
@@ -277,6 +384,7 @@ export interface Connector {
   name: string
   config: Record<string, unknown>     // secrets come back as "********"
   created_at: string
+  created_by?: string | null          // username of whoever added it (useful in a group)
   last_sync_at: string | null
   last_status: SyncStatus
   last_error: string | null

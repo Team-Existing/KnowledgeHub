@@ -1,0 +1,192 @@
+# Knowledge Hubs, production layout:
+#
+#   clients ─▶ lb (Caddy: TLS, frontend, round robin) ─▶ app1, app2 (FastAPI)
+#                                                         │        │
+#                          worker + beat (Celery) ◀─ redis ┘        │
+#                                   └─────────────▶ arcadedb-0/1/2 (Raft cluster)
+#
+# Start:   cp .env.example .env   (fill it in)  then  docker compose up -d --build
+# Details: see "Production deployment" in the README.
+name: knowledge-hubs
+
+x-backend: &backend
+  # built once, by the provision service below; every backend role runs the same image
+  image: knowledge-hubs-backend:latest
+  pull_policy: never
+  restart: unless-stopped
+  extra_hosts:
+    - "host.docker.internal:host-gateway"     # reach Ollama on the host
+  volumes:
+    # folder / git-ADR connectors may read only this (read-only) directory
+    - ${CONNECTOR_SOURCES_DIR:-./sources}:/data/sources:ro
+  # Only the variables listed here reach the app containers; in particular
+  # NOT the ArcadeDB root password, which only the provisioning job gets.
+  environment: &backend-env
+    ARCADEDB_URL: http://arcadedb-0:2480,http://arcadedb-1:2480,http://arcadedb-2:2480
+    ARCADEDB_DATABASE: ${ARCADEDB_DATABASE:-knowledge_hubs}
+    ARCADEDB_USER: ${ARCADEDB_APP_USER:-kh_app}
+    ARCADEDB_PASSWORD: ${ARCADEDB_APP_PASSWORD:?set ARCADEDB_APP_PASSWORD in deploy/.env}
+    REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/.env}@redis:6379/0
+    DB_MIGRATE_ON_STARTUP: "false"           # the provisioning job migrates, once
+    SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in deploy/.env}
+    CREDENTIALS_KEY: ${CREDENTIALS_KEY:-}
+    CONNECTOR_ROOTS: /data/sources
+    ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+    RETENTION_ENABLED: ${RETENTION_ENABLED:-true}
+    RETENTION_INACTIVE_DAYS: ${RETENTION_INACTIVE_DAYS:-365}
+    RETENTION_CHECK_HOURS: ${RETENTION_CHECK_HOURS:-24}
+    OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+    MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-20}
+    CELERY_VISIBILITY_TIMEOUT: ${CELERY_VISIBILITY_TIMEOUT:-7200}
+
+x-arcadedb: &arcadedb
+  image: arcadedata/arcadedb:26.9.1
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:2480/api/v1/ready || exit 1"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+
+# Raft HA, verified against 26.9.1: node names must be zero-based (arcadedb-0..2)
+# in server-list order, and the server list must name the Raft port, 2434.
+services:
+  # ── data ──────────────────────────────────────────────────────────────────
+  arcadedb-0:
+    <<: *arcadedb
+    environment:
+      JAVA_OPTS: >-
+        -Darcadedb.server.name=arcadedb-0
+        -Darcadedb.server.rootPassword=${ARCADEDB_ROOT_PASSWORD:?set ARCADEDB_ROOT_PASSWORD in deploy/.env}
+        -Darcadedb.ha.enabled=true
+        -Darcadedb.ha.serverList=arcadedb-0:2434,arcadedb-1:2434,arcadedb-2:2434
+    volumes:
+      - arcadedb-0-databases:/home/arcadedb/databases
+      - arcadedb-0-config:/home/arcadedb/config          # users, including the app user
+      - arcadedb-0-replication:/home/arcadedb/replication # Raft log
+      - arcadedb-0-backups:/home/arcadedb/backups
+  arcadedb-1:
+    <<: *arcadedb
+    environment:
+      JAVA_OPTS: >-
+        -Darcadedb.server.name=arcadedb-1
+        -Darcadedb.server.rootPassword=${ARCADEDB_ROOT_PASSWORD:?set ARCADEDB_ROOT_PASSWORD in deploy/.env}
+        -Darcadedb.ha.enabled=true
+        -Darcadedb.ha.serverList=arcadedb-0:2434,arcadedb-1:2434,arcadedb-2:2434
+    volumes:
+      - arcadedb-1-databases:/home/arcadedb/databases
+      - arcadedb-1-config:/home/arcadedb/config
+      - arcadedb-1-replication:/home/arcadedb/replication
+      - arcadedb-1-backups:/home/arcadedb/backups
+  arcadedb-2:
+    <<: *arcadedb
+    environment:
+      JAVA_OPTS: >-
+        -Darcadedb.server.name=arcadedb-2
+        -Darcadedb.server.rootPassword=${ARCADEDB_ROOT_PASSWORD:?set ARCADEDB_ROOT_PASSWORD in deploy/.env}
+        -Darcadedb.ha.enabled=true
+        -Darcadedb.ha.serverList=arcadedb-0:2434,arcadedb-1:2434,arcadedb-2:2434
+    volumes:
+      - arcadedb-2-databases:/home/arcadedb/databases
+      - arcadedb-2-config:/home/arcadedb/config
+      - arcadedb-2-replication:/home/arcadedb/replication
+      - arcadedb-2-backups:/home/arcadedb/backups
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # appendonly: queued syncs survive a Redis restart
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/.env}"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  # ── one-off: create the database and the app's own user, then migrate ─────
+  provision:
+    <<: *backend
+    build: ../backend
+    restart: "no"
+    command: ["python", "-m", "scripts.provision_arcadedb"]
+    environment:
+      <<: *backend-env
+      ARCADEDB_ROOT_PASSWORD: ${ARCADEDB_ROOT_PASSWORD}
+    depends_on:
+      arcadedb-0: { condition: service_healthy }
+      arcadedb-1: { condition: service_healthy }
+      arcadedb-2: { condition: service_healthy }
+
+  # ── app instances (stateless; any can serve any request) ──────────────────
+  app1: &app
+    <<: *backend
+    depends_on:
+      provision: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+  app2:
+    <<: *app
+
+  # ── background work ───────────────────────────────────────────────────────
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=INFO", "--concurrency=2"]
+    # on `docker stop` / redeploy, let a running sync finish instead of cutting it off
+    stop_grace_period: 5m
+    depends_on:
+      provision: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+  beat:
+    # exactly one: it only schedules (the inactivity clean-up); workers do the work
+    <<: *backend
+    command: ["celery", "-A", "app.worker", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    volumes: []
+    depends_on:
+      redis: { condition: service_healthy }
+
+  # ── load balancer: TLS, the frontend, round robin across app1/app2 ────────
+  lb:
+    build:
+      context: ..
+      dockerfile: deploy/lb.Dockerfile
+    image: knowledge-hubs-lb:latest
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      APP_UPSTREAMS: "app1:8000 app2:8000"
+    ports:
+      - "${LB_HTTP_PORT:-80}:80"
+      - "${LB_HTTPS_PORT:-443}:443"
+    volumes:
+      - caddy-data:/data        # certificates
+      - caddy-config:/config
+    depends_on:
+      app1: { condition: service_healthy }
+      app2: { condition: service_healthy }
+
+volumes:
+  arcadedb-0-databases:
+  arcadedb-0-config:
+  arcadedb-0-replication:
+  arcadedb-0-backups:
+  arcadedb-1-databases:
+  arcadedb-1-config:
+  arcadedb-1-replication:
+  arcadedb-1-backups:
+  arcadedb-2-databases:
+  arcadedb-2-config:
+  arcadedb-2-replication:
+  arcadedb-2-backups:
+  redis-data:
+  caddy-data:
+  caddy-config:

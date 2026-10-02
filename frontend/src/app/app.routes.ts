@@ -39,5 +39,8 @@ export const routes: Routes = [
   { path: 'connectors', loadComponent: () => import('./pages/connectors/connectors.component').then(m => m.ConnectorsComponent), canActivate: [authGuard] },
   { path: 'graphrag', loadComponent: () => import('./pages/graphrag/graphrag.component').then(m => m.GraphragComponent), canActivate: [authGuard] },
   { path: 'settings/models', loadComponent: () => import('./pages/model-manager/model-manager.component').then(m => m.ModelManagerComponent), canActivate: [authGuard] },
+  { path: 'playbooks', loadComponent: () => import('./pages/playbooks/playbooks.component').then(m => m.PlaybooksComponent), canActivate: [authGuard] },
+  { path: 'groups', loadComponent: () => import('./pages/groups/groups.component').then(m => m.GroupsComponent), canActivate: [authGuard] },
+  { path: 'admin/users', loadComponent: () => import('./pages/admin-users/admin-users.component').then(m => m.AdminUsersComponent), canActivate: [authGuard] },
   { path: 'privacy-policy', loadComponent: () => import('./pages/privacy-policy/privacy-policy.component').then(m => m.PrivacyPolicyComponent) },
 ]

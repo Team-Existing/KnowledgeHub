@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.arcadedb import ArcadeSession
-from app.auth import get_current_user
-from app.db import User, get_session
+from app.spaces import Space, current_space
+from app.db import get_session
 from app.repositories import GraphStore, QueryLogRepository
 from app.services import artifact_pipeline as pipeline
 from app.services.graphrag import graphrag_query
@@ -27,10 +27,10 @@ class GraphRagRequest(BaseModel):
 @router.post("/graphrag/query")
 async def graphrag_query_endpoint(
     request: GraphRagRequest,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    user_id = current_user.id
+    user_id = space.id
     t0 = datetime.now(timezone.utc)
     result = await graphrag_query(
         question=request.question,
@@ -43,6 +43,7 @@ async def graphrag_query_endpoint(
     latency_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
     await QueryLogRepository(session).add(
         user_id=user_id,
+        asked_by=space.user.id,
         question=request.question,
         sub_queries=result.get("sub_queries", []),
         hyde_doc=result.get("hyde_doc"),
@@ -62,8 +63,8 @@ async def graphrag_query_endpoint(
 
 @router.post("/reembed")
 async def reembed_workspace(
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     """Re-embed everything with the active model — run after changing LOCAL_EMBED_MODEL."""
-    return await pipeline.reembed_all(session, current_user.id)
+    return await pipeline.reembed_all(session, space.id)

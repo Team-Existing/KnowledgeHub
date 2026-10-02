@@ -230,7 +230,8 @@ export class GraphragComponent implements AfterViewChecked {
               return {
               id: node.id,  // ✅ Use the full ID from the node
               title: node.title || node.label || cite,
-              type: node.kind || node.type || 'item'
+              type: node.kind || node.type || 'item',
+              status: node.status ?? undefined,
             }
           }
           return { id: cite, title: cite, type: 'unknown' }

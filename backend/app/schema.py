@@ -18,6 +18,12 @@ User, Playbook, QueryLog, Meta
 ItemEvent                 per-item history (reviewed, edited, linked, status_changed, ...)
 Connector                 an external source (folder, git ADRs, GitHub, Jira, Linear) + sync state
 SyncedDocument            one fetched source document -> the artifact it was ingested as
+GroupSpace                a group: a shared space; admins create groups and invite users
+Membership                user <-> group: status invited | active | declined | left | removed
+
+Spaces: the `user_id` on every vertex, edge and per-space document is the id
+of the *space* that owns it — a user's personal space (whose id is the user's
+id, so data from before groups existed is already personal) or a group.
 
 Every vertex and edge carries user_id; every query filters on it.
 tags_text / tags_lc are derived from tags on write: full-text indexes can't
@@ -36,6 +42,9 @@ _TYPES = """
 CREATE DOCUMENT TYPE User IF NOT EXISTS
 CREATE PROPERTY User.id IF NOT EXISTS STRING
 CREATE PROPERTY User.username IF NOT EXISTS STRING
+CREATE PROPERTY User.username_key IF NOT EXISTS STRING
+CREATE PROPERTY User.last_active_at IF NOT EXISTS STRING
+CREATE PROPERTY User.last_login_at IF NOT EXISTS STRING
 CREATE PROPERTY User.hashed_password IF NOT EXISTS STRING
 CREATE PROPERTY User.role IF NOT EXISTS STRING
 CREATE PROPERTY User.created_at IF NOT EXISTS STRING
@@ -117,6 +126,7 @@ CREATE PROPERTY ItemEvent.item_id IF NOT EXISTS STRING
 CREATE PROPERTY ItemEvent.kind IF NOT EXISTS STRING
 CREATE PROPERTY ItemEvent.at IF NOT EXISTS STRING
 CREATE PROPERTY ItemEvent.detail IF NOT EXISTS MAP
+CREATE PROPERTY ItemEvent.actor IF NOT EXISTS STRING
 CREATE INDEX IF NOT EXISTS ON ItemEvent (id) UNIQUE
 CREATE INDEX IF NOT EXISTS ON ItemEvent (item_id) NOTUNIQUE
 
@@ -133,6 +143,27 @@ CREATE PROPERTY Connector.last_error IF NOT EXISTS STRING
 CREATE PROPERTY Connector.last_result IF NOT EXISTS MAP
 CREATE INDEX IF NOT EXISTS ON Connector (id) UNIQUE
 CREATE INDEX IF NOT EXISTS ON Connector (user_id) NOTUNIQUE
+
+CREATE DOCUMENT TYPE GroupSpace IF NOT EXISTS
+CREATE PROPERTY GroupSpace.id IF NOT EXISTS STRING
+CREATE PROPERTY GroupSpace.name IF NOT EXISTS STRING
+CREATE PROPERTY GroupSpace.created_by IF NOT EXISTS STRING
+CREATE PROPERTY GroupSpace.created_at IF NOT EXISTS STRING
+CREATE PROPERTY GroupSpace.last_active_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON GroupSpace (id) UNIQUE
+
+CREATE DOCUMENT TYPE Membership IF NOT EXISTS
+CREATE PROPERTY Membership.id IF NOT EXISTS STRING
+CREATE PROPERTY Membership.group_id IF NOT EXISTS STRING
+CREATE PROPERTY Membership.user_id IF NOT EXISTS STRING
+CREATE PROPERTY Membership.role IF NOT EXISTS STRING
+CREATE PROPERTY Membership.status IF NOT EXISTS STRING
+CREATE PROPERTY Membership.invited_by IF NOT EXISTS STRING
+CREATE PROPERTY Membership.created_at IF NOT EXISTS STRING
+CREATE PROPERTY Membership.responded_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON Membership (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON Membership (group_id) NOTUNIQUE
+CREATE INDEX IF NOT EXISTS ON Membership (user_id) NOTUNIQUE
 
 CREATE DOCUMENT TYPE SyncedDocument IF NOT EXISTS
 CREATE PROPERTY SyncedDocument.id IF NOT EXISTS STRING

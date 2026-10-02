@@ -1,7 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core'
 import { HttpClient, HttpParams } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
-import { TokenResponse } from '../models/api'
+import { Me, Permission, TokenResponse } from '../models/api'
 
 export const API_BASE = ''
 
@@ -11,6 +11,9 @@ export class AuthService {
   private _token = signal<string | null>(localStorage.getItem('kh_token'))
   readonly token = this._token.asReadonly()
   readonly isLoggedIn = computed(() => !!this._token())
+  /** The signed-in user's role and permissions; null until loaded. Only drives the UI: the server enforces. */
+  private _me = signal<Me | null>(null)
+  readonly me = this._me.asReadonly()
 
   constructor(private http: HttpClient) {}
 
@@ -23,6 +26,18 @@ export class AuthService {
     )
     localStorage.setItem('kh_token', data.access_token)
     this._token.set(data.access_token)
+    await this.loadMe()
+  }
+
+  async loadMe(): Promise<void> {
+    if (!this._token()) { this._me.set(null); return }
+    try {
+      this._me.set(await firstValueFrom(this.http.get<Me>(`${API_BASE}/auth/me`)))
+    } catch { this._me.set(null) }
+  }
+
+  can(permission: Permission): boolean {
+    return this._me()?.permissions.includes(permission) ?? false
   }
 
   async register(username: string, password: string): Promise<void> {
@@ -37,5 +52,6 @@ export class AuthService {
   logout(): void {
     localStorage.removeItem('kh_token')
     this._token.set(null)
+    this._me.set(null)
   }
 }

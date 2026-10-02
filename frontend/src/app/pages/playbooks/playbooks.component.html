@@ -1,0 +1,86 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h2>Playbooks</h2>
+      <p>Repeatable procedures, built from steps you write or from how-tos and checklists already in this space.</p>
+    </div>
+    <button (click)="startNew()">New playbook</button>
+  </section>
+
+  @if (error) { <p class="error-text" style="padding:0 0.25rem">{{ error }}</p> }
+
+  <!-- Editor -->
+  <section class="ingest-panel">
+    <h3 style="font-size:1rem;margin-bottom:0.75rem">{{ editingId ? 'Edit playbook' : 'New playbook' }}</h3>
+    <div class="form-stack" style="max-width:720px">
+      <input [(ngModel)]="title" placeholder="Title, e.g. Production deploy" maxlength="200" />
+
+      @if (steps.length) {
+        <ol class="lineage-list" style="list-style:none">
+          @for (s of steps; track $index) {
+            <li class="lineage-row">
+              <strong>{{ $index + 1 }}.</strong>
+              <span class="grow">{{ s.text }}
+                @if (s.item_id) { <a [routerLink]="['/knowledge', s.item_id]" class="muted-text" style="font-size:0.75rem"> (linked item)</a> }
+              </span>
+              <button class="link-btn" title="Move up" [disabled]="$index === 0" (click)="move($index, -1)">↑</button>
+              <button class="link-btn" title="Move down" [disabled]="$index === steps.length - 1" (click)="move($index, 1)">↓</button>
+              <button class="link-btn" title="Remove step" (click)="removeStep($index)">✕</button>
+            </li>
+          }
+        </ol>
+      }
+
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <input [(ngModel)]="newStep" (keyup.enter)="addTextStep()" placeholder="Write a step and press Enter"
+               style="flex:1;min-width:220px" maxlength="500" />
+        <button [disabled]="!newStep.trim()" (click)="addTextStep()">Add step</button>
+      </div>
+      @if (stepItems.length) {
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <select [(ngModel)]="pickItemId" style="flex:1;min-width:220px" aria-label="Add a knowledge item as a step">
+            <option value="">…or add a how-to, checklist or practice from this space</option>
+            @for (i of stepItems; track i.id) { <option [value]="i.id">{{ i.type }} · {{ i.title }}</option> }
+          </select>
+          <button [disabled]="!pickItemId" (click)="addItemStep()">Add item</button>
+        </div>
+      }
+
+      <div style="display:flex;gap:0.5rem">
+        <button class="primary" [disabled]="busy || !title.trim() || steps.length === 0" (click)="save()">
+          {{ busy ? 'Saving…' : 'Save playbook' }}</button>
+        @if (editingId) { <button (click)="startNew()">Cancel</button> }
+      </div>
+    </div>
+  </section>
+
+  @if (playbooks.length === 0 && !error) {
+    <section class="empty-state">
+      <h3>No playbooks yet</h3>
+      <p>Write the steps for something your team does repeatedly, like a release or onboarding.</p>
+    </section>
+  }
+
+  <div class="connector-grid">
+    @for (p of playbooks; track p.id) {
+      <div class="connector-card">
+        <div class="card-topline"><span class="type-pill">{{ p.category }}</span>
+          <span class="muted-text">{{ p.steps.length }} step{{ p.steps.length === 1 ? '' : 's' }}</span></div>
+        <h3>{{ p.title }}</h3>
+        <ol style="padding-left:1.2rem;font-size:0.85rem;display:flex;flex-direction:column;gap:0.2rem">
+          @for (s of p.steps; track $index) {
+            <li>
+              @if (s.item_id) { <a [routerLink]="['/knowledge', s.item_id]" class="rel-name-link" style="font-size:0.85rem">{{ s.text }}</a>
+                @if (!itemTitle(s.item_id)) { <span class="muted-text"> (item no longer here)</span> } }
+              @else { {{ s.text }} }
+            </li>
+          }
+        </ol>
+        <div style="display:flex;gap:0.5rem">
+          <button (click)="edit(p)">Edit</button>
+          <button class="danger" [disabled]="busy" (click)="remove(p)">Delete</button>
+        </div>
+      </div>
+    }
+  </div>
+</div>

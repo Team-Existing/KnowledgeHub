@@ -21,3 +21,7 @@ sentence-transformers==2.7.0
 # Optional: set LLM_PROVIDER=openai + OPENAI_API_KEY to use OpenAI instead of Ollama
 openai==1.12.0
 tiktoken==0.6.0
+
+# Background worker (deploy/): Celery on Redis. Not needed for single-instance development.
+celery[redis]==5.4.0
+redis==5.2.1

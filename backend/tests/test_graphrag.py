@@ -52,7 +52,8 @@ def test_answer_is_grounded_and_cited(client, kb, llm):
     # the most relevant item for the question is the PostgreSQL decision
     top = next(n for n in body["context_nodes"] if n["id"] == shown[0])
     assert "PostgreSQL" in top["title"]
-    assert body["citations"] == [{"id": shown[0], "title": top["title"], "type": "decision"}]
+    # citations carry the decision's lifecycle status, so the UI can flag superseded sources
+    assert body["citations"] == [{"id": shown[0], "title": top["title"], "type": "decision", "status": "active"}]
     assert f"[{shown[0]}]" in body["answer"]
 
 

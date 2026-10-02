@@ -1,0 +1,57 @@
+# Load balancer + TLS + frontend.
+#
+# SITE_ADDRESS=localhost  -> HTTPS with a certificate from Caddy's own local CA
+#                            (browsers warn until you trust it: `caddy trust`)
+# SITE_ADDRESS=hub.acme.com -> a real certificate from Let's Encrypt, renewed
+#                            automatically (ports 80 and 443 must be reachable)
+
+{
+	admin off
+}
+
+{$SITE_ADDRESS:localhost} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Some API prefixes are also app routes (/knowledge, /connectors, /groups,
+	# /admin/users): a browser page load (GET accepting HTML) gets the app.
+	@page {
+		method GET
+		header Accept *text/html*
+		not path /docs* /openapi.json
+	}
+	handle @page {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	@api path /auth* /admin* /spaces* /groups* /invitations* /knowledge* /connectors* /models* /health* /docs* /openapi.json
+	handle @api {
+		reverse_proxy {$APP_UPSTREAMS} {
+			lb_policy round_robin
+			# if an instance is down, retry the request on another one (only when it
+			# never reached the instance, so a write is never sent twice)
+			lb_try_duration 10s
+			fail_duration 30s
+			health_uri /health
+			health_interval 10s
+			health_timeout 5s
+			# model downloads stream progress as server-sent events
+			flush_interval -1
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

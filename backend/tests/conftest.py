@@ -11,7 +11,13 @@ the server can't be reached every test is skipped, with the reason shown.
 
 Environment is set before the app is imported. load_dotenv() never
 overrides variables that are already set, so a local backend/.env can't
-point the tests at your real database.
+point the tests at your real database, signing key or credentials key.
+
+Roles: the session registers a bootstrap admin first, so every account a
+test creates with make_user() is a member unless it asks for role="admin".
+
+Live integrations (real GitHub / Jira / Linear / Ollama) are in
+test_live_integrations.py and run only when their KH_LIVE_* variables are set.
 """
 from __future__ import annotations
 
@@ -19,6 +25,8 @@ import hashlib
 import math
 import os
 import re
+import secrets
+import tempfile
 import uuid
 from typing import Any, Callable, Dict, List, Optional
 
@@ -33,10 +41,19 @@ os.environ["ARCADEDB_PASSWORD"] = ARCADEDB_AUTH[1]
 os.environ["ARCADEDB_DATABASE"] = TEST_DATABASE
 os.environ["MAX_UPLOAD_MB"] = "1"
 os.environ["GRAPHRAG_RERANK"] = "on"
+os.environ["SECRET_KEY"] = secrets.token_urlsafe(48)
+os.environ["ALLOW_REGISTRATION"] = "true"
+# the inactivity job would race the tests on the shared database; tests run it explicitly
+os.environ["RETENTION_ENABLED"] = "false"
+# folder connectors may read the temp dir only (pytest's tmp_path lives under it)
+os.environ["CONNECTOR_ROOTS"] = tempfile.gettempdir()
 
 import pytest  # noqa: E402
 
 import app.services.providers as providers  # noqa: E402
+from app import crypto  # noqa: E402
+
+os.environ["CREDENTIALS_KEY"] = crypto.generate_key()
 
 Messages = List[Dict[str, str]]
 Handler = Callable[[Messages], Optional[str]]
@@ -113,6 +130,8 @@ class FakeEmbeddings:
 
 FAKE_LLM = FakeLLM()
 FAKE_EMBEDDINGS = FakeEmbeddings()
+# the real resolvers, for live tests that opt back in (see test_live_integrations.py)
+REAL_RESOLVE_LLM = providers._resolve_llm
 providers._resolve_llm = lambda workspace=None: FAKE_LLM
 providers._resolve_embedding = lambda workspace=None: FAKE_EMBEDDINGS
 
@@ -181,6 +200,10 @@ def client():
         pytest.skip(reason)
     try:
         with TestClient(app) as c:     # startup creates TEST_DATABASE and applies the schema
+            # claim "first account = admin" now, so test users are members unless they ask otherwise
+            r = c.post("/auth/register", json={"username": f"bootstrap_admin_{uuid.uuid4().hex[:6]}",
+                                               "password": "secret123"})
+            assert r.status_code == 201 and r.json()["role"] == "admin", r.text
             yield c
     finally:
         httpx.post(f"{ARCADEDB_URL}/api/v1/server", auth=ARCADEDB_AUTH,
@@ -210,17 +233,35 @@ def llm() -> FakeLLM:
     return FAKE_LLM
 
 
+def set_role(user_id: str, role: str) -> None:
+    r = httpx.post(f"{ARCADEDB_URL}/api/v1/command/{TEST_DATABASE}", auth=ARCADEDB_AUTH, timeout=30,
+                   json={"language": "sql", "command": "UPDATE User SET role = :r WHERE id = :id",
+                         "params": {"r": role, "id": user_id}})
+    assert r.status_code == 200, r.text
+
+
 @pytest.fixture
-def make_user(client) -> Callable[[], Dict[str, str]]:
-    """Register a fresh user; returns auth headers. Unique per call so tests share one DB safely."""
-    def _make() -> Dict[str, str]:
+def make_user(client) -> Callable[..., Dict[str, str]]:
+    """
+    Register a fresh user (a member, unless role="admin"); returns auth headers.
+    Unique per call so tests share one DB safely.
+    """
+    def _make(role: str = "member") -> Dict[str, str]:
         username = f"user_{uuid.uuid4().hex[:10]}"
         r = client.post("/auth/register", json={"username": username, "password": "secret123"})
         assert r.status_code == 201, r.text
+        assert r.json()["role"] == "member", r.text
+        if role != "member":
+            set_role(r.json()["user_id"], role)
         r = client.post("/auth/token", data={"username": username, "password": "secret123"})
         assert r.status_code == 200, r.text
         return {"Authorization": f"Bearer {r.json()['access_token']}"}
     return _make
+
+
+@pytest.fixture
+def admin(make_user) -> Dict[str, str]:
+    return make_user(role="admin")
 
 
 @pytest.fixture
@@ -230,4 +271,30 @@ def alice(make_user) -> Dict[str, str]:
 
 @pytest.fixture
 def bob(make_user) -> Dict[str, str]:
+    return make_user()
+
+
+@pytest.fixture
+def mock_http(monkeypatch) -> Callable[[Callable[[httpx.Request], httpx.Response]], list]:
+    """Route every connector HTTP call to a handler; returns the list of requests seen."""
+    from app.services.connectors import base as connector_base
+    real_make_client = connector_base.make_client
+
+    def install(handler):
+        seen = []
+
+        def wrapped(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return handler(request)
+
+        def make_client(allowed_hosts, **kwargs):
+            # the production client (redirects, host guard) with only the network swapped out
+            return real_make_client(allowed_hosts, transport=httpx.MockTransport(wrapped), **kwargs)
+        monkeypatch.setattr(connector_base, "make_client", make_client)
+        return seen
+    return install
+
+
+@pytest.fixture
+def carol_headers(make_user) -> Dict[str, str]:
     return make_user()

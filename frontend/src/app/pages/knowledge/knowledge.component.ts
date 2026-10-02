@@ -59,6 +59,43 @@ export class KnowledgeComponent implements OnInit {
 
   private posMap = new Map<string, { x: number; y: number }>()
 
+  // OKF (Open Knowledge Format) import / export of the active space
+  okfBusy = false
+  okfMessage = ''
+
+  async exportOkf() {
+    this.okfBusy = true; this.okfMessage = ''; this.error = ''
+    try {
+      const payload = await firstValueFrom(this.http.get<unknown>(`${API_BASE}/knowledge/okf/export`))
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `knowledge-hubs-export-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      this.okfMessage = 'Export downloaded.'
+    } catch (e) { this.error = errorMessage(e, 'Export failed') }
+    finally { this.okfBusy = false }
+  }
+
+  async importOkf(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    input.value = ''   // allow picking the same file again
+    if (!file) return
+    this.okfBusy = true; this.okfMessage = ''; this.error = ''
+    try {
+      let payload: unknown
+      try { payload = JSON.parse(await file.text()) } catch { throw new Error('That file is not valid JSON') }
+      const r = await firstValueFrom(this.http.post<{ imported_items: number; relationships: number }>(
+        `${API_BASE}/knowledge/okf/import`, payload))
+      this.okfMessage = `Imported ${r.imported_items} item${r.imported_items === 1 ? '' : 's'} and ${r.relationships} relationship${r.relationships === 1 ? '' : 's'} from ${file.name}.`
+      await this.loadKnowledge()
+    } catch (e) { this.error = errorMessage(e, 'Import failed') }
+    finally { this.okfBusy = false }
+  }
+
   constructor(private http: HttpClient) {}
 
   ngOnInit() { this.loadKnowledge() }

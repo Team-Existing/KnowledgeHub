@@ -2,13 +2,26 @@
   <h1>Knowledge Hubs</h1>
   <div class="nav-links">
     @if (auth.isLoggedIn()) {
+      @if (spaces.spaces().length) {
+        <select class="space-switcher" [value]="spaces.active()?.id" (change)="onSpaceChange($any($event.target).value)"
+                aria-label="Active space" title="Everything you see and add belongs to this space">
+          @for (s of spaces.spaces(); track s.id) {
+            <option [value]="s.id">{{ s.kind === 'personal' ? '👤 ' : '👥 ' }}{{ s.name }}</option>
+          }
+        </select>
+      }
       <a routerLink="/knowledge">Hub</a>
       <a routerLink="/search">Search</a>
       <a routerLink="/review">Review</a>
       <a routerLink="/decisions">Decisions</a>
+      <a routerLink="/playbooks">Playbooks</a>
       <a routerLink="/connectors">Sources</a>
+      <a routerLink="/groups">Groups
+        @if (spaces.invitations().length) { <span class="nav-badge" title="Pending invitations">{{ spaces.invitations().length }}</span> }
+      </a>
       <a routerLink="/graphrag">GraphRAG</a>
       <a routerLink="/settings/models">Models</a>
+      @if (auth.can('manage_users')) { <a routerLink="/admin/users">Users</a> }
       <app-provider-status-badge></app-provider-status-badge>
       <button style="padding:0.25rem 0.75rem;font-size:0.875rem;background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3)" (click)="logout()">Sign out</button>
     } @else {
@@ -17,5 +30,9 @@
   </div>
 </nav>
 <main>
+  @if (healthProblem()) { <div class="health-banner" role="alert">⚠ {{ healthProblem() }}</div> }
+  @if (auth.isLoggedIn() && spaces.active()?.kind === 'group') {
+    <div class="space-banner">👥 You're working in the group <strong>{{ spaces.active()?.name }}</strong> — everything here is shared with its members.</div>
+  }
   <router-outlet />
 </main>

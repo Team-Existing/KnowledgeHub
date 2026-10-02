@@ -1,7 +1,11 @@
 """
 Connectors pull knowledge from where it already lives. Each module exposes
 KIND, LABEL, FILESYSTEM (reads the server's disk → admins only), FIELDS
-(config schema, also rendered by the frontend) and `async fetch(config)`.
+(config schema, also rendered by the frontend), `async fetch(config)` and,
+for network connectors, `check(config)` (validates the user's addresses at save).
+
+Network connectors have no built-in endpoints: they contact only the
+addresses in their config, and base.make_client() refuses any other host.
 """
 from __future__ import annotations
 

@@ -8,6 +8,8 @@ import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
 import { Artifact, CrossLink, KnowledgeItem, KnowledgeResponse, Relationship } from '../../models/api'
 import { ItemLineageComponent } from '../../components/item-lineage/item-lineage.component'
+import { SpaceService } from '../../services/space.service'
+import { SpaceInfo } from '../../models/api'
 
 type RelatedItem = { item: KnowledgeItem; score: number }
 
@@ -128,7 +130,28 @@ export class KnowledgeDetailComponent implements OnInit {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  constructor(private route: ActivatedRoute, private _router: Router, private http: HttpClient) {}
+  // share the source artifact into another space (e.g. personal -> group)
+  shareTo = ''; sharing = false; shareMessage = ''
+
+  get otherSpaces(): SpaceInfo[] {
+    return this.spaces.spaces().filter(s => s.id !== this.spaces.active()?.id)
+  }
+
+  async share() {
+    const artifact = this.artifact
+    if (!artifact || !this.shareTo) return
+    this.sharing = true; this.shareMessage = ''
+    try {
+      const r = await firstValueFrom(this.http.post<{ items: number; space_name: string }>(
+        `${API_BASE}/knowledge/artifacts/${encodeURIComponent(artifact.id)}/share`, { space_id: this.shareTo }))
+      this.shareMessage = `Shared to ${r.space_name} with ${r.items} item${r.items === 1 ? '' : 's'}.`
+      this.shareTo = ''
+    } catch (e) { this.shareMessage = errorMessage(e, 'Could not share') }
+    finally { this.sharing = false }
+  }
+
+  constructor(private route: ActivatedRoute, private _router: Router, private http: HttpClient,
+              public spaces: SpaceService) {}
 
   ngOnInit() {
     // follow param changes: links between items (lineage, related) reuse this component

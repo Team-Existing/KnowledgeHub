@@ -61,14 +61,16 @@ class ItemEventRepository:
     def __init__(self, session: ArcadeSession) -> None:
         self.session = session
 
-    async def add(self, user_id: str, item_id: str, kind: str, detail: Optional[Row] = None) -> None:
+    async def add(self, user_id: str, item_id: str, kind: str, detail: Optional[Row] = None,
+                  actor: Optional[str] = None) -> None:
+        """`actor` is the username who did it (None for automatic changes, e.g. a derived status)."""
         await self.session.execute("INSERT INTO ItemEvent CONTENT :doc", {"doc": {
             "id": str(uuid.uuid4()), "user_id": user_id, "item_id": item_id, "kind": kind,
-            "at": datetime.now(timezone.utc).isoformat(), "detail": detail or {},
+            "at": datetime.now(timezone.utc).isoformat(), "detail": detail or {}, "actor": actor,
         }})
 
     async def list(self, user_id: str, item_id: str) -> List[Row]:
         return await self.session.query(
-            "SELECT kind, at, detail FROM ItemEvent WHERE item_id = :id AND user_id = :u ORDER BY at",
+            "SELECT kind, at, detail, actor FROM ItemEvent WHERE item_id = :id AND user_id = :u ORDER BY at",
             {"id": item_id, "u": user_id},
         )

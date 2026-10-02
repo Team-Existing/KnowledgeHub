@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Respon
 from pydantic import BaseModel, Field
 
 from app.arcadedb import ArcadeSession
-from app.auth import get_current_user
-from app.db import User, get_session
+from app.spaces import Space, current_space, resolve_space
+from app.db import get_session
 from app.dependencies import curation
 from app.repositories import (
     ArtifactRepository,
@@ -80,6 +80,10 @@ class ArtifactUpdateRequest(BaseModel):
     tags: Optional[List[str]] = None
 
 
+class ShareRequest(BaseModel):
+    space_id: str = Field(min_length=1)   # a space you belong to: a group's id, or your own user id
+
+
 class ItemUpdateRequest(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     tags: Optional[List[str]] = None
@@ -90,31 +94,31 @@ class ItemUpdateRequest(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-async def _owned_artifact(session: ArcadeSession, user: User, artifact_id: str) -> Row:
-    artifact = await ArtifactRepository(session).get_owned(user.id, artifact_id)
+async def _owned_artifact(session: ArcadeSession, space: Space, artifact_id: str) -> Row:
+    artifact = await ArtifactRepository(session).get_owned(space.id, artifact_id)
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact not found")
     return artifact
 
 
-async def _owned_item(session: ArcadeSession, user: User, item_id: str) -> Row:
-    item = await KnowledgeItemRepository(session).get_owned(user.id, item_id)
+async def _owned_item(session: ArcadeSession, space: Space, item_id: str) -> Row:
+    item = await KnowledgeItemRepository(session).get_owned(space.id, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     return item
 
 
 async def _update_item(
-    session: ArcadeSession, user: User, item_id: str, fields: Row, event: Optional[Row] = None,
+    session: ArcadeSession, space: Space, item_id: str, fields: Row, event: Optional[Row] = None,
 ) -> Row:
     """Apply the changes and log them in the item's history (one transaction)."""
     repo = KnowledgeItemRepository(session)
     if fields:
-        await repo.update(user.id, item_id, fields)
+        await repo.update(space.id, item_id, fields)
         if event:
-            await ItemEventRepository(session).add(user.id, item_id, event.pop("kind"), event)
+            await ItemEventRepository(session).add(space.id, item_id, event.pop("kind"), event, actor=space.actor)
         await session.commit()
-    return item_dict(await repo.get_owned(user.id, item_id))
+    return item_dict(await repo.get_owned(space.id, item_id))
 
 
 # ---------------------------------------------------------------------------
@@ -123,10 +127,10 @@ async def _update_item(
 
 @router.get("")
 async def list_knowledge(
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    user_id = current_user.id
+    user_id = space.id
     return {
         "artifacts": [artifact_dict(a) for a in await ArtifactRepository(session).list(user_id)],
         "knowledge_items": [item_dict(i) for i in await KnowledgeItemRepository(session).list(user_id)],
@@ -138,18 +142,18 @@ async def list_knowledge(
 @router.post("/okf/import")
 async def import_okf_payload(
     payload: Dict[str, Any],
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    return await pipeline.import_okf(session, current_user.id, payload)
+    return await pipeline.import_okf(session, space.id, payload)
 
 
 @router.get("/okf/export")
 async def export_okf(
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    user_id = current_user.id
+    user_id = space.id
     return export_okf_payload(
         user_id,
         [artifact_dict(a) for a in await ArtifactRepository(session).list(user_id)],
@@ -165,11 +169,11 @@ async def export_okf(
 @router.post("/artifacts")
 async def ingest_artifact(
     request: ArtifactRequest,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     return await pipeline.ingest_text(
-        session, current_user.id, request.title, request.content,
+        session, space.id, request.title, request.content,
         source=request.source, source_type="manual", author=request.author, tags=request.tags,
     )
 
@@ -180,13 +184,13 @@ async def ingest_file(
     title: str = Form(...),
     author: str = Form("unknown"),
     tags: str = Form(""),
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     content = await extract_text_from_upload(file)
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     return await pipeline.ingest_document(
-        session, current_user.id, title, content,
+        session, space.id, title, content,
         source="file", source_type="file", author=author, tags=tag_list,
     )
 
@@ -194,12 +198,12 @@ async def ingest_file(
 @router.post("/artifacts/url")
 async def ingest_url(
     request: UrlIngestRequest,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     content = await fetch_url(request.url)
     return await pipeline.ingest_document(
-        session, current_user.id, request.title, content,
+        session, space.id, request.title, content,
         source=request.url, source_type="url", author=request.author, tags=request.tags,
     )
 
@@ -207,11 +211,11 @@ async def ingest_url(
 @router.post("/artifacts/transcript")
 async def ingest_transcript(
     request: TranscriptRequest,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     return await pipeline.ingest_transcript(
-        session, current_user.id, request.title, request.content,
+        session, space.id, request.title, request.content,
         source_type=request.source_type, author=request.author, tags=request.tags,
     )
 
@@ -222,10 +226,10 @@ async def ingest_transcript(
 
 @router.get("/review")
 async def list_review_queue(
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> List[Dict[str, Any]]:
-    items = await KnowledgeItemRepository(session).list(current_user.id, review_status="pending")
+    items = await KnowledgeItemRepository(session).list(space.id, review_status="pending")
     return [item_dict(i) for i in items]
 
 
@@ -233,10 +237,10 @@ async def list_review_queue(
 async def review_item(
     item_id: str,
     body: ReviewDecision,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    item = await _owned_item(session, current_user, item_id)
+    item = await _owned_item(session, space, item_id)
     fields: Row = {"review_status": body.status, "review_note": body.note}
     if body.title:
         fields["title"] = body.title
@@ -245,7 +249,7 @@ async def review_item(
     event = {"kind": "reviewed", "from": item.get("review_status"), "to": body.status, "note": body.note}
     if body.title and body.title != item.get("title"):
         event["title"] = {"from": item.get("title"), "to": body.title}
-    return await _update_item(session, current_user, item_id, fields, event)
+    return await _update_item(session, space, item_id, fields, event)
 
 
 # ---------------------------------------------------------------------------
@@ -254,10 +258,10 @@ async def review_item(
 
 @router.post("/link")
 async def run_cross_link(
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    user_id = current_user.id
+    user_id = space.id
     items = await KnowledgeItemRepository(session).list(user_id)
     links = find_cross_links([{"id": i["id"], "artifact_id": i["artifact_id"], "title": i["title"]} for i in items])
     # stored as RELATED_TO edges; a re-run replaces the previous set
@@ -269,12 +273,12 @@ async def run_cross_link(
 
 @router.get("/links")
 async def get_cross_links(
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> List[Dict[str, Any]]:
     return [
         {"item_id_a": cl["item_id_a"], "item_id_b": cl["item_id_b"], "score": float(cl.get("score") or 0.0)}
-        for cl in await CrossLinkRepository(session).list(current_user.id)
+        for cl in await CrossLinkRepository(session).list(space.id)
     ]
 
 
@@ -289,7 +293,7 @@ async def search_knowledge(
     source_type: Optional[str] = None,
     tag: Optional[str] = None,
     limit: int = Query(default=100, ge=1, le=500),
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     """
@@ -301,10 +305,10 @@ async def search_knowledge(
     """
     search = SearchRepository(session)
     items, item_total = await search.search_items(
-        current_user.id, q, type=type, source_type=source_type, tag=tag, limit=limit
+        space.id, q, type=type, source_type=source_type, tag=tag, limit=limit
     )
     artifacts, artifact_total, snippets = await search.search_artifacts(
-        current_user.id, q, source_type=source_type, tag=tag, limit=limit
+        space.id, q, source_type=source_type, tag=tag, limit=limit
     )
     return {
         "query": q,
@@ -324,14 +328,36 @@ async def search_knowledge(
 # Playbooks
 # ---------------------------------------------------------------------------
 
+@router.get("/playbooks")
+async def list_playbooks(
+    space: Space = Depends(current_space),
+    session: ArcadeSession = Depends(get_session),
+) -> List[Dict[str, Any]]:
+    return [playbook_dict(p) for p in await PlaybookRepository(session).list(space.id)]
+
+
+@router.delete("/playbooks/{playbook_id}", status_code=204)
+async def delete_playbook(
+    playbook_id: str,
+    space: Space = Depends(current_space),
+    session: ArcadeSession = Depends(get_session),
+) -> Response:
+    if not await PlaybookRepository(session).delete(space.id, playbook_id):
+        raise HTTPException(status_code=404, detail="Playbook not found")
+    await session.commit()
+    return Response(status_code=204)
+
+
 @router.post("/playbooks")
 async def create_playbook(
     request: PlaybookRequest,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    playbook = curation.build_playbook(request.title, request.steps)
-    await PlaybookRepository(session).add(current_user.id, playbook)
+    playbook = curation.build_playbook(space.id, request.title, request.steps)
+    if not playbook["steps"]:
+        raise HTTPException(status_code=400, detail="A playbook needs at least one step with text")
+    await PlaybookRepository(session).add(space.id, playbook)
     await session.commit()
     return playbook
 
@@ -344,10 +370,10 @@ async def create_playbook(
 async def update_artifact(
     artifact_id: str,
     body: ArtifactUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    artifact = await _owned_artifact(session, current_user, artifact_id)
+    artifact = await _owned_artifact(session, space, artifact_id)
     changes: Row = {}
     if body.title is not None:
         changes["title"] = body.title
@@ -360,25 +386,41 @@ async def update_artifact(
     if body.content is not None:
         # re-extract items when content changes (this also saves title/tags)
         items = await pipeline.reextract_artifact(
-            session, current_user.id, updated, artifact.get("metadata") or {}
+            session, space.id, updated, artifact.get("metadata") or {}
         )
         return {**updated, "items": items}
     if changes:
-        await ArtifactRepository(session).update(current_user.id, artifact_id, changes)
+        await ArtifactRepository(session).update(space.id, artifact_id, changes)
         await session.commit()
     return updated
+
+
+@router.post("/artifacts/{artifact_id}/share")
+async def share_artifact(
+    artifact_id: str,
+    body: ShareRequest,
+    space: Space = Depends(current_space),
+    session: ArcadeSession = Depends(get_session),
+) -> Dict[str, Any]:
+    """Copy a source (with its knowledge items) from the active space into another space you belong to."""
+    await _owned_artifact(session, space, artifact_id)
+    target = await resolve_space(session, space.user, body.space_id)   # 403 unless you're a member
+    if target.id == space.id:
+        raise HTTPException(status_code=400, detail="That source is already in this space")
+    result = await pipeline.copy_artifact(session, space.id, target.id, artifact_id, shared_by=space.actor)
+    return {**result, "space_id": target.id, "space_name": target.name}
 
 
 @router.delete("/artifacts/{artifact_id}", status_code=204)
 async def delete_artifact(
     artifact_id: str,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Response:
-    await _owned_artifact(session, current_user, artifact_id)
-    await ArtifactRepository(session).delete_cascade(current_user.id, artifact_id)
+    await _owned_artifact(session, space, artifact_id)
+    await ArtifactRepository(session).delete_cascade(space.id, artifact_id)
     # its items' lineage edges went with them, which can reactivate older decisions
-    await lineage.refresh_statuses(session, current_user.id)
+    await lineage.refresh_statuses(session, space.id)
     await session.commit()
     return Response(status_code=204)
 
@@ -390,20 +432,20 @@ async def delete_artifact(
 @router.get("/items/{item_id}")
 async def get_item(
     item_id: str,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    return item_dict(await _owned_item(session, current_user, item_id))
+    return item_dict(await _owned_item(session, space, item_id))
 
 
 @router.put("/items/{item_id}")
 async def update_item(
     item_id: str,
     body: ItemUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    item = await _owned_item(session, current_user, item_id)
+    item = await _owned_item(session, space, item_id)
     fields: Row = {}
     if body.title is not None:
         fields["title"] = body.title
@@ -415,18 +457,18 @@ async def update_item(
     event: Row = {"kind": "edited", "fields": changed}
     if "title" in changed:
         event["title"] = {"from": item.get("title"), "to": fields["title"]}
-    return await _update_item(session, current_user, item_id, fields, event if changed else None)
+    return await _update_item(session, space, item_id, fields, event if changed else None)
 
 
 @router.delete("/items/{item_id}", status_code=204)
 async def delete_item(
     item_id: str,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Response:
-    await _owned_item(session, current_user, item_id)
-    await KnowledgeItemRepository(session).delete(current_user.id, item_id)
-    await lineage.refresh_statuses(session, current_user.id)
+    await _owned_item(session, space, item_id)
+    await KnowledgeItemRepository(session).delete(space.id, item_id)
+    await lineage.refresh_statuses(session, space.id)
     await session.commit()
     return Response(status_code=204)
 
@@ -437,21 +479,21 @@ async def delete_item(
 
 @router.get("/graph")
 async def knowledge_graph(
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    return await GraphStore(session).visualization(current_user.id)
+    return await GraphStore(session).visualization(space.id)
 
 
 # Must stay last: the catch-all path would otherwise shadow the GET routes above.
 @router.get("/{item_id}")
 async def get_knowledge_item(
     item_id: str,
-    current_user: User = Depends(get_current_user),
+    space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     """Get a knowledge item by id, id suffix, or title substring."""
-    item = await KnowledgeItemRepository(session).find_by_ref(current_user.id, item_id)
+    item = await KnowledgeItemRepository(session).find_by_ref(space.id, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     return item_dict(item)

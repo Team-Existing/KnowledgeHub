@@ -88,15 +88,21 @@
                 @if (!model.active) {
                   <button class="btn-primary" [disabled]="!!busyId" (click)="use(model)">Use this model</button>
                 }
-                <button class="btn-danger" [disabled]="!!busyId || installedCount === 1" (click)="remove(model)"
-                        [title]="installedCount === 1 ? 'At least one model must stay downloaded' : ''">
-                  {{ busyId === model.id ? 'Working…' : 'Remove' }}
-                </button>
+                @if (auth.can('manage_models')) {
+                  <button class="btn-danger" [disabled]="!!busyId || installedCount === 1" (click)="remove(model)"
+                          [title]="installedCount === 1 ? 'At least one model must stay downloaded' : ''">
+                    {{ busyId === model.id ? 'Working…' : 'Remove' }}
+                  </button>
+                }
               </div>
             } @else {
-              <button class="btn-primary" [disabled]="!!busyId || !ollamaReachable" (click)="install(model)">
-                {{ busyId ? 'Please wait…' : 'Download' }}
-              </button>
+              @if (auth.can('manage_models')) {
+                <button class="btn-primary" [disabled]="!!busyId || !ollamaReachable" (click)="install(model)">
+                  {{ busyId ? 'Please wait…' : 'Download' }}
+                </button>
+              } @else {
+                <span class="muted-text" style="font-size:0.8rem">An administrator can download this model</span>
+              }
             }
 
             @if (errorId === model.id) {

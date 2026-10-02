@@ -39,13 +39,20 @@ class PlaybookRepository:
         )
 
     async def add(self, user_id: str, playbook: Row) -> None:
-        # ids derive from the title, so saving the same title again replaces it
+        # ids derive from the space and the title, so saving the same title again replaces it.
+        # UPSERT must match the unique index exactly, hence id alone (it already encodes the space).
         await self.session.execute(
             "UPDATE Playbook SET id = :id, user_id = :u, title = :t, steps = :s, category = :c "
-            "UPSERT WHERE id = :id AND user_id = :u",
+            "UPSERT WHERE id = :id",
             {"id": playbook["id"], "u": user_id, "t": playbook["title"],
              "s": playbook["steps"], "c": playbook["category"]},
         )
+
+
+    async def delete(self, user_id: str, playbook_id: str) -> int:
+        rows = await self.session.execute(
+            "DELETE FROM Playbook WHERE id = :id AND user_id = :u", {"id": playbook_id, "u": user_id})
+        return int(rows[0].get("count", 0)) if rows else 0
 
 
 class QueryLogRepository:

@@ -185,24 +185,37 @@ def test_model_list_has_exactly_three_with_active_flag(client, ollama, make_user
 
 @pytest.mark.parametrize("endpoint", ["/models/install", "/models/remove", "/models/set-default"])
 def test_only_catalog_models_can_be_managed(client, ollama, make_user, endpoint):
-    r = client.post(endpoint, headers=make_user(), json={"model_id": "qwen2.5:14b"})
+    r = client.post(endpoint, headers=make_user(role="admin"), json={"model_id": "qwen2.5:14b"})
     assert r.status_code == 400 and ollama.pulled == [] and ollama.deleted == []
 
 
+@pytest.mark.parametrize("endpoint", ["/models/install", "/models/remove"])
+def test_members_cannot_install_or_remove_shared_models(client, ollama, make_user, endpoint):
+    ollama.installed = {"llama3.1:8b", "mistral:7b"}
+    r = client.post(endpoint, headers=make_user(), json={"model_id": "mistral:7b"})
+    assert r.status_code == 403 and ollama.pulled == [] and ollama.deleted == []
+
+
+def test_members_can_still_choose_their_own_model(client, ollama, make_user):
+    ollama.installed = {"llama3.1:8b", "mistral:7b"}
+    r = client.post("/models/set-default", headers=make_user(), json={"model_id": "mistral:7b"})
+    assert r.status_code == 200
+
+
 def test_signed_in_install(client, ollama, make_user):
-    events = sse_events(client.post("/models/install", headers=make_user(), json={"model_id": "gpt-oss:20b"}))
+    events = sse_events(client.post("/models/install", headers=make_user(role="admin"), json={"model_id": "gpt-oss:20b"}))
     assert events[-1] == {"status": "done"} and "gpt-oss:20b" in ollama.installed
 
 
 def test_cannot_remove_the_only_installed_model(client, ollama, make_user):
-    r = client.post("/models/remove", headers=make_user(), json={"model_id": "llama3.1:8b"})
+    r = client.post("/models/remove", headers=make_user(role="admin"), json={"model_id": "llama3.1:8b"})
     assert r.status_code == 409 and ollama.deleted == []
 
 
-def test_removing_active_model_switches_everyone_using_it(client, ollama):
+def test_removing_active_model_switches_everyone_using_it(client, ollama, make_user):
     ollama.installed = {"llama3.1:8b", "mistral:7b"}
-    alice, bob = register(client), register(client)
-    ha, hb = headers_for(client, *alice), headers_for(client, *bob)
+    ha = make_user(role="admin")
+    hb = headers_for(client, *register(client))
     client.post("/models/set-default", headers=ha, json={"model_id": "mistral:7b"})
     client.post("/models/set-default", headers=hb, json={"model_id": "mistral:7b"})
 
@@ -214,7 +227,7 @@ def test_removing_active_model_switches_everyone_using_it(client, ollama):
 
 
 def test_management_reports_ollama_down(client, ollama, make_user):
-    h = make_user()
+    h = make_user(role="admin")
     ollama.reachable = False
     assert client.post("/models/install", headers=h, json={"model_id": "mistral:7b"}).status_code == 503
     assert client.get("/models/status", headers=h).json()["llm"]["ollamaReachable"] is False

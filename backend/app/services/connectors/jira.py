@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.services.connectors import base
-from app.services.connectors.base import ConfigField, ConnectorError, FetchResult, Row, SourceDocument
+from app.services.connectors.base import ConfigField, FetchResult, Row, SourceDocument, user_url
 from app.services.connectors.parsers import adf_to_text
 
 KIND = "jira"
@@ -61,10 +61,13 @@ def _issue_document(base_url: str, issue: Dict[str, Any]) -> SourceDocument:
     )
 
 
+def check(config: Row) -> None:
+    user_url(config["base_url"], "Jira URL")
+
+
 async def fetch(config: Row) -> FetchResult:
-    base_url = config["base_url"].rstrip("/")
-    if not base_url.startswith(("http://", "https://")):
-        raise ConnectorError("Jira URL must start with http:// or https://")
+    link = user_url(config["base_url"], "Jira URL")
+    base_url = str(link).rstrip("/")
     if config.get("email"):
         client_kwargs: Dict[str, Any] = {"auth": (config["email"], config["api_token"])}
         cloud = True
@@ -74,7 +77,8 @@ async def fetch(config: Row) -> FetchResult:
     limit = config["max_items"]
 
     issues: List[Dict[str, Any]] = []
-    async with base.make_client(**client_kwargs) as client:
+    # only the Jira site the user gave; nothing else
+    async with base.make_client({link.host}, **client_kwargs) as client:
         if cloud:
             # Jira Cloud: the enhanced search endpoint, paged with nextPageToken
             token = None

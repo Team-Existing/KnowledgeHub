@@ -13,6 +13,7 @@ import { errorMessage } from '../../services/http-error'
  * step, because signing in needs one.
  */
 type Step = 'welcome' | 'model' | 'account' | 'done'
+import { USERNAME_RULES, isValidUsername } from '../../services/usernames'
 
 @Component({
   selector: 'app-onboarding',
@@ -26,6 +27,8 @@ export class OnboardingComponent implements OnInit {
   catalog: ModelCatalog | null = null
   checking = true
   username = ''
+  readonly usernameRules = USERNAME_RULES
+  get usernameOk(): boolean { return isValidUsername(this.username) }
   password = ''
   isCreating = false
   setupError = ''

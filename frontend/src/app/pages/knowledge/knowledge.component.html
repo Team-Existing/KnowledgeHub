@@ -10,11 +10,17 @@
         {{ linkingCross ? 'Linking…' : crossLinkCount !== null ? crossLinkCount + ' links found' : 'Cross-link' }}
       </button>
       <a *ngIf="pendingCount > 0" routerLink="/review"><button class="warning">Review ({{ pendingCount }})</button></a>
+      <button (click)="exportOkf()" [disabled]="okfBusy" title="Download everything in this space as an OKF JSON file">Export</button>
+      <label class="button-like" title="Import an OKF JSON file into this space">
+        <input type="file" accept=".json,application/json" (change)="importOkf($event)" [disabled]="okfBusy" hidden />
+        <span>{{ okfBusy ? 'Working…' : 'Import' }}</span>
+      </label>
       <button class="primary" (click)="loadKnowledge()">Refresh</button>
     </div>
   </section>
 
   <div *ngIf="error" class="error-banner">{{ error }}</div>
+  <div *ngIf="okfMessage" class="space-banner">{{ okfMessage }}</div>
 
   <section class="ingest-panel">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.75rem">
@@ -217,6 +223,7 @@
     <a *ngFor="let item of filteredItems" class="knowledge-card knowledge-card-link" [routerLink]="['/knowledge', item.id]">
       <div class="card-topline">
         <span class="type-pill">{{ item.type }}</span>
+        <span *ngIf="item.status" class="status-badge" [ngClass]="'status-' + item.status">{{ item.status }}</span>
         <span>{{ item.date | date }}</span>
       </div>
       <h3>{{ item.title }}</h3>

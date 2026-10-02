@@ -139,7 +139,7 @@ def validate_link(source: Row, target: Row, kind: str, edges: List[Row]) -> None
 
 async def add_link(
     session: ArcadeSession, user_id: str, source_id: str, target_id: str, kind: str,
-    note: str = "", origin: str = "manual",
+    note: str = "", origin: str = "manual", actor: Optional[str] = None,
 ) -> List[Row]:
     """Validate, create the edge, log it on both items, refresh statuses. Commits. Returns status changes."""
     items = KnowledgeItemRepository(session)
@@ -152,15 +152,18 @@ async def add_link(
     await lineage.add(user_id, source_id, target_id, kind, note, origin)
     events = ItemEventRepository(session)
     await events.add(user_id, source_id, "linked",
-                     {"direction": "out", "kind": kind, "item_id": target_id, "title": target["title"], "note": note})
+                     {"direction": "out", "kind": kind, "item_id": target_id, "title": target["title"], "note": note},
+                     actor=actor)
     await events.add(user_id, target_id, "linked",
-                     {"direction": "in", "kind": kind, "item_id": source_id, "title": source["title"], "note": note})
+                     {"direction": "in", "kind": kind, "item_id": source_id, "title": source["title"], "note": note},
+                     actor=actor)
     changes = await refresh_statuses(session, user_id)
     await session.commit()
     return changes
 
 
-async def remove_link(session: ArcadeSession, user_id: str, source_id: str, target_id: str) -> List[Row]:
+async def remove_link(session: ArcadeSession, user_id: str, source_id: str, target_id: str,
+                      actor: Optional[str] = None) -> List[Row]:
     """Remove the edge source -> target (either direction is accepted). Commits."""
     lineage = LineageRepository(session)
     edge = next((e for e in await lineage.touching(user_id, source_id)
@@ -169,14 +172,17 @@ async def remove_link(session: ArcadeSession, user_id: str, source_id: str, targ
         raise LineageError("Link not found", status_code=404)
     await lineage.remove(user_id, edge["from"], edge["to"])
     events = ItemEventRepository(session)
-    await events.add(user_id, edge["from"], "unlinked", {"direction": "out", "kind": edge["kind"], "item_id": edge["to"]})
-    await events.add(user_id, edge["to"], "unlinked", {"direction": "in", "kind": edge["kind"], "item_id": edge["from"]})
+    await events.add(user_id, edge["from"], "unlinked",
+                     {"direction": "out", "kind": edge["kind"], "item_id": edge["to"]}, actor=actor)
+    await events.add(user_id, edge["to"], "unlinked",
+                     {"direction": "in", "kind": edge["kind"], "item_id": edge["from"]}, actor=actor)
     changes = await refresh_statuses(session, user_id)
     await session.commit()
     return changes
 
 
-async def declare_status(session: ArcadeSession, user_id: str, item: Row, status: Optional[str], note: str) -> Row:
+async def declare_status(session: ArcadeSession, user_id: str, item: Row, status: Optional[str], note: str,
+                         actor: Optional[str] = None) -> Row:
     """Set (or clear, with None) the user's declared status. Commits."""
     allowed = DECLARABLE_STATUSES.get(item["type"])
     if allowed is None:
@@ -184,7 +190,8 @@ async def declare_status(session: ArcadeSession, user_id: str, item: Row, status
     if status is not None and status not in allowed:
         raise LineageError(f"A {item['type']} status must be one of: {', '.join(allowed)}")
     await KnowledgeItemRepository(session).update(user_id, item["id"], {"declared_status": status})
-    await ItemEventRepository(session).add(user_id, item["id"], "status_declared", {"status": status, "note": note})
+    await ItemEventRepository(session).add(user_id, item["id"], "status_declared", {"status": status, "note": note},
+                                           actor=actor)
     await refresh_statuses(session, user_id)
     await session.commit()
     return await KnowledgeItemRepository(session).get_owned(user_id, item["id"])

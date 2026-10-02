@@ -1,34 +1,58 @@
 """
 GitHub merged pull requests: each PR's description and discussion is where
-the "why" behind a change gets written down. Works with GitHub Enterprise via
-API URL. The token needs read access to the repository (none for public repos).
+the "why" behind a change gets written down.
+
+Only the repository the user links is contacted: github.com links use that
+host's API (api.github.com), GitHub Enterprise links use <host>/api/v3, and
+every request is confined to that one host. The token needs read access to
+the repository (none for public repos).
 """
 from __future__ import annotations
 
-from typing import List
+from typing import List, Tuple
 
 from app.services.connectors import base
-from app.services.connectors.base import ConfigField, ConnectorError, FetchResult, Row, SourceDocument
+from app.services.connectors.base import ConfigField, ConnectorError, FetchResult, Row, SourceDocument, user_url
 
 KIND = "github"
 LABEL = "GitHub — merged pull requests"
 FILESYSTEM = False
 FIELDS = [
-    ConfigField("repo", "Repository", required=True, help="owner/name, e.g. acme/payments-api"),
+    ConfigField("repo_url", "Repository link", required=True,
+                help="The repository's web address, e.g. https://github.com/acme/payments-api "
+                     "(or your GitHub Enterprise address)"),
     ConfigField("token", "Access token", type="password", secret=True,
                 help="Fine-grained token with read access to pull requests; optional for public repos"),
-    ConfigField("api_url", "API URL", default="https://api.github.com",
-                help="Change only for GitHub Enterprise, e.g. https://github.acme.com/api/v3"),
+    ConfigField("api_url", "API address (optional)",
+                help="Only if your GitHub Enterprise API isn't at <host>/api/v3"),
     ConfigField("max_items", "Max PRs per sync", type="number", default=30),
     ConfigField("include_comments", "Include discussion comments (yes/no)", default="yes"),
 ]
 
 
+def resolve(config: Row) -> Tuple[str, str, str]:
+    """(owner/name, API base, API host) from the user's repository link — no built-in default host."""
+    link = user_url(config["repo_url"], "Repository link")
+    parts = [p for p in link.path.split("/") if p]
+    if len(parts) < 2:
+        raise ConnectorError("Repository link must point at a repository, e.g. https://github.com/acme/api")
+    repo = f"{parts[0]}/{parts[1].removesuffix('.git')}"
+    if config.get("api_url"):
+        api = str(user_url(config["api_url"], "API address")).rstrip("/")
+    elif link.host.lower() in ("github.com", "www.github.com"):
+        api = "https://api.github.com"     # github.com serves its REST API from this host
+    else:
+        api = f"{link.scheme}://{link.netloc.decode()}/api/v3"   # GitHub Enterprise Server
+    return repo, api, user_url(api, "API address").host
+
+
+def check(config: Row) -> None:
+    """Called when the connector is saved, so a bad link is reported before any sync."""
+    resolve(config)
+
+
 async def fetch(config: Row) -> FetchResult:
-    repo = config["repo"].strip("/")
-    if repo.count("/") != 1:
-        raise ConnectorError("Repository must look like owner/name")
-    api = config["api_url"].rstrip("/")
+    repo, api, api_host = resolve(config)
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     if config.get("token"):
         headers["Authorization"] = f"Bearer {config['token']}"
@@ -36,7 +60,7 @@ async def fetch(config: Row) -> FetchResult:
     with_comments = str(config.get("include_comments", "yes")).lower() not in ("no", "false", "0")
 
     docs: List[SourceDocument] = []
-    async with base.make_client(headers=headers) as client:
+    async with base.make_client({api_host}, headers=headers) as client:
         page = 1
         while len(docs) < limit and page <= 10:
             pulls = await base.get_json(

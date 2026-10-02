@@ -30,7 +30,10 @@
 
         <div class="form-group">
           <label>Username</label>
-          <input type="text" [(ngModel)]="username" placeholder="Choose a username" class="input-field" />
+          <input type="text" [(ngModel)]="username" placeholder="Choose a username" class="input-field"
+                 autocomplete="username" />
+          <small [class.error-text]="username && !usernameOk" style="display:block;margin-top:0.3rem;font-size:0.78rem">
+            {{ usernameRules }}</small>
         </div>
         <div class="form-group">
           <label>Password</label>
@@ -41,7 +44,7 @@
 
         <div class="step-actions">
           <button class="btn-secondary" (click)="step = 'welcome'">Back</button>
-          <button class="btn-primary" [disabled]="!username || !password || isCreating" (click)="createAccount()">
+          <button class="btn-primary" [disabled]="!usernameOk || !password || isCreating" (click)="createAccount()">
             {{ isCreating ? 'Creating Account...' : 'Create Account' }}
           </button>
         </div>

@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core'
 import { CommonModule, DecimalPipe } from '@angular/common'
 import { HttpClient } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
-import { API_BASE } from '../../services/auth.service'
+import { API_BASE, AuthService } from '../../services/auth.service'
 import { ReembedResult } from '../../models/api'
 import { LocalModel, ModelService } from '../../services/model.service'
 import { errorMessage } from '../../services/http-error'
@@ -28,7 +28,7 @@ export class ModelManagerComponent implements OnInit {
   reembedResult: ReembedResult | null = null
   reembedError = ''
 
-  constructor(public service: ModelService, private http: HttpClient) {}
+  constructor(public service: ModelService, private http: HttpClient, public auth: AuthService) {}
 
   async ngOnInit() { await this.service.loadAll() }
 

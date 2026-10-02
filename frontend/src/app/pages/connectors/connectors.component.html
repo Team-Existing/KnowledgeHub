@@ -14,10 +14,15 @@
     <h3 style="font-size:1rem;margin-bottom:0.75rem">Add a source</h3>
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
       @for (k of kinds; track k.kind) {
-        <button [disabled]="!k.allowed" [title]="k.allowed ? '' : 'Only admins can add connectors that read local folders'"
-                (click)="openNew(k)">{{ k.label }}</button>
+        <button [disabled]="!k.allowed" [title]="k.disabled_reason ?? ''" (click)="openNew(k)">{{ k.label }}</button>
       }
     </div>
+
+    @if (blockedKinds.length) {
+      <p class="field-help" style="margin-top:0.5rem">
+        @for (k of blockedKinds; track k.kind) { {{ k.label }}: {{ k.disabled_reason }}.<br> }
+      </p>
+    }
 
     @if (formOpen && kind) {
       <div class="form-stack" style="margin-top:1rem;max-width:640px">
@@ -40,7 +45,12 @@
           </label>
         }
         @if (kind.filesystem) {
-          <p class="field-help">Reads files on the machine running the backend. Set CONNECTOR_ROOTS to limit which folders are allowed.</p>
+          <p class="field-help">Reads files on the machine running the backend, only inside the folders the server allows (CONNECTOR_ROOTS).</p>
+        }
+        @if (kind.needs_credentials_key) {
+          <p class="error-text">This server has no CREDENTIALS_KEY, so it can't store this source's token. Ask an administrator to set one.</p>
+        } @else if (hasSecrets) {
+          <p class="field-help">Tokens are encrypted before they are stored and are never sent back to the browser.</p>
         }
         @if (formError) { <p class="error-text">{{ formError }}</p> }
         <div style="display:flex;gap:0.5rem">
@@ -67,6 +77,7 @@
         </div>
         <h3>{{ c.name }}</h3>
         <p class="muted-text" style="font-size:0.8rem;word-break:break-all">{{ summary(c) }}</p>
+        @if (c.created_by) { <p class="muted-text" style="font-size:0.75rem">Added by {{ c.created_by }}</p> }
         @if (c.last_sync_at) { <p class="muted-text" style="font-size:0.75rem">Last sync {{ c.last_sync_at | date:'medium' }}</p> }
         @if (c.last_error) { <p class="error-text" style="font-size:0.8rem">{{ c.last_error }}</p> }
 
@@ -91,8 +102,8 @@
         }
 
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-          <button class="primary" [disabled]="busyId === c.id || c.last_status === 'running'" (click)="sync(c)">
-            {{ c.last_status === 'running' ? 'Syncing…' : 'Sync now' }}</button>
+          <button class="primary" [disabled]="busyId === c.id || c.last_status === 'running' || c.last_status === 'queued'" (click)="sync(c)">
+            {{ c.last_status === 'running' ? 'Syncing…' : c.last_status === 'queued' ? 'Queued…' : 'Sync now' }}</button>
           <button (click)="openEdit(c)">Edit</button>
           <button (click)="toggleDocuments(c)">{{ documents[c.id] ? 'Hide' : 'Documents' }}</button>
           <button class="danger" [disabled]="busyId === c.id" (click)="remove(c)">Remove</button>

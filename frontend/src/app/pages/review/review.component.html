@@ -21,6 +21,7 @@
       <div class="review-card">
         <div class="card-topline">
           <span class="type-pill">{{ item.type }}</span>
+          @if (item.status) { <span class="status-badge" [ngClass]="'status-' + item.status">{{ item.status }}</span> }
           <span class="engine-badge" [ngClass]="engineClass(item.extraction_engine)">{{ engineLabel(item.extraction_engine) }}</span>
           <span class="muted-text">{{ item.date | date }}</span>
         </div>

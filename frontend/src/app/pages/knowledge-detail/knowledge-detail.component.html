@@ -90,8 +90,18 @@
               <h4>{{ artifact.title }}</h4>
               <p *ngIf="artifact.author && artifact.author !== 'unknown'">by {{ artifact.author }}</p>
               <p>{{ artifact.source }}</p>
+              <p *ngIf="artifact.metadata['shared_from']" class="muted-text" style="font-size:0.8rem">
+                Shared by {{ $any(artifact.metadata['shared_from']).by }}</p>
             </div>
           </div>
+          <div *ngIf="otherSpaces.length" style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.75rem">
+            <select [(ngModel)]="shareTo" style="flex:1;min-width:140px" aria-label="Share this source to">
+              <option value="">Share this source to…</option>
+              <option *ngFor="let s of otherSpaces" [value]="s.id">{{ s.name }}</option>
+            </select>
+            <button [disabled]="sharing || !shareTo" (click)="share()">{{ sharing ? 'Sharing…' : 'Share' }}</button>
+          </div>
+          <p *ngIf="shareMessage" class="muted-text" style="font-size:0.8rem;margin-top:0.35rem">{{ shareMessage }}</p>
         </ng-container>
         <ng-template #noArtifact>
           <p class="muted-text">No source artifact found.</p>

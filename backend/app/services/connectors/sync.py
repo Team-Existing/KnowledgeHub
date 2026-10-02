@@ -13,9 +13,11 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
-from app.arcadedb import ArcadeSession
+from app import crypto
+from app import coordination
+from app.arcadedb import ArcadeClient, ArcadeSession
 from app.db import get_client
 from app.repositories import ConnectorRepository, UserRepository
 from app.services import artifact_pipeline as pipeline
@@ -29,12 +31,39 @@ logger = logging.getLogger(__name__)
 Row = Dict[str, Any]
 MAX_REPORTED_ERRORS = 20
 
-# connector ids with a sync in progress in this process
-_running: Set[str] = set()
+class QueueUnavailable(Exception):
+    """Redis (worker mode) can't be reached, so sync state is unknown."""
 
 
-def is_running(connector_id: str) -> bool:
-    return connector_id in _running
+async def is_running(connector_id: str) -> bool:
+    """
+    Whether a sync holds this connector's lock, in this or any other process
+    (see app/coordination.py). Raises QueueUnavailable if that can't be known.
+    """
+    try:
+        return await coordination.sync_running(connector_id)
+    except Exception as exc:   # redis errors, timeouts
+        raise QueueUnavailable(str(exc)) from exc
+
+
+def secret_names(module) -> List[str]:
+    return [f.name for f in module.FIELDS if f.secret]
+
+
+def secret_context(connector_id: str) -> str:
+    """Associated data binding a stored credential to its connector (the field name is appended)."""
+    return f"connector:{connector_id}"
+
+
+def decrypted_config(module, connector: Row) -> Row:
+    """The connector's config with credentials decrypted — only ever held in memory for a sync."""
+    try:
+        config = crypto.open_fields(connector.get("config") or {}, secret_names(module), secret_context(connector["id"]))
+    except crypto.DecryptionError as exc:
+        raise ConnectorError(f"Stored credentials can't be used ({exc}). Re-enter them on the connector.")
+    except crypto.CredentialsKeyMissing as exc:
+        raise ConnectorError(str(exc))
+    return validate_config(module.FIELDS, config)
 
 
 def connector_artifact_id(user_id: str, connector_id: str, external_id: str) -> str:
@@ -83,7 +112,8 @@ async def _apply_links(session: ArcadeSession, user_id: str, connector: Row, doc
                 continue
             try:
                 await lineage.add_link(session, user_id, src, dst, link["kind"],
-                                       note=f"from {connector['name']}", origin=connector["kind"])
+                                       note=f"from {connector['name']}", origin=connector["kind"],
+                                       actor=connector.get("_actor"))
                 created += 1
             except lineage.LineageError:
                 await session.rollback()   # already linked on an earlier sync, or would be circular
@@ -93,8 +123,7 @@ async def _apply_links(session: ArcadeSession, user_id: str, connector: Row, doc
 async def run_sync(session: ArcadeSession, user_id: str, connector: Row) -> Row:
     """Fetch and ingest. Raises ConnectorError if the source can't be read at all."""
     module = REGISTRY[connector["kind"]]
-    config = validate_config(module.FIELDS, connector.get("config") or {})
-    fetched = await module.fetch(config)
+    fetched = await module.fetch(decrypted_config(module, connector))
 
     repo = ConnectorRepository(session)
     known = await repo.document_hashes(user_id, connector["id"])
@@ -129,20 +158,34 @@ async def run_sync(session: ArcadeSession, user_id: str, connector: Row) -> Row:
     return result
 
 
-async def run_sync_job(user_id: str, connector_id: str) -> None:
-    """Background task: own session, records progress and outcome on the connector."""
-    if connector_id in _running:
-        return
-    _running.add(connector_id)
-    session = ArcadeSession(get_client())
+async def run_sync_job(user_id: str, connector_id: str, actor_id: Optional[str] = None,
+                       client: Optional[ArcadeClient] = None) -> None:
+    """
+    Run one sync: own session, records progress and outcome on the connector.
+    `user_id` is the space the connector belongs to; `actor_id` the person who
+    started the sync (their chosen LLM is used, and lineage links name them).
+    Runs in the API process (in-process mode) or on the Celery worker, which
+    passes its own `client`. The connector's lock makes a second, concurrent
+    run of the same connector a no-op, across all processes.
+    """
+    async with coordination.held_lock(coordination.sync_lock(connector_id), coordination.SYNC_LOCK_TTL) as token:
+        if token is None:
+            logger.info("Connector %s is already syncing elsewhere; skipping", connector_id)
+            return
+        await _run_sync_locked(user_id, connector_id, actor_id, client or get_client())
+
+
+async def _run_sync_locked(user_id: str, connector_id: str, actor_id: Optional[str], client: ArcadeClient) -> None:
+    session = ArcadeSession(client)
     repo = ConnectorRepository(session)
     try:
         connector = await repo.get_owned(user_id, connector_id)
         if not connector:
             return
         # runs outside the request, so apply the user's chosen LLM here explicitly
-        owner = await UserRepository(session).get(user_id)
-        use_model((owner or {}).get("llm_model"))
+        actor = await UserRepository(session).get(actor_id or user_id)
+        use_model((actor or {}).get("llm_model"))
+        connector = {**connector, "_actor": (actor or {}).get("username")}
         await repo.update(user_id, connector_id, {"last_status": "running", "last_error": None})
         await session.commit()
         try:
@@ -161,5 +204,4 @@ async def run_sync_job(user_id: str, connector_id: str) -> None:
         })
         await session.commit()
     finally:
-        _running.discard(connector_id)
         await session.close()

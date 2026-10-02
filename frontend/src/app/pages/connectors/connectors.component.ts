@@ -49,11 +49,15 @@ export class ConnectorsComponent implements OnInit, OnDestroy {
     } catch (e) { this.error = errorMessage(e, 'Could not load connectors') }
     // keep polling while any sync runs
     if (this.pollTimer) clearTimeout(this.pollTimer)
-    this.pollTimer = this.connectors.some(c => c.last_status === 'running')
+    this.pollTimer = this.connectors.some(c => c.last_status === 'running' || c.last_status === 'queued')
       ? setTimeout(() => this.load(), POLL_MS) : null
   }
 
   get kind(): ConnectorKind | undefined { return this.kinds.find(k => k.kind === this.formKind) }
+
+  get blockedKinds(): ConnectorKind[] { return this.kinds.filter(k => !k.allowed && k.disabled_reason) }
+
+  get hasSecrets(): boolean { return this.kind?.fields.some(f => f.secret) ?? false }
 
   openNew(kind: ConnectorKind) {
     this.editingId = null
@@ -127,19 +131,19 @@ export class ConnectorsComponent implements OnInit, OnDestroy {
   }
 
   statusLabel(c: Connector): string {
-    return ({ never: 'Never synced', running: 'Syncing…', ok: 'Synced', partial: 'Synced with errors',
+    return ({ never: 'Never synced', queued: 'Queued…', running: 'Syncing…', ok: 'Synced', partial: 'Synced with errors',
               error: 'Sync failed', interrupted: 'Interrupted' } as Record<string, string>)[c.last_status] ?? c.last_status
   }
 
   statusClass(c: Connector): string {
-    return ({ ok: 'status-active', partial: 'status-proposed', running: 'status-proposed',
+    return ({ ok: 'status-active', partial: 'status-proposed', running: 'status-proposed', queued: 'status-proposed',
               error: 'status-rejected', interrupted: 'status-rejected' } as Record<string, string>)[c.last_status] ?? ''
   }
 
   /** The config value worth showing on the card: a path, repo, URL or query. */
   summary(c: Connector): string {
     const cfg = c.config
-    return String(cfg['path'] ?? cfg['repo'] ?? cfg['base_url'] ?? cfg['team_key'] ?? '')
+    return String(cfg['path'] ?? cfg['repo_url'] ?? cfg['base_url'] ?? cfg['api_url'] ?? '')
   }
 
   isExternal(url: string): boolean { return /^https?:\/\//.test(url) }
