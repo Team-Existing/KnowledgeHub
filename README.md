@@ -1,6 +1,6 @@
 # Knowledge Hubs
 
-[![CI](https://github.com/itisar-345/KnowledgeHubby/actions/workflows/ci.yml/badge.svg)](https://github.com/itisar-345/KnowledgeHubby/actions/workflows/ci.yml)
+[![CI](https://github.com/Team-Existing/KnowledgeHub/actions/workflows/ci.yml/badge.svg)](https://github.com/Team-Existing/KnowledgeHub/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
 A **local-first knowledge base** for teams. It turns meeting notes, retros, decision logs, documents, web pages and transcripts into structured knowledge (decisions, risks, lessons, how-tos) that you can review, search, track over time and question in plain English.
@@ -28,8 +28,8 @@ More in [Features](docs/features.md).
 Requires [Docker](https://docs.docker.com/get-docker/) (Compose v2.20+), about 15 GB of disk and 8 GB+ of RAM.
 
 ```bash
-git clone https://github.com/itisar-345/KnowledgeHubby.git
-cd KnowledgeHubby
+git clone https://github.com/Team-Existing/KnowledgeHub.git
+cd KnowledgeHub
 docker compose up --build
 ```
 

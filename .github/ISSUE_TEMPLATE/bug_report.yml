@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug. **Security issues don't belong here**: please follow [SECURITY.md](https://github.com/itisar-345/KnowledgeHubby/blob/main/SECURITY.md) instead.
+        Thanks for reporting a bug. **Security issues don't belong here**: please follow [SECURITY.md](https://github.com/Team-Existing/KnowledgeHub/blob/main/SECURITY.md) instead.
   - type: textarea
     id: what-happened
     attributes:

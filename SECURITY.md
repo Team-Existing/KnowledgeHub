@@ -8,7 +8,7 @@ Security fixes are made on `main` and included in the next release. Please run t
 
 **Please don't report security issues in public GitHub issues, discussions or pull requests.**
 
-Report them privately through GitHub: go to the repository's **Security** tab and choose **Report a vulnerability** ([direct link](https://github.com/itisar-345/KnowledgeHubby/security/advisories/new)).
+Report them privately through GitHub: go to the repository's **Security** tab and choose **Report a vulnerability** ([direct link](https://github.com/Team-Existing/KnowledgeHub/security/advisories/new)).
 
 Please include:
 

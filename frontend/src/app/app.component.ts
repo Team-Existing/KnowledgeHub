@@ -15,7 +15,7 @@ const THEME_KEY = 'kh_theme'
  * The AGPL (section 13) requires offering the source to everyone who uses the app
  * over a network. If you run a modified version, point this at your source.
  */
-export const SOURCE_CODE_URL = 'https://github.com/itisar-345/KnowledgeHubby'
+export const SOURCE_CODE_URL = 'https://github.com/Team-Existing/KnowledgeHub'
 type Theme = 'system' | 'light' | 'dark'
 
 interface NavItem { path: string; label: string; icon: string; badge?: () => number; show?: () => boolean }

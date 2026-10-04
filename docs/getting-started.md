@@ -12,8 +12,8 @@ For a multi-instance setup with TLS, see [Production deployment](deployment.md).
 Requires [Docker](https://docs.docker.com/get-docker/) with Compose v2.20+, about 15 GB of free disk space (images, plus 4–13 GB for a model) and 8 GB+ of RAM.
 
 ```bash
-git clone https://github.com/itisar-345/KnowledgeHubby.git
-cd KnowledgeHubby
+git clone https://github.com/Team-Existing/KnowledgeHub.git
+cd KnowledgeHub
 docker compose up --build
 # → http://localhost:8080
 ```

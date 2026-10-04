@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/itisar-345/KnowledgeHubby/security/advisories/new
+    url: https://github.com/Team-Existing/KnowledgeHub/security/advisories/new
     about: Please report security issues privately, not as a public issue.
   - name: Documentation
-    url: https://github.com/itisar-345/KnowledgeHubby/tree/main/docs
+    url: https://github.com/Team-Existing/KnowledgeHub/tree/main/docs
     about: Setup, configuration, connectors, API and known limitations.
