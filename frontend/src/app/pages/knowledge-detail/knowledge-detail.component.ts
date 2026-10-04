@@ -10,13 +10,14 @@ import { Artifact, CrossLink, KnowledgeItem, KnowledgeResponse, Relationship } f
 import { ItemLineageComponent } from '../../components/item-lineage/item-lineage.component'
 import { SpaceService } from '../../services/space.service'
 import { SpaceInfo } from '../../models/api'
+import { IconComponent } from '../../components/icon/icon.component'
 
 type RelatedItem = { item: KnowledgeItem; score: number }
 
 @Component({
   selector: 'app-knowledge-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, ItemLineageComponent],
+  imports: [CommonModule, FormsModule, RouterLink, ItemLineageComponent, IconComponent],
   templateUrl: './knowledge-detail.component.html',
   styleUrl: './knowledge-detail.component.css'
 })

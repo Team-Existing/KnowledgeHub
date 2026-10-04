@@ -271,3 +271,23 @@ def test_an_unreachable_redis_fails_fast(monkeypatch):
     started = time.monotonic()
     assert asyncio.run(coordination.ping()) is False
     assert time.monotonic() - started < coordination.REDIS_TIMEOUT + 1.5
+
+
+def test_provisioning_waits_for_an_elected_leader_not_just_ready_nodes():
+    """
+    Regression: on a cold start nodes answer "ready" before the election ends, and
+    "list databases" works without a leader, so provisioning raced ahead and failed
+    on "create user" (ServerIsNotTheLeader: leader address is unknown).
+    """
+    answers = iter([{"ha": {"leader": None, "electionStatus": "VOTING_FOR_ME"}},
+                    {"ha": {"leader": None}},
+                    {"ha": {"leader": "arcadedb-1"}}])
+
+    client = ArcadeClient("http://node-a:2480", "db", "u", "p")      # one node: one answer per call
+    client.http = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=next(answers))))
+    assert asyncio.run(client.cluster_leader()) is None
+    assert asyncio.run(client.cluster_leader()) is None
+    assert asyncio.run(client.cluster_leader()) == "arcadedb-1"
+
+    standalone, _ = _client(lambda request: httpx.Response(200, json={"version": "26.9.1"}))
+    assert asyncio.run(standalone.cluster_leader()) == "standalone"

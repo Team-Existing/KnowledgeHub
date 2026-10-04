@@ -2,11 +2,12 @@ import { Component, EventEmitter, Output } from '@angular/core'
 import { CommonModule } from '@angular/common'
 import { Router } from '@angular/router'
 import { ModelService } from '../../services/model.service'
+import { IconComponent } from '../../components/icon/icon.component'
 
 @Component({
   selector: 'app-model-privacy-panel',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, IconComponent],
   templateUrl: './model-privacy-panel.component.html',
   styleUrl: './model-privacy-panel.component.css',
 })

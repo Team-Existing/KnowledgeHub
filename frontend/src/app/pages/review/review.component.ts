@@ -7,13 +7,14 @@ import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
 import { KnowledgeItem } from '../../models/api'
+import { IconComponent } from '../../components/icon/icon.component'
 
 type ReviewItem = KnowledgeItem
 
 @Component({
   selector: 'app-review',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, IconComponent],
   templateUrl: './review.component.html'
 })
 export class ReviewComponent implements OnInit {

@@ -43,7 +43,7 @@
 
     @if (!ollamaReachable) {
       <div class="warning-banner">
-        ⚠ Ollama is not running. Start it (or run <code>ollama serve</code>) to download or use models.
+        Ollama is not running. Start it (or run <code>ollama serve</code>) to download or use models.
       </div>
     }
 
@@ -65,7 +65,7 @@
               </div>
             </div>
             <p class="model-meta">{{ model.description }}</p>
-            @if (tooBig(model)) { <p class="model-meta">⚠ This computer has {{ ramGb }} GB RAM; it may run slowly.</p> }
+            @if (tooBig(model)) { <p class="model-meta ram-note">This computer has {{ ramGb }} GB RAM; it may run slowly.</p> }
 
             @if (busyId === model.id && service.installProgress()) {
               <div class="progress-wrap">
@@ -112,7 +112,7 @@
         }
       </div>
       @if (installedCount === 1) {
-        <p class="muted-text">At least one model must stay downloaded, so the only downloaded model can't be removed.</p>
+        <p class="muted-text keep-note">At least one model must stay downloaded, so the only downloaded model can't be removed.</p>
       }
     </section>
 

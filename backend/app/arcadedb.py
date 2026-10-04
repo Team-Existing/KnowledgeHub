@@ -186,6 +186,27 @@ class ArcadeClient:
                                     "run the provisioning step (python -m scripts.provision_arcadedb) first")
             raise
 
+    async def cluster_leader(self) -> Optional[str]:
+        """
+        The cluster's current leader, "standalone" for a server without HA, or None
+        while an election is still running (server commands such as create user
+        fail until then). Needs credentials that may read server status (root).
+        """
+        for node in (self.nodes[i] for i in self._order()):
+            try:
+                response = await self.http.get(f"{node}/server", params={"mode": "cluster"},
+                                               timeout=self.PROBE_TIMEOUT)
+            except httpx.HTTPError:
+                continue
+            if response.status_code >= 400:
+                continue
+            ha = response.json().get("ha")
+            if not ha:
+                return "standalone"
+            if ha.get("leader"):
+                return ha["leader"]
+        return None
+
     async def node_status(self) -> List[Dict[str, Any]]:
         """
         Readiness of every configured node (for /health), probed in parallel with

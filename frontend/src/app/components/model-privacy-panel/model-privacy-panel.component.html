@@ -1,7 +1,7 @@
 <div class="panel">
   <div class="panel-header">
     <span class="panel-title">Model &amp; Privacy</span>
-    <button class="close-btn" (click)="close.emit()" aria-label="Close">✕</button>
+    <button class="close-btn" (click)="close.emit()" aria-label="Close"><app-icon name="close" [size]="18" /></button>
   </div>
 
   <div class="panel-body">
@@ -46,10 +46,10 @@
     <div class="section">
       <p class="section-label">Actions</p>
       <button class="action-btn" (click)="goTo('/settings/models')">
-        <span>🤖</span> Manage local models
+        <app-icon name="models" [size]="17" /> Manage local models
       </button>
       <button class="action-btn secondary" (click)="goTo('/privacy-policy')">
-        <span>🔒</span> Data privacy policy
+        <app-icon name="users" [size]="17" /> Data privacy policy
       </button>
     </div>
 

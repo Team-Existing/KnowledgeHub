@@ -7,6 +7,7 @@ import { AuthService } from '../../services/auth.service'
 import { ModelCatalog, ModelService } from '../../services/model.service'
 import { ModelSetupComponent } from '../../components/model-setup/model-setup.component'
 import { errorMessage } from '../../services/http-error'
+import { IconComponent } from '../../components/icon/icon.component'
 
 /**
  * Sign-in starts with a model check: one of the three local models must be
@@ -18,7 +19,7 @@ type Stage = 'checking' | 'needs-model' | 'ready'
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [FormsModule, CommonModule, ModelSetupComponent],
+  imports: [FormsModule, CommonModule, ModelSetupComponent, IconComponent],
   templateUrl: './login.component.html',
   styleUrl: './login.component.css'
 })

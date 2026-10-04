@@ -74,7 +74,7 @@ export class ModelService {
 
   readonly statusBadgeText = computed(() => {
     const llm = this._modelStatus()?.llm
-    return llm?.installed ? `🟢 Local · ${llm.model}` : '🔴 No model active'
+    return llm?.installed ? `Local · ${llm.model}` : 'No model active'
   })
 
   constructor(private http: HttpClient, private auth: AuthService) {}

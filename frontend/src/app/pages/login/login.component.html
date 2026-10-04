@@ -1,13 +1,16 @@
 <div class="auth-shell">
   <div class="auth-card" [class.wide]="stage === 'needs-model'">
-    <h2>Knowledge Hubs</h2>
+    <div class="auth-brand">
+      <span class="brand-mark"><app-icon name="logo" [size]="22" /></span>
+      <h2>Knowledge Hubs</h2>
+    </div>
 
     @if (stage === 'checking') {
       <p class="muted-text">Checking for a local AI model…</p>
     } @else if (stage === 'needs-model' && catalog) {
       <app-model-setup [catalog]="catalog" (installed)="onInstalled($event)" (retry)="checkModels()" />
     } @else {
-      <p style="color:#999;font-size:0.875rem;margin-top:-0.25rem">{{ mode === 'login' ? 'Sign in to your workspace' : 'Create a new workspace' }}</p>
+      <p class="auth-sub">{{ mode === 'login' ? 'Sign in to your workspace' : 'Create your account' }}</p>
       @if (justInstalled) { <p class="success-text">✓ {{ justInstalled }} is installed. Sign in to start.</p> }
       <div class="form-stack">
         <input placeholder="Username" [(ngModel)]="username" class="input-field" />
@@ -21,6 +24,7 @@
       <button class="btn-secondary" (click)="toggleMode()">
         {{ mode === 'login' ? 'No account? Register' : 'Have an account? Sign in' }}
       </button>
+      <p class="auth-foot">Runs locally · your knowledge never leaves this server</p>
     }
   </div>
 </div>

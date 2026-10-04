@@ -48,16 +48,22 @@ def _env(name: str, default: str | None = None) -> str:
 
 
 async def _wait_for_leader(root: ArcadeClient) -> None:
-    """Server commands need a leader; during start-up the cluster is still electing one."""
+    """
+    Server commands (create database / user) need a leader. On a cold start every
+    node answers "ready" a few seconds before the election ends, and some server
+    commands (e.g. "list databases") work without a leader, so ask the cluster
+    who leads and wait until it names someone.
+    """
     deadline = time.monotonic() + WAIT_SECONDS
     while True:
         try:
-            await root.server_command("list databases")
-            return
-        except ArcadeDBError as exc:
-            reason = exc.detail or exc.exception
+            leader = await root.cluster_leader()
+            reason = "no leader elected yet"
         except Exception as exc:   # nodes still starting
-            reason = str(exc)
+            leader, reason = None, str(exc)
+        if leader:
+            log.info("ArcadeDB ready (leader: %s)", leader)
+            return
         if time.monotonic() > deadline:
             sys.exit(f"provision: ArcadeDB not ready after {WAIT_SECONDS}s ({reason})")
         log.info("waiting for ArcadeDB (%s)", reason[:120])

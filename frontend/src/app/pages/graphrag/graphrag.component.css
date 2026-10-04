@@ -1,89 +1,30 @@
-.provider-badge {
-  padding: 0.25rem 0.6rem;
-  border-radius: 4px;
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-.provider-green { background: #e6f7e6; color: #1a6b1a; }
-.provider-blue  { background: #ede9ff; color: #5a3fc0; }
-.provider-red   { background: #ffe6e6; color: #cc0000; }
-.latency-hint   { color: #667085; font-size: 0.75rem; margin-left: 0.5rem; }
+.provider-badge { padding: 0.22rem 0.6rem; border-radius: 999px; font-size: 0.76rem; font-weight: 600; }
+.provider-green { background: var(--success-soft); color: var(--success-text); }
+.provider-blue  { background: var(--accent-soft); color: var(--accent-text); }
+.provider-red   { background: var(--danger-soft); color: var(--danger-text); }
+.latency-hint   { color: var(--text-4); font-size: 0.75rem; margin-left: 0.5rem; }
 
 .citations-section {
-  margin-top: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  background: #f8f9fa;
-  border-radius: 6px;
-  border-left: 3px solid #667eea;
+  margin-top: 0.85rem; padding: 0.6rem 0.8rem;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
 }
-
-.citations-section summary {
-  cursor: pointer;
-  font-size: 0.85rem;
-  color: #344054;
-  font-weight: 500;
-}
-
-.citation-list {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0 0;
-}
-
+.citations-section summary { font-size: 0.82rem; font-weight: 600; color: var(--text-2); }
+.citation-list { list-style: none; padding: 0; margin: 0.5rem 0 0; }
 .citation-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0;
-  font-size: 0.85rem;
-  border-bottom: 1px solid #f0f0f0;
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.4rem 0; font-size: 0.84rem; border-bottom: 1px solid var(--border);
 }
-
-.citation-list li:last-child {
-  border-bottom: none;
-}
-
+.citation-list li:last-child { border-bottom: none; }
 .citation-type {
-  background: #e5ecea;
-  padding: 0.1rem 0.5rem;
-  border-radius: 3px;
-  font-size: 0.7rem;
-  color: #475467;
-  text-transform: uppercase;
+  padding: 0.1rem 0.5rem; border-radius: 999px;
+  background: var(--surface-3); color: var(--text-2);
+  font-size: 0.68rem; font-weight: 600; text-transform: capitalize;
 }
-
-.citation-title {
-  flex: 1;
-  font-weight: 500;
-  color: #1f2933;
+.citation-title { flex: 1; font-weight: 550; color: var(--text); }
+.citation-link { min-height: 26px; padding: 0 0.6rem; font-size: 0.75rem; }
+:host ::ng-deep .citation-badge {
+  display: inline-block; padding: 0.05rem 0.45rem; margin: 0 0.1rem;
+  border-radius: 6px; background: var(--accent-soft); color: var(--accent-text);
+  font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1px solid var(--accent-soft-2);
 }
-
-.citation-link {
-  background: #667eea;
-  color: white;
-  border: none;
-  padding: 0.15rem 0.5rem;
-  border-radius: 3px;
-  font-size: 0.7rem;
-  cursor: pointer;
-}
-
-.citation-link:hover {
-  background: #5a6fd6;
-}
-
-.citation-badge {
-  display: inline-block;
-  background: #ede9ff;
-  color: #5a3fc0;
-  padding: 0.1rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid #d4c9ff;
-}
-
-.citation-badge:hover {
-  background: #ddd4ff;
-}
+:host ::ng-deep .citation-badge:hover { background: var(--accent-soft-2); }

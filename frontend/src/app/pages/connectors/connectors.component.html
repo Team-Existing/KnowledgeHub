@@ -89,7 +89,7 @@
             <span>{{ c.last_result.unchanged }} unchanged</span>
             <span>{{ c.last_result.items_extracted }} items</span>
             @if (c.last_result.links_created) { <span>{{ c.last_result.links_created }} lineage links</span> }
-            @if (c.last_result.failed) { <span style="color:#b42318">{{ c.last_result.failed }} failed</span> }
+            @if (c.last_result.failed) { <span style="color:var(--danger-text)">{{ c.last_result.failed }} failed</span> }
           </div>
         }
         @if (c.last_result.errors?.length) {

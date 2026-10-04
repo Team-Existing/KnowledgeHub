@@ -9,6 +9,7 @@ import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
 import { Citation, ContextNode, GraphRagResponse } from '../../models/api'
 import { ModelService } from '../../services/model.service'
+import { IconComponent } from '../../components/icon/icon.component'
 
 //Update Message type - citations can be string[] or Citation[]
 type Message = { 
@@ -34,11 +35,10 @@ const PIPELINE_STAGES = [
 @Component({
   selector: 'app-graphrag',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent],
   templateUrl: './graphrag.component.html',
   styleUrl: './graphrag.component.css'
 })
-
 
 export class GraphragComponent implements AfterViewChecked {
   @ViewChild('bottomEl') bottomEl!: ElementRef

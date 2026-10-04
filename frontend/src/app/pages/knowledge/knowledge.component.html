@@ -103,7 +103,7 @@
 
   <!-- Artifacts list with edit / delete -->
   <section class="ingest-panel" *ngIf="data.artifacts.length > 0">
-    <h3>Artifacts <span style="font-weight:400;color:#667085;font-size:0.875rem">({{ data.artifacts.length }})</span></h3>
+    <h3>Artifacts <span style="font-weight:400;color:var(--text-3);font-size:0.875rem">({{ data.artifacts.length }})</span></h3>
     <div class="artifact-list">
       <div *ngFor="let a of data.artifacts" class="artifact-row">
         <ng-container *ngIf="editingArtifactId !== a.id; else editArtifact">
@@ -214,7 +214,7 @@
       <option value="all">All types</option>
       <option *ngFor="let t of itemTypes" [value]="t">{{ t }}</option>
     </select>
-    <a [routerLink]="['/search']" [queryParams]="query ? {q: query} : {}" style="font-size:0.85rem;align-self:center;color:#667eea;text-decoration:none">
+    <a [routerLink]="['/search']" [queryParams]="query ? {q: query} : {}" style="font-size:0.85rem;align-self:center;color:var(--accent-text);text-decoration:none">
       Advanced search →
     </a>
   </section>

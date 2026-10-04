@@ -4,7 +4,7 @@
       <h2>Review Queue</h2>
       <p>{{ items.length }} pending item{{ items.length === 1 ? '' : 's' }} awaiting review</p>
     </div>
-    <a class="back-link" routerLink="/knowledge">← Back to hub</a>
+    <a class="back-link" routerLink="/knowledge"><app-icon name="back" [size]="16" /> Back to hub</a>
   </section>
 
   @if (error) { <p class="error-text" style="padding:0 0.25rem">{{ error }}</p> }

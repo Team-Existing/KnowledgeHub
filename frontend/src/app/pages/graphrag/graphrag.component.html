@@ -2,23 +2,23 @@
   <div class="chat-header">
     <div>
       <strong style="display:flex;align-items:center;gap:0.5rem">GraphRAG Assistant</strong>
-      <p style="color:#667085;font-size:0.8rem;margin-top:0.2rem">Graph-aware retrieval · answers grounded in your knowledge base</p>
+      <p style="color:var(--text-3);font-size:0.8rem;margin-top:0.2rem">Graph-aware retrieval · answers grounded in your knowledge base</p>
     </div>
     <div class="chat-actions">
       <span class="provider-badge" [ngClass]="'provider-' + modelService.statusBadgeColor()" [attr.aria-label]="modelService.statusBadgeText()">
         {{ modelService.statusBadgeText() }}
       </span>
-      <label style="font-size:0.8rem;color:#667085;display:flex;align-items:center;gap:0.4rem">
+      <label style="font-size:0.8rem;color:var(--text-3);display:flex;align-items:center;gap:0.4rem">
         Top-K
         <input type="number" min="1" max="20" [(ngModel)]="topK" style="width:52px;padding:0.25rem 0.4rem;font-size:0.8rem" />
       </label>
-      <button (click)="confirmClear()" title="Clear chat">🗑</button>
+      <button class="icon-btn" (click)="confirmClear()" title="Clear chat"><app-icon name="trash" [size]="17" label="Clear chat" /></button>
     </div>
   </div>
 
   <div class="messages" #messagesEl>
     @if (messages.length === 0) {
-      <div style="text-align:center;color:#667085;margin-top:3rem">
+      <div style="text-align:center;color:var(--text-3);margin-top:3rem">
         <p>Ask a question about your knowledge base.</p>
       </div>
     }
@@ -44,7 +44,7 @@
                       <span class="status-badge" [ngClass]="'status-' + cite.status" title="This decision was replaced; see the item for what replaced it">{{ cite.status }}</span>
                     }
                     <span class="citation-title">{{ cite.title }}</span>
-                    <button (click)="goToItem(cite.id)" class="citation-link">View →</button>
+                    <button (click)="goToItem(cite.id)" class="citation-link">View</button>
                   </li>
                 }
               </ul>
@@ -64,6 +64,6 @@
   <div class="input-area">
     <textarea rows="2" placeholder="Ask about decisions, risks, lessons, best practices…"
       [(ngModel)]="input" (keydown)="onKey($event)" [disabled]="loading"></textarea>
-    <button class="primary" (click)="send()" [disabled]="loading || !input.trim()" title="Send">➤</button>
+    <button class="primary" (click)="send()" [disabled]="loading || !input.trim()" title="Send"><app-icon name="send" [size]="18" label="Send" /></button>
   </div>
 </div>

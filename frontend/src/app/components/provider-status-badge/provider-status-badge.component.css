@@ -1,21 +1,31 @@
+/* the model indicator in the sidebar footer; opens the model & privacy panel */
 .status-badge {
-  padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.35);
-  cursor: pointer;
+  width: 100%;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  min-height: 34px;
+  padding: 0 0.7rem;
+  border-radius: 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  color: var(--text-2);
   font-size: 0.8rem;
-  font-weight: 600;
-  transition: opacity 0.2s;
-  white-space: nowrap;
+  font-weight: 550;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.status-badge:hover { opacity: 0.85; }
-
-.badge-green { background: rgba(255,255,255,0.18); color: #fff; }
-.badge-blue  { background: rgba(255,255,255,0.18); color: #fff; }
-.badge-red   { background: rgba(220,53,69,0.35);   color: #fff; }
-
-.overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.25);
-  z-index: 99;
+.status-badge::before {
+  content: '';
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-4);
 }
+.status-badge:hover:not(:disabled) { background: var(--surface-3); color: var(--text); }
+.badge-green::before { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.badge-blue::before  { background: var(--accent);  box-shadow: 0 0 0 3px var(--accent-soft); }
+.badge-red::before   { background: var(--danger);  box-shadow: 0 0 0 3px var(--danger-soft); }
+.badge-red { color: var(--danger-text); }
+
+.overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); z-index: 99; }

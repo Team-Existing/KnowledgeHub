@@ -27,7 +27,7 @@
 
   @if (result) {
     @if (result.knowledge_items.length > 0) {
-      <div style="padding:0 0.25rem 0.5rem;font-size:0.85rem;color:#667085;text-transform:uppercase;letter-spacing:0.05em;font-weight:600">
+      <div class="section-heading">
         Knowledge Items ({{ countLabel(result.knowledge_items.length, result.item_total) }})
       </div>
       <section class="knowledge-grid">
@@ -46,7 +46,7 @@
       </section>
     }
     @if (result.artifacts.length > 0) {
-      <div style="padding:0 0.25rem 0.5rem;font-size:0.85rem;color:#667085;text-transform:uppercase;letter-spacing:0.05em;font-weight:600">
+      <div class="section-heading">
         Artifacts ({{ countLabel(result.artifacts.length, result.artifact_total) }})
       </div>
       <section class="knowledge-grid">
