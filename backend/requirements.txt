@@ -10,7 +10,7 @@ pypdf==6.19.0
 python-docx==1.2.0
 httpx==0.28.1
 trafilatura==2.3.0
-numpy==2.4.6
+numpy==2.5.3
 psutil==7.2.2
 
 # Local-first embedding (the only embedding provider)
@@ -18,4 +18,4 @@ sentence-transformers==6.1.0
 
 # Background worker (deploy/): Celery on Redis. Not needed for single-instance development.
 celery[redis]==5.6.3
-redis==6.4.0
+redis==8.1.0
