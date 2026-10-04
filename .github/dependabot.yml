@@ -22,6 +22,10 @@ updates:
     directories: ["/backend", "/deploy"]
     schedule:
       interval: monthly
+    ignore:
+      # Caddy 2.11 cancels proxied requests after 60 s; see deploy/lb.Dockerfile
+      - dependency-name: caddy
+        versions: [">= 2.11"]
 
   - package-ecosystem: docker-compose
     directories: ["/", "/deploy"]

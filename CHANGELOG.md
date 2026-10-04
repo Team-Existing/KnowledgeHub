@@ -16,7 +16,10 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 - Backend dependencies upgraded to current releases, including FastAPI 0.142 (Starlette 1.7), Pydantic 2.13, sentence-transformers 6, NumPy 2 and Celery 5.6.
 - JWTs are handled by PyJWT instead of python-jose, and passwords by `bcrypt` directly instead of passlib. Existing password hashes and sessions keep working.
 - Tokens without an expiry are refused.
-- Docker base images: Caddy 2.11, Node 22.
+- Docker base images: Caddy 2.10, Node 22.
+
+### Fixed
+- Reloading a page whose path is also an API path (such as `/knowledge`) made the app show "Failed to load knowledge": the browser reused the cached page for the app's data request. The web server now sends `Vary: Accept`.
 
 ### Removed
 - Unused dependencies: `openai`, `tiktoken`, `aiofiles`, `python-jose`, `passlib`.

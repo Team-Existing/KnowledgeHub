@@ -5,6 +5,21 @@
 
 A **local-first knowledge base** for teams. It turns meeting notes, retros, decision logs, documents, web pages and transcripts into structured knowledge (decisions, risks, lessons, how-tos) that you can review, search, track over time and question in plain English.
 
+![GraphRAG answering "What do we use for domain events now, and why did it change?" with citations, and flagging the superseded Kafka decision](docs/images/graphrag.png)
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/decisions.png" alt="Decision log: each decision's status, tags, and the older decision it supersedes or amends"></td>
+    <td width="50%"><img src="docs/images/review.png" alt="Review queue: extracted items waiting to be accepted, edited or rejected"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Decision log</b>: status, history and what replaced what</td>
+    <td align="center"><b>Review queue</b>: nothing reaches GraphRAG until someone accepts it</td>
+  </tr>
+</table>
+
+<sub>Screenshots use fictional demo data.</sub>
+
 - **Runs on your machine.** FastAPI backend, Angular frontend, **ArcadeDB** as the only data store, and local AI: one of three LLMs run by [Ollama](docs/local-models.md) plus sentence-transformers embeddings. There are no cloud AI providers.
 - **Personal and group spaces.** Everyone has a private space and can create or join groups that share one. A switcher in the nav picks where you're working.
 - **Decisions have a history.** A decision can supersede, reverse or amend an older one, and risks can be mitigated or actually happen. The app tracks each item's status and shows how it evolved.
