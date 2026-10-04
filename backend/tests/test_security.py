@@ -35,12 +35,43 @@ def test_server_refuses_weak_signing_keys(monkeypatch, key):
 
 
 def test_tokens_signed_with_another_key_are_rejected(client, make_user):
-    from jose import jwt
+    import jwt
+    from app.auth import ALGORITHM, SECRET_KEY
+    headers = make_user(role="admin")
+    claims = jwt.decode(headers["Authorization"].split()[1], SECRET_KEY, algorithms=[ALGORITHM])
+    # the same, valid claims (subject and expiry): only the signing key differs
+    forged = jwt.encode(claims, "change-me-in-production-use-32-chars-min", algorithm=ALGORITHM)
+    assert client.get("/admin/users", headers={"Authorization": f"Bearer {forged}"}).status_code == 401
+
+
+def test_tokens_without_an_expiry_are_rejected(client, make_user):
+    import jwt
     from app.auth import ALGORITHM, SECRET_KEY
     headers = make_user(role="admin")
     sub = jwt.decode(headers["Authorization"].split()[1], SECRET_KEY, algorithms=[ALGORITHM])["sub"]
-    forged = jwt.encode({"sub": sub}, "change-me-in-production-use-32-chars-min", algorithm=ALGORITHM)
-    assert client.get("/admin/users", headers={"Authorization": f"Bearer {forged}"}).status_code == 401
+    eternal = jwt.encode({"sub": sub}, SECRET_KEY, algorithm=ALGORITHM)
+    assert client.get("/admin/users", headers={"Authorization": f"Bearer {eternal}"}).status_code == 401
+
+
+# hashes made by passlib, which earlier versions used: existing accounts must keep signing in
+_PASSLIB_HASH = "$2b$12$HVcHLtMSegyCew6LYVgIP.XKmg1EmgJr2tPBJkxTSA4km8kirna1q"        # correct horse battery staple
+_PASSLIB_LONG_HASH = "$2b$12$cX50unTGY26ZC1NNIvLTs..FSpAOxQRPaxt6y6azjjseNU3zUDGhG"   # "x" * 100
+
+
+def test_password_hashes_from_earlier_versions_still_verify():
+    from app.auth import verify_password
+    assert verify_password("correct horse battery staple", _PASSLIB_HASH)
+    assert not verify_password("correct horse battery stapler", _PASSLIB_HASH)
+    # passlib truncated to bcrypt's 72 bytes silently; so does the current code
+    assert verify_password("x" * 100, _PASSLIB_LONG_HASH)
+
+
+def test_password_hashing_handles_long_and_malformed_input():
+    from app.auth import hash_password, verify_password
+    hashed = hash_password("é" * 60)              # 120 bytes: past bcrypt's limit
+    assert verify_password("é" * 60, hashed)
+    assert not verify_password("anything", "not-a-bcrypt-hash")
+    assert not verify_password("anything", "")
 
 
 # ── roles ───────────────────────────────────────────────────────────────────

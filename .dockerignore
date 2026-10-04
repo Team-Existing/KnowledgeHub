@@ -10,3 +10,4 @@ backend
 .git
 deploy/.env
 deploy/sources
+/sources

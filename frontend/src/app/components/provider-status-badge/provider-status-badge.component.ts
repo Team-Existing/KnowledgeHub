@@ -5,10 +5,9 @@ import { ModelPrivacyPanelComponent } from '../model-privacy-panel/model-privacy
 
 @Component({
   selector: 'app-provider-status-badge',
-  standalone: true,
   imports: [CommonModule, ModelPrivacyPanelComponent],
   templateUrl: './provider-status-badge.component.html',
-  styleUrl: './provider-status-badge.component.css',
+  styleUrl: './provider-status-badge.component.css'
 })
 export class ProviderStatusBadgeComponent implements OnInit {
   showPanel = false

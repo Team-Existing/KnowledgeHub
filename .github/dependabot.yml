@@ -1,0 +1,34 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      angular:
+        patterns: ["@angular*", "@angular-devkit/*", "zone.js", "typescript"]
+      npm:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories: ["/backend", "/deploy"]
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker-compose
+    directories: ["/", "/deploy"]
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

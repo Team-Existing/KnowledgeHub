@@ -19,9 +19,8 @@ const STATUS_ORDER: Record<Register, string[]> = {
 
 @Component({
   selector: 'app-decisions',
-  standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './decisions.component.html',
+  templateUrl: './decisions.component.html'
 })
 export class DecisionsComponent implements OnInit {
   register: Register = 'decision'

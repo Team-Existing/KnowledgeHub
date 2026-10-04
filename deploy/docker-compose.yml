@@ -6,7 +6,7 @@
 #                                   └─────────────▶ arcadedb-0/1/2 (Raft cluster)
 #
 # Start:   cp .env.example .env   (fill it in)  then  docker compose up -d --build
-# Details: see "Production deployment" in the README.
+# Details: docs/deployment.md. For a single machine, use ../docker-compose.yml instead.
 name: knowledge-hubs
 
 x-backend: &backend

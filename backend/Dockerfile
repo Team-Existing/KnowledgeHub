@@ -1,5 +1,6 @@
-# One image for every backend role in deploy/docker-compose.yml:
-# the API instances, the Celery worker and beat, and the provisioning job.
+# One image for every backend role: the API in the local stack (docker-compose.yml)
+# and, in deploy/docker-compose.yml, the API instances, the Celery worker and beat,
+# and the provisioning job.
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -28,7 +29,9 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 COPY app ./app
 COPY scripts ./scripts
 
-RUN useradd --create-home --uid 10001 kh && chown -R kh /app
+# /var/lib/knowledge-hubs: secrets the one-command local stack generates on first start
+# (scripts/local_entrypoint.py); created here so its volume is owned by the app user
+RUN useradd --create-home --uid 10001 kh && chown -R kh /app  && install -d -o kh -m 700 /var/lib/knowledge-hubs
 USER kh
 
 ENV LOCAL_EMBED_MODEL=${LOCAL_EMBED_MODEL} \

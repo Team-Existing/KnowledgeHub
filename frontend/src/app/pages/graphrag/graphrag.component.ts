@@ -34,7 +34,6 @@ const PIPELINE_STAGES = [
 
 @Component({
   selector: 'app-graphrag',
-  standalone: true,
   imports: [CommonModule, FormsModule, IconComponent],
   templateUrl: './graphrag.component.html',
   styleUrl: './graphrag.component.css'

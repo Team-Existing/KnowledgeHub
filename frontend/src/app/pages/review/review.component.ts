@@ -13,7 +13,6 @@ type ReviewItem = KnowledgeItem
 
 @Component({
   selector: 'app-review',
-  standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, IconComponent],
   templateUrl: './review.component.html'
 })

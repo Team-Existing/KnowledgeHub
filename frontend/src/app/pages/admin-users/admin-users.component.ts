@@ -10,9 +10,8 @@ import { USERNAME_RULES, isValidUsername } from '../../services/usernames'
 
 @Component({
   selector: 'app-admin-users',
-  standalone: true,
   imports: [CommonModule, FormsModule],
-  templateUrl: './admin-users.component.html',
+  templateUrl: './admin-users.component.html'
 })
 export class AdminUsersComponent implements OnInit {
   readonly roles: Role[] = ['admin', 'member']

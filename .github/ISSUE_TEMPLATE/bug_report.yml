@@ -1,0 +1,51 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. **Security issues don't belong here**: please follow [SECURITY.md](https://github.com/itisar-345/KnowledgeHubby/blob/main/SECURITY.md) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: setup
+    attributes:
+      label: How are you running it?
+      options:
+        - Docker, one command (docker-compose.yml)
+        - Production stack (deploy/)
+        - From source
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v0.1.0, or the output of `git rev-parse --short HEAD`
+  - type: input
+    id: model
+    attributes:
+      label: LLM model
+      placeholder: llama3.1:8b, mistral:7b or gpt-oss:20b
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant backend logs (`docker compose logs backend`) or browser console errors. Remove any secrets or private data.
+      render: text

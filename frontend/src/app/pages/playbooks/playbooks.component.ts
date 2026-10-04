@@ -1,5 +1,4 @@
 import { Component, OnInit } from '@angular/core'
-import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { RouterLink } from '@angular/router'
 import { HttpClient } from '@angular/common/http'
@@ -13,9 +12,8 @@ const STEP_TYPES = new Set(['how-to', 'checklist', 'best-practice', 'action-item
 
 @Component({
   selector: 'app-playbooks',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './playbooks.component.html',
+  imports: [FormsModule, RouterLink],
+  templateUrl: './playbooks.component.html'
 })
 export class PlaybooksComponent implements OnInit {
   playbooks: Playbook[] = []

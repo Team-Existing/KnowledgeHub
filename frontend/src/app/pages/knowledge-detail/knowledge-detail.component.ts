@@ -16,7 +16,6 @@ type RelatedItem = { item: KnowledgeItem; score: number }
 
 @Component({
   selector: 'app-knowledge-detail',
-  standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, ItemLineageComponent, IconComponent],
   templateUrl: './knowledge-detail.component.html',
   styleUrl: './knowledge-detail.component.css'

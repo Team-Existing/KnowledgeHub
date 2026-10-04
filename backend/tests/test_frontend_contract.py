@@ -71,11 +71,12 @@ def _frontend_calls() -> List[Tuple[str, str, str]]:
 
 
 def _routes() -> List[Tuple[str, "re.Pattern[str]", str]]:
+    # from the OpenAPI schema: FastAPI includes routers lazily, so app.routes doesn't
+    # list their endpoints (no route here sets include_in_schema=False)
     out = []
-    for r in app.routes:
-        if hasattr(r, "methods") and not r.path.startswith(("/docs", "/redoc", "/openapi")):
-            rx = re.compile("^" + re.sub(r"\{[^}]+\}", "[^/]+", r.path) + "$")
-            out += [(m, rx, r.path) for m in r.methods - {"HEAD", "OPTIONS"}]
+    for path, operations in app.openapi()["paths"].items():
+        rx = re.compile("^" + re.sub(r"\{[^}]+\}", "[^/]+", path) + "$")
+        out += [(m.upper(), rx, path) for m in operations if m.upper() not in ("HEAD", "OPTIONS")]
     return out
 
 

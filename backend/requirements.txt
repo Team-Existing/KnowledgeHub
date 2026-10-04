@@ -1,27 +1,21 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.5.0
-python-dotenv==1.0.1
-python-multipart>=0.0.9
-python-jose[cryptography]==3.3.0
-cryptography==42.0.8
-passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
-aiofiles==23.2.1
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+pydantic==2.13.5
+python-dotenv==1.2.4
+python-multipart==0.0.32
+PyJWT==2.15.1
+cryptography==50.0.2
+bcrypt==5.0.0
 pypdf==6.19.0
-python-docx==1.1.2
-httpx==0.25.2
-trafilatura==1.12.2
-numpy==1.26.4
-psutil==5.9.8
+python-docx==1.2.0
+httpx==0.28.1
+trafilatura==2.3.0
+numpy==2.4.6
+psutil==7.2.2
 
-# Local-first embedding (default)
-sentence-transformers==2.7.0
-
-# Optional: set LLM_PROVIDER=openai + OPENAI_API_KEY to use OpenAI instead of Ollama
-openai==1.12.0
-tiktoken==0.6.0
+# Local-first embedding (the only embedding provider)
+sentence-transformers==6.1.0
 
 # Background worker (deploy/): Celery on Redis. Not needed for single-instance development.
-celery[redis]==5.4.0
-redis==5.2.1
+celery[redis]==5.6.3
+redis==6.4.0

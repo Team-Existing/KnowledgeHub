@@ -1,0 +1,103 @@
+# Knowledge Hubs on your own machine, in one command:
+#
+#   docker compose up --build        then open http://localhost:8080
+#
+#   web (Caddy: the frontend + API proxy) ─▶ backend (FastAPI) ─▶ arcadedb
+#                                                             └─▶ ollama (local LLM)
+#
+# No .env needed: the backend generates SECRET_KEY and CREDENTIALS_KEY on first
+# start and keeps them in a volume. The first account you create is the server
+# admin; the sign-in screen offers to download an LLM if none is installed yet.
+#
+# Optional settings (environment or a .env file next to this one):
+#   KH_PORT=8080                      port on this machine
+#   KH_BIND=127.0.0.1                 0.0.0.0 to let other machines on your network in
+#   OLLAMA_BASE_URL=http://host.docker.internal:11434
+#                                     use an Ollama already running on this machine
+#                                     (e.g. for GPU acceleration on macOS); then start
+#                                     with: docker compose up --build --scale ollama=0
+#   CONNECTOR_SOURCES_DIR=./sources   folder that folder / git-ADR connectors may read
+#
+# This is a single-instance setup. For TLS, several app instances, a background
+# worker and an ArcadeDB cluster, use deploy/ (see docs/deployment.md).
+name: knowledge-hubs-local
+
+services:
+  arcadedb:
+    image: arcadedata/arcadedb:26.9.1
+    restart: unless-stopped
+    environment:
+      # reachable only inside this Compose network: the port isn't published
+      JAVA_OPTS: -Darcadedb.server.rootPassword=${ARCADEDB_PASSWORD:-knowledge-hubs-local}
+    volumes:
+      - arcadedb-data:/home/arcadedb/databases
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:2480/api/v1/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  ollama:
+    image: ollama/ollama:0.35.1
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama      # downloaded models survive restarts
+    # NVIDIA GPU (Linux, or Windows with WSL 2): uncomment
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    command: ["python", "-m", "scripts.local_entrypoint"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # for OLLAMA_BASE_URL pointing at the host
+    environment:
+      ARCADEDB_URL: http://arcadedb:2480
+      ARCADEDB_DATABASE: knowledge_hubs
+      ARCADEDB_USER: root
+      ARCADEDB_PASSWORD: ${ARCADEDB_PASSWORD:-knowledge-hubs-local}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+      # empty = generated on first start and kept in the backend-secrets volume
+      SECRET_KEY: ${SECRET_KEY:-}
+      CREDENTIALS_KEY: ${CREDENTIALS_KEY:-}
+      KH_SECRETS_DIR: /var/lib/knowledge-hubs
+      CONNECTOR_ROOTS: /data/sources
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      RETENTION_ENABLED: ${RETENTION_ENABLED:-true}
+      RETENTION_INACTIVE_DAYS: ${RETENTION_INACTIVE_DAYS:-365}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-20}
+    volumes:
+      - backend-secrets:/var/lib/knowledge-hubs
+      - ${CONNECTOR_SOURCES_DIR:-./sources}:/data/sources:ro
+    depends_on:
+      arcadedb: { condition: service_healthy }
+      ollama: { condition: service_started, required: false }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+
+  web:
+    # the production load balancer's image, serving plain HTTP to one backend
+    build:
+      context: .
+      dockerfile: deploy/lb.Dockerfile
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ":80"
+      APP_UPSTREAMS: "backend:8000"
+    ports:
+      - "${KH_BIND:-127.0.0.1}:${KH_PORT:-8080}:80"
+    depends_on:
+      backend: { condition: service_healthy }
+
+volumes:
+  arcadedb-data:
+  ollama-models:
+  backend-secrets:

@@ -15,7 +15,6 @@ type Transform = { x: number; y: number; k: number }
 
 @Component({
   selector: 'app-knowledge',
-  standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './knowledge.component.html'
 })

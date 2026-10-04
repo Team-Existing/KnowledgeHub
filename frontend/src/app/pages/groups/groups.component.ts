@@ -10,9 +10,8 @@ import { Candidate, Group, GroupMember } from '../../models/api'
 
 @Component({
   selector: 'app-groups',
-  standalone: true,
   imports: [CommonModule, FormsModule],
-  templateUrl: './groups.component.html',
+  templateUrl: './groups.component.html'
 })
 export class GroupsComponent implements OnInit {
   groups: Group[] = []

@@ -12,9 +12,8 @@ const POLL_MS = 3000
 
 @Component({
   selector: 'app-connectors',
-  standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './connectors.component.html',
+  templateUrl: './connectors.component.html'
 })
 export class ConnectorsComponent implements OnInit, OnDestroy {
   kinds: ConnectorKind[] = []

@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
-import { CommonModule } from '@angular/common'
 import { HttpErrorResponse } from '@angular/common/http'
 import { AuthService } from '../../services/auth.service'
 import { ModelCatalog, ModelService } from '../../services/model.service'
@@ -18,8 +17,7 @@ type Stage = 'checking' | 'needs-model' | 'ready'
 
 @Component({
   selector: 'app-login',
-  standalone: true,
-  imports: [FormsModule, CommonModule, ModelSetupComponent, IconComponent],
+  imports: [FormsModule, ModelSetupComponent, IconComponent],
   templateUrl: './login.component.html',
   styleUrl: './login.component.css'
 })

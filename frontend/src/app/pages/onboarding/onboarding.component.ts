@@ -1,5 +1,4 @@
 import { Component, OnInit } from '@angular/core'
-import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { Router, RouterLink } from '@angular/router'
 import { ModelCatalog, ModelService } from '../../services/model.service'
@@ -17,10 +16,9 @@ import { USERNAME_RULES, isValidUsername } from '../../services/usernames'
 
 @Component({
   selector: 'app-onboarding',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, ModelSetupComponent],
+  imports: [FormsModule, RouterLink, ModelSetupComponent],
   templateUrl: './onboarding.component.html',
-  styleUrl: './onboarding.component.css',
+  styleUrl: './onboarding.component.css'
 })
 export class OnboardingComponent implements OnInit {
   step: Step = 'welcome'

@@ -252,6 +252,8 @@ label { color: var(--text-2); }
 }
 
 .sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 0.6rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+.source-link { font-size: 0.75rem; color: var(--text-3); text-align: center; text-decoration: none; }
+.source-link:hover { color: var(--text-2); text-decoration: underline; }
 .user-chip { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.5rem; border-radius: 10px; }
 .avatar {
   display: grid; place-items: center; flex-shrink: 0;

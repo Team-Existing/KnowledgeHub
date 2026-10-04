@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core'
-import { CommonModule, DecimalPipe } from '@angular/common'
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms'
 import { ModelCatalog, ModelService } from '../../services/model.service'
 import { errorMessage } from '../../services/http-error'
@@ -10,10 +10,9 @@ import { errorMessage } from '../../services/http-error'
  */
 @Component({
   selector: 'app-model-setup',
-  standalone: true,
   imports: [CommonModule, FormsModule, DecimalPipe],
   templateUrl: './model-setup.component.html',
-  styleUrl: './model-setup.component.css',
+  styleUrl: './model-setup.component.css'
 })
 export class ModelSetupComponent implements OnChanges {
   @Input({ required: true }) catalog!: ModelCatalog

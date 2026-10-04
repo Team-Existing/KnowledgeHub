@@ -9,7 +9,9 @@
       <button (click)="runCrossLink()" [disabled]="linkingCross">
         {{ linkingCross ? 'Linking…' : crossLinkCount !== null ? crossLinkCount + ' links found' : 'Cross-link' }}
       </button>
-      <a *ngIf="pendingCount > 0" routerLink="/review"><button class="warning">Review ({{ pendingCount }})</button></a>
+      @if (pendingCount > 0) {
+        <a routerLink="/review"><button class="warning">Review ({{ pendingCount }})</button></a>
+      }
       <button (click)="exportOkf()" [disabled]="okfBusy" title="Download everything in this space as an OKF JSON file">Export</button>
       <label class="button-like" title="Import an OKF JSON file into this space">
         <input type="file" accept=".json,application/json" (change)="importOkf($event)" [disabled]="okfBusy" hidden />
@@ -19,8 +21,12 @@
     </div>
   </section>
 
-  <div *ngIf="error" class="error-banner">{{ error }}</div>
-  <div *ngIf="okfMessage" class="space-banner">{{ okfMessage }}</div>
+  @if (error) {
+    <div class="error-banner">{{ error }}</div>
+  }
+  @if (okfMessage) {
+    <div class="space-banner">{{ okfMessage }}</div>
+  }
 
   <section class="ingest-panel">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.75rem">
@@ -29,11 +35,13 @@
         <p>Paste text, upload a file, fetch a URL, or extract decisions from a meeting transcript / email / Slack thread using AI.</p>
       </div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-        <button *ngFor="let m of ingestModes" [class.primary]="ingestMode === m.key" (click)="ingestMode = m.key">{{ m.label }}</button>
+        @for (m of ingestModes; track m) {
+          <button [class.primary]="ingestMode === m.key" (click)="ingestMode = m.key">{{ m.label }}</button>
+        }
       </div>
     </div>
 
-    <ng-container *ngIf="ingestMode === 'text'">
+    @if (ingestMode === 'text') {
       <div class="form-grid">
         <input [(ngModel)]="title" placeholder="Title" />
         <input [(ngModel)]="author" placeholder="Author" />
@@ -41,14 +49,16 @@
       </div>
       <textarea [(ngModel)]="content" placeholder="Paste knowledge source text here…" rows="8"></textarea>
       <div class="panel-actions">
-        <span *ngIf="error" class="error-text">{{ error }}</span>
+        @if (error) {
+          <span class="error-text">{{ error }}</span>
+        }
         <button class="primary" [disabled]="loading || !title || !content" (click)="ingestText()">
           {{ loading ? 'Extracting…' : 'Extract Knowledge' }}
         </button>
       </div>
-    </ng-container>
+    }
 
-    <ng-container *ngIf="ingestMode === 'file'">
+    @if (ingestMode === 'file') {
       <div class="form-grid">
         <input [(ngModel)]="fileTitle" placeholder="Title" />
         <input [(ngModel)]="fileAuthor" placeholder="Author" />
@@ -56,14 +66,16 @@
       </div>
       <input type="file" accept=".pdf,.txt,.md,.docx" style="padding:0.5rem 0" (change)="onFileChange($event)" />
       <div class="panel-actions">
-        <span *ngIf="error" class="error-text">{{ error }}</span>
+        @if (error) {
+          <span class="error-text">{{ error }}</span>
+        }
         <button class="primary" [disabled]="loading || !fileTitle" (click)="ingestFile()">
           {{ loading ? 'Uploading…' : 'Upload & Extract' }}
         </button>
       </div>
-    </ng-container>
+    }
 
-    <ng-container *ngIf="ingestMode === 'url'">
+    @if (ingestMode === 'url') {
       <div class="form-grid">
         <input [(ngModel)]="urlTitle" placeholder="Title" />
         <input [(ngModel)]="urlAuthor" placeholder="Author" />
@@ -71,14 +83,16 @@
       </div>
       <input [(ngModel)]="urlValue" placeholder="https://…" />
       <div class="panel-actions">
-        <span *ngIf="error" class="error-text">{{ error }}</span>
+        @if (error) {
+          <span class="error-text">{{ error }}</span>
+        }
         <button class="primary" [disabled]="loading || !urlValue || !urlTitle" (click)="ingestUrl()">
           {{ loading ? 'Fetching…' : 'Fetch & Extract' }}
         </button>
       </div>
-    </ng-container>
+    }
 
-    <ng-container *ngIf="ingestMode === 'transcript'">
+    @if (ingestMode === 'transcript') {
       <div class="form-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
         <input [(ngModel)]="txTitle" placeholder="Title" />
         <input [(ngModel)]="txAuthor" placeholder="Author" />
@@ -90,47 +104,54 @@
         </select>
       </div>
       <textarea [(ngModel)]="txContent" placeholder="Paste your meeting transcript, email thread, or Slack conversation…" rows="10"></textarea>
-      <div *ngIf="txSummary" class="summary-box"><strong>AI Summary:</strong> {{ txSummary }}</div>
+      @if (txSummary) {
+        <div class="summary-box"><strong>AI Summary:</strong> {{ txSummary }}</div>
+      }
       <p class="provider-hint">ⓘ Transcript mode uses your local model — no data leaves this device</p>
       <div class="panel-actions">
-        <span *ngIf="error" class="error-text">{{ error }}</span>
+        @if (error) {
+          <span class="error-text">{{ error }}</span>
+        }
         <button class="primary" [disabled]="loading || !txTitle || !txContent" (click)="ingestTranscript()">
           {{ loading ? 'Extracting with AI…' : 'Extract with AI' }}
         </button>
       </div>
-    </ng-container>
+    }
   </section>
 
   <!-- Artifacts list with edit / delete -->
-  <section class="ingest-panel" *ngIf="data.artifacts.length > 0">
-    <h3>Artifacts <span style="font-weight:400;color:var(--text-3);font-size:0.875rem">({{ data.artifacts.length }})</span></h3>
-    <div class="artifact-list">
-      <div *ngFor="let a of data.artifacts" class="artifact-row">
-        <ng-container *ngIf="editingArtifactId !== a.id; else editArtifact">
-          <div class="artifact-row-info">
-            <strong>{{ a.title }}</strong>
-            <span class="muted-text">by {{ a.author }} &middot; {{ a.created_at | date }}</span>
+  @if (data.artifacts.length > 0) {
+    <section class="ingest-panel">
+      <h3>Artifacts <span style="font-weight:400;color:var(--text-3);font-size:0.875rem">({{ data.artifacts.length }})</span></h3>
+      <div class="artifact-list">
+        @for (a of data.artifacts; track a) {
+          <div class="artifact-row">
+            @if (editingArtifactId !== a.id) {
+              <div class="artifact-row-info">
+                <strong>{{ a.title }}</strong>
+                <span class="muted-text">by {{ a.author }} &middot; {{ a.created_at | date }}</span>
+              </div>
+              <div class="artifact-row-actions">
+                <button (click)="startEditArtifact(a)">Edit</button>
+                <button class="danger" (click)="deleteArtifact(a.id)" [disabled]="deletingId === a.id">
+                  {{ deletingId === a.id ? 'Deleting…' : 'Delete' }}
+                </button>
+              </div>
+            } @else {
+              <div style="display:flex;flex-direction:column;gap:0.5rem;flex:1">
+                <input [(ngModel)]="editArtifactTitle" placeholder="Title" />
+                <input [(ngModel)]="editArtifactTags" placeholder="Tags, comma separated" />
+              </div>
+              <div class="artifact-row-actions">
+                <button class="primary" (click)="saveArtifact(a.id)" [disabled]="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
+                <button (click)="editingArtifactId = ''" [disabled]="saving">Cancel</button>
+              </div>
+            }
           </div>
-          <div class="artifact-row-actions">
-            <button (click)="startEditArtifact(a)">Edit</button>
-            <button class="danger" (click)="deleteArtifact(a.id)" [disabled]="deletingId === a.id">
-              {{ deletingId === a.id ? 'Deleting…' : 'Delete' }}
-            </button>
-          </div>
-        </ng-container>
-        <ng-template #editArtifact>
-          <div style="display:flex;flex-direction:column;gap:0.5rem;flex:1">
-            <input [(ngModel)]="editArtifactTitle" placeholder="Title" />
-            <input [(ngModel)]="editArtifactTags" placeholder="Tags, comma separated" />
-          </div>
-          <div class="artifact-row-actions">
-            <button class="primary" (click)="saveArtifact(a.id)" [disabled]="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
-            <button (click)="editingArtifactId = ''" [disabled]="saving">Cancel</button>
-          </div>
-        </ng-template>
+        }
       </div>
-    </div>
-  </section>
+    </section>
+  }
 
   <section class="graph-panel">
     <div class="graph-header">
@@ -139,10 +160,12 @@
         <p>{{ graph.nodes.length }} nodes · {{ graph.edges.length }} relationships</p>
       </div>
       <div style="display:flex;align-items:center;gap:0.5rem">
-        <a *ngIf="selectedNode && selectedNode.type !== 'artifact'" class="detail-link" [routerLink]="['/knowledge', selectedNode.id]">Open details</a>
+        @if (selectedNode && selectedNode.type !== 'artifact') {
+          <a class="detail-link" [routerLink]="['/knowledge', selectedNode.id]">Open details</a>
+        }
       </div>
     </div>
-    <ng-container *ngIf="graph.nodes.length > 0; else emptyGraph">
+    @if (graph.nodes.length > 0) {
       <div class="graph-layout">
         <div class="graph-canvas-wrap">
           <div class="graph-zoom-bar">
@@ -159,81 +182,99 @@
             (mouseup)="onMouseUp($event)"
             (mouseleave)="onMouseUp($event)">
             <g [attr.transform]="svgTransform">
-              <g *ngFor="let edge of edgesWithPos">
-                <line [class]="isEdgeSelected(edge) ? 'graph-edge selected' : 'graph-edge'"
-                  [attr.x1]="edge.sx" [attr.y1]="edge.sy" [attr.x2]="edge.tx" [attr.y2]="edge.ty" />
-                <text class="graph-edge-label" [attr.x]="(edge.sx+edge.tx)/2" [attr.y]="(edge.sy+edge.ty)/2-6">{{ edge.label }}</text>
+              @for (edge of edgesWithPos; track edge) {
+                <g>
+                  <line [class]="isEdgeSelected(edge) ? 'graph-edge selected' : 'graph-edge'"
+                    [attr.x1]="edge.sx" [attr.y1]="edge.sy" [attr.x2]="edge.tx" [attr.y2]="edge.ty" />
+                    <text class="graph-edge-label" [attr.x]="(edge.sx+edge.tx)/2" [attr.y]="(edge.sy+edge.ty)/2-6">{{ edge.label }}</text>
+                  </g>
+                }
+                @for (node of nodesWithPos; track node) {
+                  <g
+                    [class]="selectedNodeId === node.id ? 'graph-node selected' : 'graph-node ' + node.type"
+                    role="button" tabindex="0"
+                    (click)="onNodeClick($event, node)"
+                    (mousedown)="onNodeMouseDown($event, node)"
+                    (keydown.enter)="selectedNodeId = node.id">
+                    <circle [attr.cx]="node.x" [attr.cy]="node.y" [attr.r]="node.type === 'artifact' ? 24 : 18" />
+                    <text [attr.x]="node.x" [attr.y]="node.y + (node.type === 'artifact' ? 34 : 28)">{{ node.label.length > 28 ? node.label.slice(0,25) + '…' : node.label }}</text>
+                  </g>
+                }
               </g>
-              <g *ngFor="let node of nodesWithPos"
-                [class]="selectedNodeId === node.id ? 'graph-node selected' : 'graph-node ' + node.type"
-                role="button" tabindex="0"
-                (click)="onNodeClick($event, node)"
-                (mousedown)="onNodeMouseDown($event, node)"
-                (keydown.enter)="selectedNodeId = node.id">
-                <circle [attr.cx]="node.x" [attr.cy]="node.y" [attr.r]="node.type === 'artifact' ? 24 : 18" />
-                <text [attr.x]="node.x" [attr.y]="node.y + (node.type === 'artifact' ? 34 : 28)">{{ node.label.length > 28 ? node.label.slice(0,25) + '…' : node.label }}</text>
-              </g>
-            </g>
-          </svg>
+            </svg>
+          </div>
+          <aside class="graph-inspector">
+            @if (selectedNode) {
+              <span class="type-pill">{{ selectedNode.type }}</span>
+              <h4>{{ selectedNode.label }}</h4>
+              <p>{{ selectedNodeLinks.length }} relationship{{ selectedNodeLinks.length === 1 ? '' : 's' }}</p>
+              @if (selectedNode.type === 'artifact') {
+                <p class="muted-text">Artifact nodes are source documents; select a connected knowledge item to open its details.</p>
+              }
+              <div class="relationship-list">
+                @for (edge of selectedNodeLinks; track edge) {
+                  <button (click)="selectOther(edge)">
+                    <span>{{ edge.label }}</span>
+                    <strong>{{ getOtherLabel(edge) }}</strong>
+                  </button>
+                }
+              </div>
+            } @else {
+              <div class="graph-empty">
+                <h4>Select a node</h4>
+                <p>Inspect its relationships and jump into the detail page.</p>
+              </div>
+            }
+          </aside>
         </div>
-        <aside class="graph-inspector">
-          <ng-container *ngIf="selectedNode; else noSelection">
-            <span class="type-pill">{{ selectedNode.type }}</span>
-            <h4>{{ selectedNode.label }}</h4>
-            <p>{{ selectedNodeLinks.length }} relationship{{ selectedNodeLinks.length === 1 ? '' : 's' }}</p>
-            <p *ngIf="selectedNode.type === 'artifact'" class="muted-text">Artifact nodes are source documents; select a connected knowledge item to open its details.</p>
-            <div class="relationship-list">
-              <button *ngFor="let edge of selectedNodeLinks" (click)="selectOther(edge)">
-                <span>{{ edge.label }}</span>
-                <strong>{{ getOtherLabel(edge) }}</strong>
-              </button>
-            </div>
-          </ng-container>
-          <ng-template #noSelection>
-            <div class="graph-empty">
-              <h4>Select a node</h4>
-              <p>Inspect its relationships and jump into the detail page.</p>
-            </div>
-          </ng-template>
-        </aside>
-      </div>
-    </ng-container>
-    <ng-template #emptyGraph>
-      <div class="empty-state">
-        <h3>No graph yet</h3>
-        <p>Ingest an artifact to generate artifact-to-knowledge relationships.</p>
-      </div>
-    </ng-template>
-  </section>
+      } @else {
+        <div class="empty-state">
+          <h3>No graph yet</h3>
+          <p>Ingest an artifact to generate artifact-to-knowledge relationships.</p>
+        </div>
+      }
+    </section>
 
-  <section class="filters">
-    <div class="search-box">
-      <input [(ngModel)]="query" placeholder="Filter extracted knowledge" />
-    </div>
-    <select [(ngModel)]="typeFilter">
-      <option value="all">All types</option>
-      <option *ngFor="let t of itemTypes" [value]="t">{{ t }}</option>
-    </select>
-    <a [routerLink]="['/search']" [queryParams]="query ? {q: query} : {}" style="font-size:0.85rem;align-self:center;color:var(--accent-text);text-decoration:none">
-      Advanced search →
-    </a>
-  </section>
-
-  <section class="knowledge-grid">
-    <a *ngFor="let item of filteredItems" class="knowledge-card knowledge-card-link" [routerLink]="['/knowledge', item.id]">
-      <div class="card-topline">
-        <span class="type-pill">{{ item.type }}</span>
-        <span *ngIf="item.status" class="status-badge" [ngClass]="'status-' + item.status">{{ item.status }}</span>
-        <span>{{ item.date | date }}</span>
+    <section class="filters">
+      <div class="search-box">
+        <input [(ngModel)]="query" placeholder="Filter extracted knowledge" />
       </div>
-      <h3>{{ item.title }}</h3>
-      <p>by {{ item.author }}</p>
-      <span *ngIf="item.review_status === 'pending'" class="review-badge">pending review</span>
-      <div class="tag-row"><span *ngFor="let t of item.tags">#{{ t }}</span></div>
-    </a>
-    <div *ngIf="filteredItems.length === 0" class="empty-state">
-      <h3>No knowledge items yet</h3>
-      <p>Add an artifact above to extract decisions, risks, best practices, and checklists.</p>
-    </div>
-  </section>
-</div>
+      <select [(ngModel)]="typeFilter">
+        <option value="all">All types</option>
+        @for (t of itemTypes; track t) {
+          <option [value]="t">{{ t }}</option>
+        }
+      </select>
+      <a [routerLink]="['/search']" [queryParams]="query ? {q: query} : {}" style="font-size:0.85rem;align-self:center;color:var(--accent-text);text-decoration:none">
+        Advanced search →
+      </a>
+    </section>
+
+    <section class="knowledge-grid">
+      @for (item of filteredItems; track item) {
+        <a class="knowledge-card knowledge-card-link" [routerLink]="['/knowledge', item.id]">
+          <div class="card-topline">
+            <span class="type-pill">{{ item.type }}</span>
+            @if (item.status) {
+              <span class="status-badge" [ngClass]="'status-' + item.status">{{ item.status }}</span>
+            }
+            <span>{{ item.date | date }}</span>
+          </div>
+          <h3>{{ item.title }}</h3>
+          <p>by {{ item.author }}</p>
+          @if (item.review_status === 'pending') {
+            <span class="review-badge">pending review</span>
+          }
+          <div class="tag-row">@for (t of item.tags; track t) {
+            <span>#{{ t }}</span>
+          }</div>
+        </a>
+      }
+      @if (filteredItems.length === 0) {
+        <div class="empty-state">
+          <h3>No knowledge items yet</h3>
+          <p>Add an artifact above to extract decisions, risks, best practices, and checklists.</p>
+        </div>
+      }
+    </section>
+  </div>

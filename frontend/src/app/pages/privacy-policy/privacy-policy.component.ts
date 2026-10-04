@@ -4,9 +4,8 @@ import { IconComponent } from '../../components/icon/icon.component'
 
 @Component({
   selector: 'app-privacy-policy',
-  standalone: true,
   imports: [RouterLink, IconComponent],
   templateUrl: './privacy-policy.component.html',
-  styleUrl: './privacy-policy.component.css',
+  styleUrl: './privacy-policy.component.css'
 })
 export class PrivacyPolicyComponent {}

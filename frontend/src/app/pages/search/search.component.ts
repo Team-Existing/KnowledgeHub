@@ -13,7 +13,6 @@ const ITEM_TYPES = ['decision', 'action-item', 'risk', 'best-practice', 'checkli
 
 @Component({
   selector: 'app-search',
-  standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './search.component.html'
 })

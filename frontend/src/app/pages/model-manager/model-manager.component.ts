@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core'
-import { CommonModule, DecimalPipe } from '@angular/common'
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
 import { API_BASE, AuthService } from '../../services/auth.service'
@@ -14,10 +14,9 @@ import { errorMessage } from '../../services/http-error'
  */
 @Component({
   selector: 'app-model-manager',
-  standalone: true,
   imports: [CommonModule, DecimalPipe],
   templateUrl: './model-manager.component.html',
-  styleUrl: './model-manager.component.css',
+  styleUrl: './model-manager.component.css'
 })
 export class ModelManagerComponent implements OnInit {
   busyId: string | null = null

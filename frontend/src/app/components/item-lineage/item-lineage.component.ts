@@ -25,9 +25,8 @@ const PHRASES: Record<LinkKind, { out: string; in: string }> = {
 
 @Component({
   selector: 'app-item-lineage',
-  standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './item-lineage.component.html',
+  templateUrl: './item-lineage.component.html'
 })
 export class ItemLineageComponent implements OnChanges {
   @Input({ required: true }) item!: KnowledgeItem

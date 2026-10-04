@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
+import bcrypt
+import jwt
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel
 from app.arcadedb import ArcadeSession
 from app.db import User, get_session
@@ -35,7 +35,6 @@ def check_secret_key() -> None:
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 
@@ -44,12 +43,21 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+def _bcrypt_input(password: str) -> bytes:
+    # bcrypt reads at most 72 bytes; earlier versions (passlib) truncated silently,
+    # so truncating here keeps every existing hash verifiable
+    return password.encode("utf-8")[:72]
+
+
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(_bcrypt_input(password), bcrypt.gensalt()).decode("ascii")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(_bcrypt_input(plain), hashed.encode("ascii"))
+    except (ValueError, TypeError, UnicodeEncodeError):   # malformed or missing hash
+        return False
 
 
 def create_token(user_id: str) -> str:
@@ -70,11 +78,11 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["exp", "sub"]})
         user_id: Optional[str] = payload.get("sub")
         if not user_id:
             raise credentials_error
-    except JWTError:
+    except jwt.PyJWTError:
         raise credentials_error
 
     user = await UserRepository(session).get(user_id)
