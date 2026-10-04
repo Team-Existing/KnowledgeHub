@@ -9,6 +9,7 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 - Documentation split into [`docs/`](docs/), plus `CONTRIBUTING.md`, `SECURITY.md`, a code of conduct, issue and pull request templates.
 - Continuous integration: backend tests (with ArcadeDB and Redis), frontend tests and build, and the Docker images.
 - A "Source code" link in the app's sidebar, as the AGPL requires for network use.
+- A screenshot of every page in `docs/images/`, a [screenshot gallery](docs/screenshots.md), and an animated tour at the top of the README.
 
 ### Changed
 - **License: GPL-3.0 → AGPL-3.0.**

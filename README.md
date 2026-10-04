@@ -5,20 +5,9 @@
 
 A **local-first knowledge base** for teams. It turns meeting notes, retros, decision logs, documents, web pages and transcripts into structured knowledge (decisions, risks, lessons, how-tos) that you can review, search, track over time and question in plain English.
 
-![GraphRAG answering "What do we use for domain events now, and why did it change?" with citations, and flagging the superseded Kafka decision](docs/images/graphrag.png)
+![A tour of Knowledge Hubs: Hub, Search, Review, Decisions, Playbooks, GraphRAG, Sources, Groups, Models and Users](docs/images/tour.gif)
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/images/decisions.png" alt="Decision log: each decision's status, tags, and the older decision it supersedes or amends"></td>
-    <td width="50%"><img src="docs/images/review.png" alt="Review queue: extracted items waiting to be accepted, edited or rejected"></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Decision log</b>: status, history and what replaced what</td>
-    <td align="center"><b>Review queue</b>: nothing reaches GraphRAG until someone accepts it</td>
-  </tr>
-</table>
-
-<sub>Screenshots use fictional demo data.</sub>
+<sub>Fictional demo data. Each page on its own: [Screenshots](docs/screenshots.md).</sub>
 
 - **Runs on your machine.** FastAPI backend, Angular frontend, **ArcadeDB** as the only data store, and local AI: one of three LLMs run by [Ollama](docs/local-models.md) plus sentence-transformers embeddings. There are no cloud AI providers.
 - **Personal and group spaces.** Everyone has a private space and can create or join groups that share one. A switcher in the nav picks where you're working.
@@ -28,13 +17,16 @@ A **local-first knowledge base** for teams. It turns meeting notes, retros, deci
 
 | Page | What you do there |
 |---|---|
-| **Hub** | Add knowledge: paste text, upload a file (PDF, TXT, MD, DOCX), fetch a URL, or submit a transcript, email thread or Slack export. Browse, see the graph, cross-link items, export and import the space |
-| **Search** | Full-text search over items and sources, filtered by type, source and tag |
-| **Review** | Accept, edit or reject extracted items before GraphRAG uses them |
-| **Decisions** | The decision log and risk register, with each item's status and what replaced it |
-| **Playbooks** | Repeatable procedures, written as steps or built from how-tos and checklists in the space |
-| **Sources** | Connectors that pull in transcripts, notes, ADRs, pull requests and issues |
-| **GraphRAG** | Ask questions; answers cite the items they used and flag superseded decisions |
+| [**Hub**](docs/images/hub.png) | Add knowledge: paste text, upload a file (PDF, TXT, MD, DOCX), fetch a URL, or submit a transcript, email thread or Slack export. Browse, see the graph, cross-link items, export and import the space |
+| [**Search**](docs/images/search.png) | Full-text search over items and sources, filtered by type, source and tag |
+| [**Review**](docs/images/review.png) | Accept, edit or reject extracted items before GraphRAG uses them |
+| [**Decisions**](docs/images/decisions.png) | The decision log and risk register, with each item's status and what replaced it |
+| [**Playbooks**](docs/images/playbooks.png) | Repeatable procedures, written as steps or built from how-tos and checklists in the space |
+| [**Sources**](docs/images/sources.png) | Connectors that pull in transcripts, notes, ADRs, pull requests and issues |
+| [**GraphRAG**](docs/images/graphrag.png) | Ask questions; answers cite the items they used and flag superseded decisions |
+| [**Groups**](docs/images/groups.png) | Create groups, invite people and share a space with them |
+| [**Models**](docs/images/models.png) | Download, switch or remove the local LLMs; re-embed the knowledge base |
+| [**Users**](docs/images/users.png) *(server admins)* | Create accounts, change roles, see inactive accounts due for deletion |
 
 More in [Features](docs/features.md).
 
@@ -58,6 +50,7 @@ To use a GPU, an Ollama you already run, or to work on the code with live reload
 |---|---|
 | [Getting started](docs/getting-started.md) | Docker in one command, running from source, migrating from the SQLite version |
 | [Features](docs/features.md) | What each page does, how knowledge is extracted, search and cross-linking |
+| [Screenshots](docs/screenshots.md) | Every page of the app |
 | [Production deployment](docs/deployment.md) | The multi-instance stack in `deploy/`: TLS, load balancing, worker, ArcadeDB cluster, operations |
 | [Configuration](docs/configuration.md) | Every environment variable |
 | [Accounts, roles and spaces](docs/accounts-and-spaces.md) | Server admins, groups, personal and shared spaces |
