@@ -94,7 +94,7 @@ services:
       - arcadedb-2-backups:/home/arcadedb/backups
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: unless-stopped
     # appendonly: queued syncs survive a Redis restart
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/.env}"]
