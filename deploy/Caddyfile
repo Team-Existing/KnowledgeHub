@@ -22,6 +22,10 @@
 
 	# Some API prefixes are also app routes (/knowledge, /connectors, /groups,
 	# /admin/users): a browser page load (GET accepting HTML) gets the app.
+	# Vary: Accept keeps the browser from answering the app's own API request
+	# for such a path with the page it cached on a reload, and vice versa.
+	@shared path /knowledge* /connectors* /groups* /admin*
+	header @shared Vary Accept
 	@page {
 		method GET
 		header Accept *text/html*

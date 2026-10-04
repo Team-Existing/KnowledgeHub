@@ -9,6 +9,8 @@ RUN npm ci
 COPY frontend/ ./
 RUN npx ng build --configuration production
 
-FROM caddy:2.11-alpine
+# 2.10, not 2.11: Caddy 2.11 cancels proxied requests after 60 s (499), which
+# breaks GraphRAG answers that take longer on a CPU-only machine
+FROM caddy:2.10-alpine
 COPY --from=frontend /src/dist/frontend/browser /srv
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
