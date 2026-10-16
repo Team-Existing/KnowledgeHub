@@ -11,6 +11,13 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 - A "Source code" link in the app's sidebar, as the AGPL requires for network use.
 - A screenshot of every page in `docs/images/`, a [screenshot gallery](docs/screenshots.md), and an animated tour at the top of the README.
 
+- `SETUP_TOKEN`: registering the first account, which becomes the server admin, needs this token. The production stack requires it.
+- Sign-in and sign-up throttling (`AUTH_RATE_LIMIT`): repeated failed sign-ins get 429 with `Retry-After`. Counters are shared through Redis across app instances.
+- **Sign out** revokes the session on the server (`POST /auth/logout`): every token of the account stops working.
+- A Content Security Policy and a `Permissions-Policy` header from the web server.
+- `API_DOCS`: `false` hides `/docs`, `/redoc` and `/openapi.json`; the production stack sets it.
+- [`deploy/backup.sh`](deploy/backup.sh): a consistent ArcadeDB backup copied to `deploy/backups/`, with old copies pruned. The deployment guide describes restoring.
+
 ### Changed
 - **License: GPL-3.0 → AGPL-3.0.**
 - Angular 17 → 21. Building the frontend needs Node 20.19+ or 22.12+; the Docker images use Node 22.
@@ -20,6 +27,8 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 - Docker base images: Caddy 2.10, Node 22.
 
 ### Fixed
+- URL fetching could be redirected to a private address by DNS rebinding. The address is now checked again when connecting, and the connection goes to exactly that address.
+- The production frontend build no longer loads its stylesheet through an inline `onload` handler (`inlineCritical` off), which the Content Security Policy would block.
 - Reloading a page whose path is also an API path (such as `/knowledge`) made the app show "Failed to load knowledge": the browser reused the cached page for the app's data request. The web server now sends `Vary: Accept`.
 
 ### Removed

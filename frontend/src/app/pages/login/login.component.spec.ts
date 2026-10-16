@@ -24,9 +24,10 @@ describe('LoginComponent model gate', () => {
   let http: HttpTestingController
   const text = () => (fixture.nativeElement as HTMLElement).textContent ?? ''
 
-  async function load(c: ModelCatalog) {
-    fixture.detectChanges()                                     // ngOnInit → GET /models/catalog
+  async function load(c: ModelCatalog, setupTokenRequired = false) {
+    fixture.detectChanges()                                     // ngOnInit → GET /models/catalog, /auth/setup
     http.expectOne('/models/catalog').flush(c)
+    http.expectOne('/auth/setup').flush({ setup_token_required: setupTokenRequired, registration_open: true })
     await fixture.whenStable()
     fixture.detectChanges()
   }
@@ -67,6 +68,24 @@ describe('LoginComponent model gate', () => {
     expect(models.installModel).toHaveBeenCalledWith('llama3.1:8b', true)   // the recommended one, before login
     expect(fixture.componentInstance.stage).toBe('ready')
     expect(text()).toContain('is installed. Sign in to start.')
+  })
+
+  it('asks the first account on a new server for the setup token', async () => {
+    await load(catalog(['mistral:7b']), true)
+    const c = fixture.componentInstance
+    expect(c.mode).toBe('register')
+    expect(text()).toContain('SETUP_TOKEN')
+    c.username = 'ana'; c.password = 'secret123'; c.setupToken = 'from-the-server'
+    const done = c.submit()
+    const register = http.expectOne('/auth/register')
+    expect(register.request.body).toEqual({ username: 'ana', password: 'secret123', setup_token: 'from-the-server' })
+    register.flush({ user_id: '1', role: 'admin' }, { status: 201, statusText: 'Created' })
+    await new Promise(resolve => setTimeout(resolve))
+    http.expectOne('/auth/token').flush({ access_token: 'x.y.z', token_type: 'bearer' })
+    await new Promise(resolve => setTimeout(resolve))
+    http.expectOne('/auth/me').flush({ id: '1', username: 'ana', role: 'admin', permissions: [], llm_model: null })
+    await done
+    localStorage.removeItem('kh_token')
   })
 
   it('explains when Ollama is not running', async () => {

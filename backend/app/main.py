@@ -6,6 +6,7 @@ load_dotenv(find_dotenv(usecwd=True) or find_dotenv())
 import asyncio
 import contextlib
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -46,7 +47,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await close_db()
 
 
-app = FastAPI(title="Knowledge Hubs", lifespan=lifespan)
+def api_docs_enabled() -> bool:
+    """API_DOCS=false hides /docs, /redoc and /openapi.json (the production stack does)."""
+    return os.getenv("API_DOCS", "true").strip().lower() not in ("false", "0", "no", "off")
+
+
+_docs = api_docs_enabled()
+app = FastAPI(title="Knowledge Hubs", lifespan=lifespan, docs_url="/docs" if _docs else None,
+              redoc_url="/redoc" if _docs else None, openapi_url="/openapi.json" if _docs else None)
 
 
 @app.exception_handler(QueueUnavailable)

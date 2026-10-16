@@ -268,6 +268,13 @@ export interface TokenResponse {
   token_type: string
 }
 
+/** GET /auth/setup */
+export interface SetupStatus {
+  /** no admin yet, and the server sets SETUP_TOKEN: the first account must supply it */
+  setup_token_required: boolean
+  registration_open: boolean
+}
+
 /* ── Decision lineage ─────────────────────────────────────────────────────── */
 
 export type LinkKind = 'supersedes' | 'reverses' | 'amends' | 'realizes' | 'mitigates' | 'learned_from'

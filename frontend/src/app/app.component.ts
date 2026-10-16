@@ -119,8 +119,8 @@ export class AppComponent implements OnDestroy {
 
   onSpaceChange(id: string) { this.spaces.switchTo(id) }
 
-  logout() {
-    this.auth.logout()
+  async logout() {
+    await this.auth.signOut()
     this.router.navigate(['/login'])
   }
 }

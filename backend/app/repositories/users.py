@@ -38,6 +38,12 @@ class UserRepository:
             "SELECT id, username, role, created_at, llm_model, last_active_at, last_login_at FROM User ORDER BY created_at"
         )
 
+    async def revoke_tokens(self, user_id: str) -> None:
+        """Invalidate every token issued so far (see app.auth.create_token)."""
+        await self.session.execute(
+            "UPDATE User SET token_version = ifnull(token_version, 0) + 1 WHERE id = :id", {"id": user_id}
+        )
+
     async def set_role(self, user_id: str, role: str) -> None:
         await self.session.execute("UPDATE User SET role = :r WHERE id = :id", {"r": role, "id": user_id})
 

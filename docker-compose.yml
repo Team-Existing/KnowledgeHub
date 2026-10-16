@@ -12,6 +12,8 @@
 # Optional settings (environment or a .env file next to this one):
 #   KH_PORT=8080                      port on this machine
 #   KH_BIND=127.0.0.1                 0.0.0.0 to let other machines on your network in
+#   SETUP_TOKEN=...                   then registering the first (admin) account needs it:
+#                                     set it before letting other machines in
 #   OLLAMA_BASE_URL=http://host.docker.internal:11434
 #                                     use an Ollama already running on this machine
 #                                     (e.g. for GPU acceleration on macOS); then start
@@ -67,6 +69,7 @@ services:
       KH_SECRETS_DIR: /var/lib/knowledge-hubs
       CONNECTOR_ROOTS: /data/sources
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
       RETENTION_ENABLED: ${RETENTION_ENABLED:-true}
       RETENTION_INACTIVE_DAYS: ${RETENTION_INACTIVE_DAYS:-365}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-20}

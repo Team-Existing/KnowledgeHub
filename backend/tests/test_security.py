@@ -157,6 +157,111 @@ def test_closed_registration_admins_create_accounts(client, make_user, monkeypat
     assert client.get("/auth/me", headers=headers_for(client, username)).json()["username"] == username
 
 
+def test_first_admin_needs_the_setup_token(client, db_query, monkeypatch):
+    monkeypatch.setenv("SETUP_TOKEN", "the-servers-setup-token")
+    assert client.get("/auth/setup").json()["setup_token_required"] is False   # the session's admin exists
+    claim = db_query("SELECT value FROM Meta WHERE key = 'first_admin'")[0]["value"]
+    db_query("DELETE FROM Meta WHERE key = 'first_admin'")
+    try:
+        # a fresh, internet-facing install: strangers can't take the admin account
+        assert client.get("/auth/setup").json() == {"setup_token_required": True, "registration_open": True}
+        r, _ = register(client)
+        assert r.status_code == 403 and "setup token" in r.json()["detail"]
+        name = f"user_{uuid.uuid4().hex[:10]}"
+        r = client.post("/auth/register", json={"username": name, "password": "secret123", "setup_token": "wrong"})
+        assert r.status_code == 403
+        r = client.post("/auth/register",
+                        json={"username": name, "password": "secret123", "setup_token": "the-servers-setup-token"})
+        assert r.status_code == 201 and r.json()["role"] == "admin"
+        # once the admin exists, the token is neither needed nor makes anyone else admin
+        assert client.get("/auth/setup").json()["setup_token_required"] is False
+        r, _ = register(client)
+        assert r.status_code == 201 and r.json()["role"] == "member"
+    finally:
+        db_query("UPDATE Meta SET value = :v WHERE key = 'first_admin'", v=claim)
+
+
+def test_signing_out_revokes_the_token(client):
+    _, username = register(client)
+    first, second = headers_for(client, username), headers_for(client, username)
+    assert client.post("/auth/logout", headers=first).status_code == 204
+    # every session of the account ends, including the one on another device
+    assert client.get("/auth/me", headers=first).status_code == 401
+    assert client.get("/auth/me", headers=second).status_code == 401
+    assert client.get("/auth/me", headers=headers_for(client, username)).status_code == 200
+
+
+def test_tokens_from_before_session_versions_still_work(client):
+    import jwt
+    from datetime import datetime, timedelta, timezone
+    from app.auth import ALGORITHM, SECRET_KEY
+    _, username = register(client)
+    sub = jwt.decode(headers_for(client, username)["Authorization"].split()[1], SECRET_KEY,
+                     algorithms=[ALGORITHM])["sub"]
+    legacy = jwt.encode({"sub": sub, "exp": datetime.now(timezone.utc) + timedelta(hours=1)},
+                        SECRET_KEY, algorithm=ALGORITHM)
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {legacy}"}).status_code == 200
+
+
+@pytest.fixture
+def rate_limited(monkeypatch):
+    from app import ratelimit
+    monkeypatch.setenv("AUTH_RATE_LIMIT", "true")
+    ratelimit.reset()
+    yield ratelimit
+    ratelimit.reset()
+
+
+def test_password_guessing_is_throttled(client, rate_limited):
+    _, username = register(client)
+    for _ in range(rate_limited.LOGIN_FAILURES_PER_ACCOUNT):
+        assert client.post("/auth/token", data={"username": username, "password": "wrong"}).status_code == 401
+    r = client.post("/auth/token", data={"username": username, "password": "secret123"})
+    assert r.status_code == 429 and int(r.headers["Retry-After"]) > 0   # even the right password, for now
+    # other accounts can still sign in from here
+    _, other = register(client)
+    assert client.post("/auth/token", data={"username": other, "password": "secret123"}).status_code == 200
+
+
+def test_a_successful_sign_in_resets_the_count(client, rate_limited):
+    _, username = register(client)
+    for _ in range(rate_limited.LOGIN_FAILURES_PER_ACCOUNT - 1):
+        client.post("/auth/token", data={"username": username, "password": "wrong"})
+    assert client.post("/auth/token", data={"username": username, "password": "secret123"}).status_code == 200
+    assert client.post("/auth/token", data={"username": username, "password": "wrong"}).status_code == 401
+    assert client.post("/auth/token", data={"username": username, "password": "secret123"}).status_code == 200
+
+
+def test_mass_registration_is_throttled(client, rate_limited):
+    for _ in range(rate_limited.REGISTRATIONS_PER_ADDRESS):
+        assert register(client)[0].status_code == 201
+    assert register(client)[0].status_code == 429
+
+
+def test_rate_limits_are_shared_through_redis(client, rate_limited, monkeypatch):
+    # in worker mode every app instance counts in Redis, so guesses spread over instances add up
+    import os
+    from app import coordination
+    redis = os.getenv("KH_TEST_REDIS_URL")
+    if not redis:
+        pytest.skip("set KH_TEST_REDIS_URL to test against Redis")
+    monkeypatch.setenv("REDIS_URL", redis)
+    coordination._redis_clients.clear()
+    try:
+        _, username = register(client)
+        for _ in range(rate_limited.LOGIN_FAILURES_PER_ACCOUNT):
+            client.post("/auth/token", data={"username": username, "password": "wrong"})
+        rate_limited.reset()   # another instance: nothing in its memory
+        assert client.post("/auth/token", data={"username": username, "password": "secret123"}).status_code == 429
+    finally:
+        import redis as sync_redis
+        r = sync_redis.from_url(redis)
+        for key in r.scan_iter("kh:rl:*"):   # the per-address counters would carry over to the next run
+            r.delete(key)
+        monkeypatch.delenv("REDIS_URL")
+        coordination._redis_clients.clear()
+
+
 # ── encryption primitives (no database) ─────────────────────────────────────
 
 def test_encryption_binds_value_to_its_record(monkeypatch):

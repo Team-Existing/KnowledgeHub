@@ -60,9 +60,15 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_token(user_id: str) -> str:
+def create_token(user_id: str, token_version: int = 0) -> str:
+    """
+    `tv` is the account's session version when the token was issued. Signing
+    out bumps the version (POST /auth/logout), which invalidates every token
+    issued before, so a stolen token stops working once the user signs out.
+    """
     payload = {
         "sub": user_id,
+        "tv": token_version,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -86,7 +92,8 @@ async def get_current_user(
         raise credentials_error
 
     user = await UserRepository(session).get(user_id)
-    if not user:
+    # tokens from before session versions existed carry no `tv`: they match version 0
+    if not user or payload.get("tv", 0) != (user.get("token_version") or 0):
         raise credentials_error
     await activity.touch_user(session.client, user)   # at most once an hour; see services/retention.py
     # every LLM call made while handling this request uses the user's chosen model

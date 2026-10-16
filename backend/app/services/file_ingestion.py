@@ -6,6 +6,7 @@ import os
 import socket
 from typing import BinaryIO, Optional
 
+import httpcore
 import httpx
 from fastapi import HTTPException, UploadFile
 from starlette.concurrency import run_in_threadpool
@@ -89,25 +90,67 @@ def _is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     return ip.is_global and not ip.is_multicast
 
 
-async def _assert_public_host(url: httpx.URL) -> None:
-    """Reject URLs whose host is, or resolves to, a non-public address."""
-    if url.scheme not in ("http", "https"):
-        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
-    host = url.host
-    if not host:
-        raise HTTPException(status_code=400, detail="URL has no host")
+async def _lookup(host: str, port: int) -> list[str]:
+    """Every address `host` resolves to."""
     try:
-        infos = await asyncio.get_running_loop().getaddrinfo(
-            host, url.port or (443 if url.scheme == "https" else 80),
-            type=socket.SOCK_STREAM,
-        )
+        infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except socket.gaierror:
         raise HTTPException(status_code=400, detail=f"Could not resolve host: {host}")
-    # every resolved address must be public, not just the first
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0].split("%", 1)[0])
-        if not _is_public_ip(ip):
+    return [info[4][0].split("%", 1)[0] for info in infos]
+
+
+async def _resolve_public(host: str, port: int) -> str:
+    """Resolve `host`; every address must be public, not just the first. Returns one to connect to."""
+    addresses = await _lookup(host, port)
+    if not addresses:
+        raise HTTPException(status_code=400, detail=f"Could not resolve host: {host}")
+    for address in addresses:
+        if not _is_public_ip(ipaddress.ip_address(address)):
             raise HTTPException(status_code=400, detail="URL resolves to a private or reserved address")
+    return addresses[0]
+
+
+async def _assert_public_host(url: httpx.URL) -> None:
+    """Reject URLs whose host is, or resolves to, a non-public address (a clear error up front)."""
+    if url.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+    if not url.host:
+        raise HTTPException(status_code=400, detail="URL has no host")
+    await _resolve_public(url.host, url.port or (443 if url.scheme == "https" else 80))
+
+
+class _PublicOnlyBackend(httpcore.AsyncNetworkBackend):
+    """
+    Checks the address at the moment of connecting, and connects to exactly
+    the address it checked. Checking a URL and then letting the HTTP client
+    resolve the host again would let a hostile DNS server answer with a public
+    address the first time and a private one the second (DNS rebinding).
+    TLS is unaffected: the certificate is still verified against the host
+    name, which httpcore passes to start_tls separately.
+    """
+
+    def __init__(self) -> None:
+        self._inner = httpcore.AnyIOBackend()
+
+    async def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
+        address = await _resolve_public(host, port)
+        return await self._inner.connect_tcp(address, port, timeout=timeout, local_address=local_address,
+                                             socket_options=socket_options)
+
+    async def connect_unix_socket(self, path, timeout=None, socket_options=None):
+        raise HTTPException(status_code=400, detail="Unix sockets are not allowed")
+
+    async def sleep(self, seconds: float) -> None:
+        await self._inner.sleep(seconds)
+
+
+def _public_only_transport() -> httpx.AsyncHTTPTransport:
+    transport = httpx.AsyncHTTPTransport()
+    # httpx has no public hook for the network backend; its pool is rebuilt with ours
+    # (httpx is pinned in requirements.txt; test_ingestion covers this)
+    transport._pool = httpcore.AsyncConnectionPool(ssl_context=httpx.create_ssl_context(),
+                                                   network_backend=_PublicOnlyBackend())
+    return transport
 
 
 async def fetch_url(url: str) -> str:
@@ -116,8 +159,11 @@ async def fetch_url(url: str) -> str:
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid URL")
     try:
-        # redirects are followed manually so every hop is re-validated
-        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+        # redirects are followed manually so every hop is re-validated; the transport
+        # checks the address again when it connects. Passing a transport also means
+        # proxy settings from the environment are ignored: a proxy would connect for us.
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False,
+                                     transport=_public_only_transport()) as client:
             for _ in range(MAX_REDIRECTS + 1):
                 await _assert_public_host(target)
                 async with client.stream("GET", target) as response:

@@ -230,15 +230,31 @@ def page_server():
 def test_url_ingest_fetches_and_follows_redirects(client, alice, page_server, monkeypatch):
     import app.services.file_ingestion as fi
 
-    async def allow(url):   # the test server is on loopback, which is normally blocked
-        return None
-    monkeypatch.setattr(fi, "_assert_public_host", allow)
+    async def allow(host, port):   # the test server is on loopback, which is normally blocked
+        return "127.0.0.1"
+    monkeypatch.setattr(fi, "_resolve_public", allow)
     r = client.post("/knowledge/artifacts/url", headers=alice, json={"url": f"{page_server}/moved", "title": "Page"})
     assert r.status_code == 200, r.text
     body = r.json()
     assert "ship weekly" in body["artifact"]["content"]
     assert body["artifact"]["source"] == f"{page_server}/moved"
     assert {"decision", "risk"} <= {i["type"] for i in body["items"]}
+
+
+def test_url_ingest_resists_dns_rebinding(client, alice, page_server, monkeypatch):
+    # a hostile DNS server answers with a public address when the URL is checked,
+    # then with loopback when the client connects: the connection must be refused
+    import app.services.file_ingestion as fi
+    answers = iter([["93.184.216.34"]])
+
+    async def rebinding(host, port):
+        return next(answers, ["127.0.0.1"])
+    monkeypatch.setattr(fi, "_lookup", rebinding)
+    port = page_server.rsplit(":", 1)[1]
+    r = client.post("/knowledge/artifacts/url", headers=alice,
+                    json={"url": f"http://rebind.example:{port}/page", "title": "x"})
+    assert r.status_code == 400, r.text
+    assert "private" in r.json()["detail"]
 
 
 # ── edit / delete ───────────────────────────────────────────────────────────

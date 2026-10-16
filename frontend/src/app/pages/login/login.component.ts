@@ -27,6 +27,8 @@ export class LoginComponent implements OnInit {
   justInstalled = ''
   mode: 'login' | 'register' = 'login'
   username = ''; password = ''; error = ''; loading = false
+  // a fresh server with SETUP_TOKEN set: the first account (the admin) needs it
+  needsSetupToken = false; setupToken = ''
   // set by authInterceptor when the API rejected a stored token
   readonly sessionExpired: boolean
 
@@ -39,7 +41,13 @@ export class LoginComponent implements OnInit {
     this.sessionExpired = route.snapshot.queryParamMap.has('expired')
   }
 
-  ngOnInit() { this.checkModels() }
+  ngOnInit() {
+    this.checkModels()
+    this.auth.setupStatus().then(s => {
+      this.needsSetupToken = s.setup_token_required
+      if (s.setup_token_required) this.mode = 'register'
+    }).catch(() => { /* older server, or unreachable: checkModels reports that */ })
+  }
 
   async checkModels() {
     this.stage = 'checking'
@@ -64,7 +72,8 @@ export class LoginComponent implements OnInit {
     this.error = ''; this.loading = true
     try {
       if (this.mode === 'register') {
-        await this.auth.register(this.username, this.password)
+        await this.auth.register(this.username, this.password, this.needsSetupToken ? this.setupToken : undefined)
+        this.needsSetupToken = false
       }
       await this.auth.login(this.username, this.password)
       this.router.navigate(['/knowledge'])

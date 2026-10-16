@@ -39,13 +39,14 @@
 cd deploy
 cp .env.example .env
 # fill in deploy/.env: SITE_ADDRESS, and generate every secret:
-#   SECRET_KEY, ARCADEDB_ROOT_PASSWORD, ARCADEDB_APP_PASSWORD, REDIS_PASSWORD:
+#   SECRET_KEY, SETUP_TOKEN, ARCADEDB_ROOT_PASSWORD, ARCADEDB_APP_PASSWORD, REDIS_PASSWORD:
 #       python -c "import secrets; print(secrets.token_urlsafe(32))"
 #   CREDENTIALS_KEY:   (in backend/)  python -m app.crypto
 docker compose up -d --build
-# → https://<SITE_ADDRESS>/      (the first account you create is the server admin)
+# → https://<SITE_ADDRESS>/      register the first account with SETUP_TOKEN: it becomes the server admin
 ```
 
+- **The first account:** the sign-in page asks for `SETUP_TOKEN` when no admin exists yet, so someone who finds the site before you can't take the admin account. After that the token isn't used; set `ALLOW_REGISTRATION=false` if only admins should create accounts.
 - **TLS:** with `SITE_ADDRESS=localhost`, browsers warn until you trust Caddy's local CA. With a real domain, ports 80 and 443 must be reachable for Let's Encrypt.
 - **Ollama** runs on the Docker host (`OLLAMA_BASE_URL`, default `http://host.docker.internal:11434`).
 - **Folder and git-ADR connectors** read `CONNECTOR_SOURCES_DIR` (default `deploy/sources`), mounted read-only at `/data/sources` in the app and worker containers. Point folder connectors at paths under `/data/sources`.
@@ -75,6 +76,7 @@ The first run of the "leader stopped" scenario found the first one. `/health` pr
 
 - **More app instances:** copy `app2` in `docker-compose.yml` and add it to `APP_UPSTREAMS`. More sync throughput: raise the worker's `--concurrency`, or run more `worker` replicas. Keep **one** `beat`.
 - **Logs:** `docker compose logs -f app1 worker`. Health: `curl -k https://<site>/health` shows each node, the queue and the background mode.
-- **Backups:** each ArcadeDB node keeps its data in its own volumes (`arcadedb-N-databases`, `-config`, `-replication`, `-backups`). Back up at least one node's `databases` volume, plus `redis-data` for queued work.
+- **Backups:** run [`deploy/backup.sh`](../deploy/backup.sh) (`sh deploy/backup.sh`) while the stack is up, nightly from the host's crontab: `0 3 * * * sh /path/to/deploy/backup.sh`. It has ArcadeDB write a consistent snapshot, as the app's own user, copies the zip to `deploy/backups/` and deletes local copies older than `BACKUP_KEEP_DAYS` (14). Copy that folder off the machine as well. Queued syncs in `redis-data` don't need backing up: a lost sync runs again the next time someone clicks **Sync now**.
+- **Restoring:** ArcadeDB restores a backup zip into a database that doesn't exist yet, and reads a local file only when the node's `JAVA_OPTS` include `-Darcadedb.server.restoreImportAllowLocalUrls=true`. Copy the zip into the container (`docker compose cp`), then send the server command `restore database knowledge_hubs file:///path/in/container/backup.zip` as root (`POST /api/v1/server`). This was verified on a single node. For the cluster, restore on one node with the others stopped and their `-databases` volumes emptied, then start them so they resync; rehearse it on a copy first.
 - **Upgrades without downtime:** `docker compose build provision lb`, then `docker compose run --rm provision` (idempotent: it re-applies the app user and runs any new migrations). Then restart the instances one at a time, so one is always serving: `docker compose up -d --no-deps app1`, wait for it to report healthy, then `docker compose up -d --no-deps app2 worker`. A plain `docker compose up -d --build` also works, but restarts both instances at once.
 - **Rotating secrets:** change the value in `deploy/.env` and run `docker compose up -d`. For `CREDENTIALS_KEY`, use `<new>,<old>` for one restart (see [Security notes](security.md)). For `ARCADEDB_APP_PASSWORD`, `provision` re-applies it before the app instances restart.

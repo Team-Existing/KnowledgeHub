@@ -1,10 +1,10 @@
 # API
 
-All endpoints except `/auth/register`, `/auth/token`, `GET /health`, `GET /models/catalog` and `POST /models/bootstrap-install` need `Authorization: Bearer <token>`. Data endpoints act in the space named by the `X-Space` header (a group id, or your own user id); without it they use your personal space. Interactive docs are at `http://localhost:8000/docs`.
+All endpoints except `/auth/register`, `/auth/setup`, `/auth/token`, `GET /health`, `GET /models/catalog` and `POST /models/bootstrap-install` need `Authorization: Bearer <token>`. Data endpoints act in the space named by the `X-Space` header (a group id, or your own user id); without it they use your personal space. Interactive docs are at `http://localhost:8000/docs` (off in the production stack: `API_DOCS`).
 
 | Group | Endpoints |
 |---|---|
-| Auth | `POST /auth/register`, `POST /auth/token` (form fields `username`, `password`; token valid for 8 h), `GET /auth/me` (role and permissions) |
+| Auth | `POST /auth/register` (`username`, `password`, and `setup_token` for the first account when the server sets `SETUP_TOKEN`), `GET /auth/setup` (whether that token is needed), `POST /auth/token` (form fields `username`, `password`; token valid for 8 h; 429 after repeated failures), `POST /auth/logout` (ends every session of the account), `GET /auth/me` (role and permissions) |
 | Admin *(server admins)* | `GET /admin/users` (with last activity and expiry), `POST /admin/users` (create with a role), `PATCH /admin/users/{id}` (change role), `GET /admin/retention` (what's due), `POST /admin/retention/run` |
 | Spaces & groups | `GET /spaces`; `POST/GET /groups`, `PATCH/DELETE /groups/{id}`, `GET /groups/{id}/members`, `GET /groups/{id}/candidates?q=` (search users), `POST /groups/{id}/invitations`, `DELETE /groups/{id}/members/{user_id}`, `POST /groups/{id}/leave`; `GET /invitations`, `POST /invitations/{group_id}/accept`, `/decline` |
 | Ingest | `POST /knowledge/artifacts` (text), `/artifacts/upload` (multipart), `/artifacts/url`, `/artifacts/transcript` |

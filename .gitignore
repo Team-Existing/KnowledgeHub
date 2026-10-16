@@ -23,6 +23,7 @@ venv/
 # Local data — never commit user data or databases
 backend/data/*.db
 backend/data/*.json
+deploy/backups/
 
 # Editor
 .idea/

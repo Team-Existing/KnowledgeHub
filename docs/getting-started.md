@@ -72,7 +72,7 @@ cd ../frontend && npm install && npm start
 # → http://localhost:4200
 ```
 
-**The first account you create is the server admin.** Everyone who registers after that is a normal user. See [Accounts, roles and spaces](accounts-and-spaces.md).
+**The first account you create is the server admin.** Everyone who registers after that is a normal user. If `SETUP_TOKEN` is set (the production stack requires it), registering that first account asks for it. See [Accounts, roles and spaces](accounts-and-spaces.md).
 
 The first embedding call loads the sentence-transformers model from the local cache (step 4): the app runs with `TRANSFORMERS_OFFLINE=1`, so it never downloads anything on its own. If you change `LOCAL_EMBED_MODEL`, fetch that model the same way.
 
