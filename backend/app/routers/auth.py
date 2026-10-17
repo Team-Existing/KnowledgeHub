@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import hmac
 import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, field_validator
 
@@ -15,7 +16,7 @@ from app.db import User, get_session
 from app.rbac import DEFAULT_ROLE, Permission, Role, has_permission
 from app.repositories import UserRepository
 from app.usernames import check_new_username, username_key
-from app import activity
+from app import activity, ratelimit
 from app.services import llm_catalog
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -24,6 +25,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=60)
     password: str = Field(min_length=6)
+    # required for the first (admin) account when the server sets SETUP_TOKEN
+    setup_token: str | None = Field(default=None, max_length=512)
 
     @field_validator("username")
     @classmethod
@@ -34,6 +37,19 @@ class RegisterRequest(BaseModel):
 def registration_open() -> bool:
     """ALLOW_REGISTRATION=false closes self-sign-up; admins then create accounts (POST /admin/users)."""
     return os.getenv("ALLOW_REGISTRATION", "true").strip().lower() not in ("false", "0", "no", "off")
+
+
+def setup_token() -> str:
+    """
+    SETUP_TOKEN guards the first account, which becomes the server admin: on a
+    server reachable from the internet, whoever registered first would
+    otherwise own it. Empty = no token needed (a hub only you can reach).
+    """
+    return os.getenv("SETUP_TOKEN", "").strip()
+
+
+async def admin_claimed(session: ArcadeSession) -> bool:
+    return bool(await session.query_one("SELECT key FROM Meta WHERE key = 'first_admin'"))
 
 
 async def create_user(session: ArcadeSession, username: str, password: str, role: Role | None = None) -> Dict[str, Any]:
@@ -75,13 +91,33 @@ async def create_user(session: ArcadeSession, username: str, password: str, role
         raise HTTPException(status_code=409, detail="Username already taken")
 
 
+@router.get("/setup")
+async def setup_status(session: ArcadeSession = Depends(get_session)) -> Dict[str, bool]:
+    """What the sign-in page needs to offer: whether the first account needs the setup token."""
+    claimed = await admin_claimed(session)
+    return {
+        "setup_token_required": bool(setup_token()) and not claimed,
+        "registration_open": registration_open() or not claimed,
+    }
+
+
 @router.post("/register", status_code=201)
 async def register(
     body: RegisterRequest,
+    request: Request,
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, str]:
-    # the first account can always be created, otherwise nobody could ever administer the hub
-    if not registration_open() and await session.query_one("SELECT key FROM Meta WHERE key = 'first_admin'"):
+    key = ratelimit.register_key(request)
+    await ratelimit.check((key, ratelimit.REGISTRATIONS_PER_ADDRESS))
+    await ratelimit.hit(key, window=ratelimit.REGISTER_WINDOW)
+    if not await admin_claimed(session):
+        # the first account can always be created, otherwise nobody could ever administer
+        # the hub; with SETUP_TOKEN set, only by someone who has the server's configuration
+        expected = setup_token()
+        if expected and not hmac.compare_digest((body.setup_token or "").strip().encode(), expected.encode()):
+            raise HTTPException(status_code=403, detail="The first account is the server admin and needs the "
+                                "setup token (SETUP_TOKEN in the server's configuration).")
+    elif not registration_open():
         raise HTTPException(status_code=403, detail="Self-registration is closed. Ask an administrator for an account.")
     user = await create_user(session, body.username, body.password)
     return {"user_id": user["id"], "role": user["role"]}
@@ -98,15 +134,32 @@ async def me(current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
     }
 
 
+@router.post("/logout", status_code=204)
+async def logout(
+    current_user: User = Depends(get_current_user),
+    session: ArcadeSession = Depends(get_session),
+) -> None:
+    """Sign out: every token this account holds stops working, on every device."""
+    await UserRepository(session).revoke_tokens(current_user.id)
+    await session.commit()
+
+
 @router.post("/token", response_model=TokenResponse)
 async def login(
+    request: Request,
     form: OAuth2PasswordRequestForm = Depends(),
     session: ArcadeSession = Depends(get_session),
 ) -> TokenResponse:
+    account_key, address_key = ratelimit.login_keys(request, username_key(form.username))
+    # checked before the password, so throttled guesses don't even cost a bcrypt round
+    await ratelimit.check((account_key, ratelimit.LOGIN_FAILURES_PER_ACCOUNT),
+                          (address_key, ratelimit.LOGIN_FAILURES_PER_ADDRESS))
     users = UserRepository(session)
     user = await users.get_by_username(form.username)
     if not user or not verify_password(form.password, user["hashed_password"]):
+        await ratelimit.hit(account_key, address_key, window=ratelimit.LOGIN_WINDOW)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    await ratelimit.clear(account_key)
 
     # A local LLM is required: one of the three catalog models must be installed.
     reachable, installed = await llm_catalog.availability()
@@ -123,4 +176,4 @@ async def login(
         await users.set_llm_model(user["id"], model)
         await session.commit()
     await activity.touch_user(session.client, user, login=True)
-    return TokenResponse(access_token=create_token(user["id"]))
+    return TokenResponse(access_token=create_token(user["id"], user.get("token_version") or 0))

@@ -43,6 +43,9 @@ os.environ["MAX_UPLOAD_MB"] = "1"
 os.environ["GRAPHRAG_RERANK"] = "on"
 os.environ["SECRET_KEY"] = secrets.token_urlsafe(48)
 os.environ["ALLOW_REGISTRATION"] = "true"
+# every test signs in from the same address; test_security turns the limiter back on
+os.environ["AUTH_RATE_LIMIT"] = "false"
+os.environ.pop("SETUP_TOKEN", None)
 # the inactivity job would race the tests on the shared database; tests run it explicitly
 os.environ["RETENTION_ENABLED"] = "false"
 # folder connectors may read the temp dir only (pytest's tmp_path lives under it)

@@ -18,6 +18,9 @@ Where settings go depends on how you run it:
 | `CREDENTIALS_KEY` | — | Key(s) that encrypt stored connector credentials; comma-separated for rotation. Without it, connectors that need a token can't be saved |
 | `CONNECTOR_ROOTS` | — | Folders that folder / git-ADR connectors may read (`;`-separated on Windows, `:` elsewhere). Empty disables those connectors |
 | `ALLOW_REGISTRATION` | `true` | `false` = only server admins create accounts. The first account can always be created |
+| `SETUP_TOKEN` | — (**required** in `deploy/`) | Registering the first account, which becomes the server admin, asks for this token. Set it on any server others can reach. Empty = no token needed |
+| `AUTH_RATE_LIMIT` | `true` | Sign-in throttling: 5 failed attempts per account and 30 in total per client address every 15 minutes, and 20 sign-ups per address an hour (429 with `Retry-After`). Shared through Redis in worker mode |
+| `API_DOCS` | `true` (`false` in `deploy/`) | Interactive API docs at `/docs`, `/redoc` and `/openapi.json` |
 | `RETENTION_INACTIVE_DAYS` | `365` | Accounts and groups unused this long are deleted with their data |
 | `RETENTION_CHECK_HOURS` | `24` | How often the clean-up runs (also once at startup) |
 | `RETENTION_ENABLED` | `true` | `false` turns automatic deletion off; admins still see what's due |

@@ -14,6 +14,11 @@
 - **Group connectors share one credential.** Every member of a group can sync a group connector with the token whoever added it saved. Use a token scoped to what the group should see.
 - **Per-sync caps.** GitHub reads at most 10 pages of closed pull requests per sync; each connector has a `max` setting for items per sync.
 
+**Accounts**
+- **Signing out ends every session of the account.** Tokens can't be revoked one at a time: **Sign out** on one device signs you out on all of them.
+- **Sign-in throttling counts by client address.** Many people behind one address (an office NAT) share the limit of 30 failed sign-ins per 15 minutes. If Redis is down, the limits aren't enforced, rather than blocking sign-in.
+- **Tokens live in the browser's `localStorage`.** The Content Security Policy stops injected scripts, which are what could read it, and signing out revokes the token on the server.
+
 **Data**
 - **Deletion is permanent.** Inactivity retention, group deletion and removing a connector's data can't be undone; back up the `arcadedb-data` volume.
 - **Shared copies drop lineage links.** Sharing a source into another space copies its items, statuses and review state, but not links to items outside it.
@@ -27,4 +32,3 @@
 
 **Performance and network**
 - **Writes are one HTTP round trip per statement.** An ingest of N items makes roughly 3N calls to ArcadeDB. That's fine on the same machine, but slower if ArcadeDB is remote.
-- **URL fetching is exposed to DNS rebinding.** Addresses are checked, then httpx resolves the host again when connecting, so a hostile DNS server can return a different address the second time.

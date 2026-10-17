@@ -17,8 +17,18 @@
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 		-Server
 	}
+
+	# Content Security Policy: only this site's own scripts run, so injected markup
+	# can't execute code or read the sign-in token. Inline styles are allowed (Angular
+	# injects component styles); inline scripts and event handlers are not, which is
+	# why angular.json turns off inlineCritical (it adds an onload= handler).
+	# Not on the API docs pages: Swagger UI loads from a CDN, and the production stack
+	# turns those pages off (API_DOCS=false).
+	@csp not path /docs* /redoc*
+	header @csp Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 
 	# Some API prefixes are also app routes (/knowledge, /connectors, /groups,
 	# /admin/users): a browser page load (GET accepting HTML) gets the app.

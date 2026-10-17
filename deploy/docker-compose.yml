@@ -29,6 +29,9 @@ x-backend: &backend
     REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/.env}@redis:6379/0
     DB_MIGRATE_ON_STARTUP: "false"           # the provisioning job migrates, once
     SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in deploy/.env}
+    # the first account becomes the server admin and must present this token
+    SETUP_TOKEN: ${SETUP_TOKEN:?set SETUP_TOKEN in deploy/.env}
+    API_DOCS: ${API_DOCS:-false}
     CREDENTIALS_KEY: ${CREDENTIALS_KEY:-}
     CONNECTOR_ROOTS: /data/sources
     ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}

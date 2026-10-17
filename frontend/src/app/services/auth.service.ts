@@ -1,7 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core'
 import { HttpClient, HttpParams } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
-import { Me, Permission, TokenResponse } from '../models/api'
+import { Me, Permission, SetupStatus, TokenResponse } from '../models/api'
 
 export const API_BASE = ''
 
@@ -40,8 +40,15 @@ export class AuthService {
     return this._me()?.permissions.includes(permission) ?? false
   }
 
-  async register(username: string, password: string): Promise<void> {
-    await firstValueFrom(this.http.post(`${API_BASE}/auth/register`, { username, password }))
+  /** setupToken: only for the first (admin) account, when the server sets SETUP_TOKEN */
+  async register(username: string, password: string, setupToken?: string): Promise<void> {
+    const body = setupToken ? { username, password, setup_token: setupToken } : { username, password }
+    await firstValueFrom(this.http.post(`${API_BASE}/auth/register`, body))
+  }
+
+  /** Whether the first account still needs the server's setup token. */
+  async setupStatus(): Promise<SetupStatus> {
+    return firstValueFrom(this.http.get<SetupStatus>(`${API_BASE}/auth/setup`))
   }
 
   async registerAndLogin(username: string, password: string): Promise<void> {
@@ -49,6 +56,15 @@ export class AuthService {
     await this.login(username, password)
   }
 
+  /** Sign out on the server too: every token of the account stops working, so a copied one can't be reused. */
+  async signOut(): Promise<void> {
+    if (this._token()) {
+      try { await firstValueFrom(this.http.post(`${API_BASE}/auth/logout`, null)) } catch { /* expired already */ }
+    }
+    this.logout()
+  }
+
+  /** Forget the token in this browser only. */
   logout(): void {
     localStorage.removeItem('kh_token')
     this._token.set(null)

@@ -80,7 +80,7 @@ jobs:
         run: |
           docker compose config --quiet
           # the production stack refuses to start without its secrets; give it placeholders to validate
-          SECRET_KEY=x ARCADEDB_ROOT_PASSWORD=x ARCADEDB_APP_PASSWORD=x REDIS_PASSWORD=x \
+          SECRET_KEY=x SETUP_TOKEN=x ARCADEDB_ROOT_PASSWORD=x ARCADEDB_APP_PASSWORD=x REDIS_PASSWORD=x \
             docker compose -f deploy/docker-compose.yml config --quiet
       - name: Build the local stack's images
         run: docker compose build
