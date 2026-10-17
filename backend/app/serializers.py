@@ -6,8 +6,9 @@ from typing import Any, Dict
 Row = Dict[str, Any]
 
 
-def artifact_dict(a: Row) -> Row:
-    return {
+def artifact_dict(a: Row, content: bool = True) -> Row:
+    """content=False leaves out the document text (lists: it can be megabytes per space)."""
+    out = {
         "id": a["id"],
         "title": a.get("title"),
         "content": a.get("content"),
@@ -19,6 +20,9 @@ def artifact_dict(a: Row) -> Row:
         "created_at": a.get("created_at"),
         "metadata": a.get("metadata") or {},
     }
+    if not content:
+        del out["content"]
+    return out
 
 
 def item_dict(i: Row) -> Row:

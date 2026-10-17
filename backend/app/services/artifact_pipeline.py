@@ -8,6 +8,7 @@ the item list is built.
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -25,7 +26,9 @@ from app.services.item_schema import normalize_item_details
 from app.services.llm_extraction import _summarise_text, extract_from_document, extract_from_transcript
 from app.services.okf import normalize_okf_payload
 from app.schema import record_embedding_model
-from app.services.providers import get_embedding_provider
+from app.services.providers import active_model, get_embedding_provider, use_model
+
+logger = logging.getLogger(__name__)
 
 Item = Dict[str, Any]
 
@@ -138,30 +141,36 @@ async def persist_artifact(
     metadata: Dict[str, Any],
     extraction_engine: str = "regex",
 ) -> List[Dict[str, Any]]:
-    """Upsert the artifact, sync its items, ensure CONTAINS edges — one transaction. Returns the edges."""
-    await ArtifactRepository(session).upsert(
-        user_id,
-        artifact["id"],
-        title=artifact["title"],
-        content=artifact["content"],
-        source=artifact["source"],
-        source_type=artifact["source_type"],
-        author=artifact["author"],
-        tags=artifact["tags"],
-        created_at=artifact["created_at"],
-        metadata=metadata,
-        extraction_engine=extraction_engine,
-    )
-    await KnowledgeItemRepository(session).sync_for_artifact(
-        user_id, artifact["id"], items, extraction_engine
-    )
-    relationships = await RelationshipRepository(session).ensure_contains(
-        user_id, artifact["id"], [i["id"] for i in items]
-    )
-    # new decisions/risks get their first status; removed items may have freed others
-    await lineage.refresh_statuses(session, user_id)
-    await session.commit()
-    return relationships
+    """
+    Upsert the artifact, sync its items, ensure CONTAINS edges — one transaction,
+    run again on a write conflict (only these writes: the extraction isn't repeated).
+    Returns the edges.
+    """
+    async def write() -> List[Dict[str, Any]]:
+        await ArtifactRepository(session).upsert(
+            user_id,
+            artifact["id"],
+            title=artifact["title"],
+            content=artifact["content"],
+            source=artifact["source"],
+            source_type=artifact["source_type"],
+            author=artifact["author"],
+            tags=artifact["tags"],
+            created_at=artifact["created_at"],
+            metadata=metadata,
+            extraction_engine=extraction_engine,
+        )
+        await KnowledgeItemRepository(session).sync_for_artifact(
+            user_id, artifact["id"], items, extraction_engine
+        )
+        relationships = await RelationshipRepository(session).ensure_contains(
+            user_id, artifact["id"], [i["id"] for i in items]
+        )
+        # new decisions/risks get their first status; removed items may have freed others
+        await lineage.refresh_statuses(session, user_id)
+        return relationships
+
+    return await session.transaction(write)
 
 
 async def index_artifact(
@@ -170,11 +179,33 @@ async def index_artifact(
     artifact: Dict[str, Any],
     items: List[Item],
     summarise: bool = True,
+    background: Optional[Any] = None,
 ) -> None:
-    """Embed items and (optionally) rebuild the artifact summary."""
+    """
+    Embed items and (optionally) rebuild the artifact summary. With `background`
+    (FastAPI's BackgroundTasks) the summary is built after the response has gone:
+    it's an LLM call, about 30 seconds on a CPU, and nothing in the response needs it.
+    """
     await embed_and_store(session, user_id, items)
-    if summarise:
+    if not summarise:
+        return
+    if background is not None:
+        background.add_task(summarise_later, user_id, artifact["id"], artifact["content"], active_model())
+    else:
         await build_artifact_summary(session, user_id, artifact["id"], artifact["content"])
+
+
+async def summarise_later(user_id: str, artifact_id: str, content: str, model: str) -> None:
+    """The deferred summary, in its own session: the request's has closed by now."""
+    from app.db import get_client
+    use_model(model)                      # the model of the user who added it
+    session = ArcadeSession(get_client())
+    try:
+        await build_artifact_summary(session, user_id, artifact_id, content)
+    except Exception:                     # the artifact may be gone, or the LLM down: GraphRAG copes
+        logger.exception("Couldn't summarise artifact %s", artifact_id)
+    finally:
+        await session.close()
 
 
 async def embed_and_store(session: ArcadeSession, user_id: str, items: List[Item]) -> int:
@@ -188,12 +219,15 @@ async def embed_and_store(session: ArcadeSession, user_id: str, items: List[Item
         return 0
     provider = get_embedding_provider()
     repo = KnowledgeItemRepository(session)
-    updated = 0
-    for item_id, vector in pairs:
-        if await repo.set_embedding(user_id, item_id, vector, provider.name, provider.dimensions):
-            updated += 1
-    await session.commit()
-    return updated
+
+    async def write() -> int:
+        updated = 0
+        for item_id, vector in pairs:
+            if await repo.set_embedding(user_id, item_id, vector, provider.name, provider.dimensions):
+                updated += 1
+        return updated
+
+    return await session.transaction(write)
 
 
 async def build_artifact_summary(
@@ -205,10 +239,9 @@ async def build_artifact_summary(
         return
     summary_vec = await embed(summary_text)
     provider = get_embedding_provider()
-    await ArtifactRepository(session).set_summary(
+    await session.transaction(lambda: ArtifactRepository(session).set_summary(
         user_id, artifact_id, summary_text, summary_vec, provider.name, provider.dimensions,
-    )
-    await session.commit()
+    ))
 
 
 def _artifact(
@@ -244,20 +277,20 @@ def _base_metadata(artifact: Dict[str, Any]) -> Dict[str, Any]:
 async def ingest_text(
     session: ArcadeSession, user_id: str, title: str, content: str,
     source: str, source_type: str, author: str, tags: List[str],
-    artifact_id: Optional[str] = None, created_at: Optional[str] = None,
+    artifact_id: Optional[str] = None, created_at: Optional[str] = None, background: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Regex extraction — used for manually entered text."""
     artifact = _artifact(user_id, title, content, source, source_type, author, tags, artifact_id, created_at)
     items = build_regex_items(user_id, artifact["id"], content, author, tags, artifact["created_at"])
     relationships = await persist_artifact(session, user_id, artifact, items, _base_metadata(artifact))
-    await index_artifact(session, user_id, artifact, items)
+    await index_artifact(session, user_id, artifact, items, background=background)
     return {"artifact": artifact, "items": items, "relationships": relationships, "extracted_count": len(items)}
 
 
 async def ingest_document(
     session: ArcadeSession, user_id: str, title: str, content: str,
     source: str, source_type: str, author: str, tags: List[str],
-    artifact_id: Optional[str] = None, created_at: Optional[str] = None,
+    artifact_id: Optional[str] = None, created_at: Optional[str] = None, background: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     LLM extraction for uploaded files and fetched URLs. Regex is only a
@@ -288,7 +321,7 @@ async def ingest_document(
             item.setdefault("extraction_engine", "regex" if item["type"] == "checklist" else engine)
 
     relationships = await persist_artifact(session, user_id, artifact, items, metadata, engine)
-    await index_artifact(session, user_id, artifact, items)
+    await index_artifact(session, user_id, artifact, items, background=background)
     return {
         "artifact": artifact,
         "items": items,
@@ -302,6 +335,7 @@ async def ingest_transcript(
     session: ArcadeSession, user_id: str, title: str, content: str,
     source_type: str, author: str, tags: List[str],
     artifact_id: Optional[str] = None, created_at: Optional[str] = None, source: Optional[str] = None,
+    background: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """LLM extraction for transcripts, emails and Slack exports."""
     llm_result = await extract_from_transcript(content, source_type=source_type)
@@ -314,7 +348,7 @@ async def ingest_transcript(
 
     items = build_llm_items(user_id, artifact["id"], llm_result, author, tags, artifact["created_at"])
     relationships = await persist_artifact(session, user_id, artifact, items, metadata, engine)
-    await index_artifact(session, user_id, artifact, items)
+    await index_artifact(session, user_id, artifact, items, background=background)
     return {
         "artifact": artifact,
         "items": items,

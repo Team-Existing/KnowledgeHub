@@ -44,7 +44,8 @@ export interface KnowledgeItem {
 export interface Artifact {
   id: string
   title: string
-  content: string
+  /** the document text: left out of lists (GET /knowledge, search) */
+  content?: string
   source: string
   source_type: string
   author: string
@@ -83,10 +84,32 @@ export interface HealthResponse {
 
 /** GET /knowledge */
 export interface KnowledgeResponse {
+  /** a page: the newest `limit` after `offset` (see totals) */
   artifacts: Artifact[]
   knowledge_items: KnowledgeItem[]
+  /** between the returned nodes only */
   relationships: Relationship[]
   playbooks: Playbook[]
+  totals?: KnowledgeTotals
+  item_types?: string[]
+}
+export interface KnowledgeTotals {
+  artifacts: number
+  knowledge_items: number
+  /** items matching the q / type filters */
+  matching_items: number
+  pending_review: number
+}
+
+/** GET /knowledge/items */
+export interface ItemsResponse { items: KnowledgeItem[]; total: number }
+
+/** GET /knowledge/items/{id}/context */
+export interface ItemContext {
+  item: KnowledgeItem
+  artifact: Artifact | null
+  relationships: Relationship[]
+  nodes: Record<string, { title: string; kind: 'item' | 'artifact'; type: string }>
 }
 
 /** GET /knowledge/graph */
@@ -96,6 +119,9 @@ export interface GraphResponse {
   nodes: GraphNode[]
   edges: GraphEdge[]
   layout: string
+  /** the graph holds the newest nodes; total_nodes counts them all */
+  total_nodes?: number
+  truncated?: boolean
 }
 
 /** GET /knowledge/links */
@@ -124,6 +150,8 @@ export interface IngestResult {
 /** GET /knowledge/search */
 export interface SearchArtifact extends Artifact {
   snippet?: string              // present when the artifact matched in its content
+  /** an item extracted from it, whose page shows the source; absent if it has none */
+  first_item_id?: string
 }
 export interface SearchResult {
   query: string
@@ -141,6 +169,8 @@ export interface Citation {
   title: string
   type: string
   status?: ItemStatus       // e.g. "superseded" when the cited decision was replaced
+  /** matched to the answer's wording because the model wrote no [id] for it */
+  inferred?: boolean
 }
 export interface ContextNode {
   id: string
@@ -343,8 +373,12 @@ export interface LinkKindsResponse {
 
 /** GET /knowledge/register */
 export interface RegisterResponse {
+  /** newest first, at most `limit`; total counts them all */
   items: KnowledgeItem[]
   edges: LineageEdge[]
+  total?: number
+  /** items the edges name that are outside this page */
+  related?: KnowledgeItem[]
 }
 
 /* ── Connectors ───────────────────────────────────────────────────────────── */

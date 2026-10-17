@@ -4,6 +4,8 @@
 - **One LLM, one embedding model.** Only Ollama and local sentence-transformers are implemented.
 - **Models are per machine, choices are per user.** Everyone on one server shares the same Ollama, so removing a model affects every account. Anyone using it is moved to another installed model.
 - **Full-text search doesn't fold accents.** The default analyzer means `cafe` won't match "Café".
+- **Lists come a page at a time.** The Hub, review queue, decision log and graph show the newest (or, for review, oldest) page with **Load more**; the Hub's filter runs on the server. The graph draws at most the 300 newest nodes. The status counts on the decision log cover the loaded entries.
+- **Sources are found through their items.** A source in search results opens an item extracted from it, whose page shows the source; a source nothing was extracted from has no page.
 - **Search slows on very broad queries.** On 50,000 items a precise query takes about 75 ms, but a one-word query matching 30,000+ items takes about 300 ms, mostly spent counting the total.
 - **Extracted text isn't size-capped.** Uploads and URLs are capped by `MAX_UPLOAD_MB`, but the text extracted from them isn't (pasted text is capped at 100,000 characters). LLM extraction reads at most 8 chunks.
 
@@ -26,6 +28,7 @@
 
 **Production stack**
 - **The cluster needs a majority.** Three nodes survive one being down. With two down there's no leader, and writes stop until a node returns.
+- **Reads don't spread over the nodes.** Every app instance sends its reads and writes to the current leader, so that a read always sees the write before it. The other nodes are standbys: they keep a copy and take over when the leader goes. More nodes add resilience, not read capacity.
 - **One Ollama for everything.** Every app instance and the worker call the same Ollama on the Docker host, so LLM throughput doesn't grow with more instances.
 - **Exactly one `beat`.** Two would schedule the clean-up twice. It's harmless, because runs are locked, but wasteful.
 - **No horizontal Redis.** Redis is a single container. If it's down, starting a sync returns "background queue unavailable" (503), and the Sources page can't show live sync state. Everything else (reading, ingesting, search, GraphRAG) keeps working, and `/health` reports `degraded`. This was tested against the stack.

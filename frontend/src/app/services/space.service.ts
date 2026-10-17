@@ -44,7 +44,9 @@ export class SpaceService {
     if (id === this._activeId()) return
     this.setActive(id)
     const url = this.router.url.startsWith('/knowledge/') ? '/knowledge' : this.router.url   // items don't cross spaces
-    await this.router.navigateByUrl('/', { skipLocationChange: true })
+    // Not via '/': it redirects to /knowledge, so on the hub both navigations would be to the
+    // current URL, which the router ignores, and the hub kept showing the previous space.
+    await this.router.navigateByUrl('/switching-space', { skipLocationChange: true })
     await this.router.navigateByUrl(url)
   }
 

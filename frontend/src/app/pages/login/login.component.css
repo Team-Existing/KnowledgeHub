@@ -1,7 +1,7 @@
 /* layout comes from .auth-shell / .auth-card in styles.css */
 .auth-brand { display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.25rem; }
 .auth-brand .brand-mark { width: 38px; height: 38px; border-radius: 11px; }
-.auth-card h2 { font-size: 1.35rem; letter-spacing: -0.02em; }
+.auth-card h1 { font-size: 1.35rem; letter-spacing: -0.02em; }
 .auth-sub { color: var(--text-3); font-size: 0.9rem; margin-top: -0.5rem; }
 .form-stack { margin: 0.5rem 0 0.25rem; }
 .input-field { width: 100%; min-height: 42px; }

@@ -1,7 +1,7 @@
 <div class="chat-container">
   <div class="chat-header">
     <div>
-      <strong style="display:flex;align-items:center;gap:0.5rem">GraphRAG Assistant</strong>
+      <h1 style="display:flex;align-items:center;gap:0.5rem;font-size:1rem;margin:0">GraphRAG Assistant</h1>
       <p style="color:var(--text-3);font-size:0.8rem;margin-top:0.2rem">Graph-aware retrieval · answers grounded in your knowledge base</p>
     </div>
     <div class="chat-actions">
@@ -44,6 +44,10 @@
                       <span class="status-badge" [ngClass]="'status-' + cite.status" title="This decision was replaced; see the item for what replaced it">{{ cite.status }}</span>
                     }
                     <span class="citation-title">{{ cite.title }}</span>
+                    @if (cite.inferred) {
+                      <span class="muted-text" style="font-size:0.75rem"
+                            title="The model named this source without citing it; matched by its title">matched</span>
+                    }
                     <button (click)="goToItem(cite.id)" class="citation-link">View</button>
                   </li>
                 }

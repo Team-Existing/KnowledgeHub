@@ -12,7 +12,7 @@ cheap precisely because they have few.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.arcadedb import ArcadeSession
 from app.repositories.search import ITEM_INDEX, lucene_query
@@ -134,19 +134,32 @@ class GraphStore:
         combined.sort(key=lambda n: n.get("score") or 0.0, reverse=True)
         return combined
 
-    async def visualization(self, user_id: str) -> Row:
+    async def visualization(self, user_id: str, limit: Optional[int] = None) -> Row:
+        """
+        The newest `limit` nodes (artifacts and items) and the edges between them.
+        A browser can't usefully draw thousands of nodes, and sending them all
+        cost seconds per page load on a large space.
+        """
+        from app.repositories._common import page
         from app.repositories.relationships import RelationshipRepository
 
+        total = await self.session.scalar("SELECT count(*) AS n FROM Node WHERE user_id = :u", {"u": user_id}, 0)
         nodes = [
             {"id": r["id"], "label": r.get("title") or r["id"],
              "type": "artifact" if r["node_type"] == "Artifact" else r.get("type")}
             for r in await self.session.query(
-                "SELECT id, title, type, @type AS node_type FROM Node WHERE user_id = :u ORDER BY @rid",
+                page("SELECT id, title, type, @type AS node_type, ifnull(created_at, date) AS sort_at "
+                     "FROM Node WHERE user_id = :u",
+                     newest_first=limit is not None, limit=limit, newest_by="sort_at"),
                 {"u": user_id},
             )
         ]
-        edges = [
-            {"source": e["from"], "target": e["to"], "label": e["type"]}
-            for e in await RelationshipRepository(self.session).list(user_id)
-        ]
-        return {"nodes": nodes, "edges": edges, "layout": "force-directed"}
+        rels = RelationshipRepository(self.session)
+        if limit is None:
+            found = await rels.list(user_id)
+        else:
+            found = await rels.among(user_id, [n["id"] for n in nodes if n["type"] != "artifact"],
+                                     [n["id"] for n in nodes if n["type"] == "artifact"])
+        edges = [{"source": e["from"], "target": e["to"], "label": e["type"]} for e in found]
+        return {"nodes": nodes, "edges": edges, "layout": "force-directed",
+                "total_nodes": total, "truncated": len(nodes) < total}

@@ -128,6 +128,11 @@ services:
   # ── app instances (stateless; any can serve any request) ──────────────────
   app1: &app
     <<: *backend
+    environment:
+      <<: *backend-env
+      # server processes per instance (uvicorn reads WEB_CONCURRENCY). Each holds its own
+      # copy of the embedding model, about 500 MB.
+      WEB_CONCURRENCY: ${APP_WORKERS:-2}
     depends_on:
       provision: { condition: service_completed_successfully }
       redis: { condition: service_healthy }

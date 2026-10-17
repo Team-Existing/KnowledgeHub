@@ -297,10 +297,19 @@ async def suggest_links(session: ArcadeSession, user_id: str, item: Row, limit: 
     return out
 
 
-async def register(session: ArcadeSession, user_id: str, types: List[str]) -> Row:
-    """The decision / risk register: tracked items with their status and chain edges."""
-    rows = [i for i in await KnowledgeItemRepository(session).list(user_id, exclude_rejected=True)
-            if i["type"] in types]
+async def register(session: ArcadeSession, user_id: str, types: List[str],
+                   limit: Optional[int] = None, offset: int = 0) -> Row:
+    """
+    The decision / risk register: tracked items with their status and chain edges,
+    newest first. `total` counts them all; `items` holds at most `limit`. Items
+    named by the returned chain edges but outside the page come back as `related`.
+    """
+    repo = KnowledgeItemRepository(session)
+    rows = await repo.list(user_id, types=types, exclude_rejected=True,
+                           limit=limit, offset=offset, newest_first=True)
+    total = await repo.count(user_id, types=types, exclude_rejected=True)
     ids = {i["id"] for i in rows}
     edges = [e for e in await LineageRepository(session).list(user_id) if e["from"] in ids or e["to"] in ids]
-    return {"items": [item_dict(i) for i in rows], "edges": edges}
+    outside = {e[end] for e in edges for end in ("from", "to")} - ids
+    related = [item_dict(i) for i in await repo.get_many(user_id, sorted(outside))]
+    return {"items": [item_dict(i) for i in rows], "edges": edges, "total": total, "related": related}

@@ -7,18 +7,64 @@ Graph edges. The API exposes them as {"from", "to", "type"}:
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List, Optional
 
 from app.arcadedb import ArcadeSession
 
 Row = Dict[str, Any]
+
+EDGE_TYPES = ("CONTAINS", "RELATED_TO", "LINK", "EVOLVES")
 
 
 class RelationshipRepository:
     def __init__(self, session: ArcadeSession) -> None:
         self.session = session
 
+    async def touching(
+        self, user_id: str, ids: Iterable[str], edge_types: Iterable[str] = EDGE_TYPES,
+    ) -> List[Row]:
+        """
+        The edges at the given nodes, found by walking out from them (the id index finds
+        the nodes). Filtering every edge of the space on its ends instead took a second
+        on 6,000 items. An artifact can hold thousands of items, so pass item ids, and
+        artifacts only with edge_types=("LINK",), unless all of its CONTAINS edges are wanted.
+        """
+        ids = list(ids)
+        types = [t for t in edge_types if t in EDGE_TYPES]
+        if not ids or not types:
+            return []
+        rows = await self.session.query(
+            "SELECT @type AS edge_type, @out.id AS src, @in.id AS dst, type AS link_type, kind "
+            f"FROM (SELECT expand(bothE({', '.join(repr(t) for t in types)})) FROM Node "
+            "WHERE id IN :ids AND user_id = :u)",
+            {"u": user_id, "ids": ids},
+        )
+        rels: List[Row] = []
+        seen = set()
+        for r in rows:
+            edge_type = r["edge_type"]
+            label = {"LINK": r.get("link_type") or "", "EVOLVES": (r.get("kind") or "").upper()}.get(edge_type, edge_type)
+            key = (r["src"], r["dst"], edge_type, label)
+            if key not in seen:            # an edge between two of the nodes is reached from both ends
+                seen.add(key)
+                rels.append({"from": r["src"], "to": r["dst"], "type": label})
+        return rels
+
+    async def among(self, user_id: str, item_ids: Iterable[str], artifact_ids: Iterable[str]) -> List[Row]:
+        """The edges between the given items and artifacts (both ends among them)."""
+        item_ids, artifact_ids = list(item_ids), list(artifact_ids)
+        shown = set(item_ids) | set(artifact_ids)
+        found = await self.touching(user_id, item_ids) + await self.touching(user_id, artifact_ids, ("LINK",))
+        out, seen = [], set()
+        for r in found:
+            key = (r["from"], r["to"], r["type"])
+            if r["from"] in shown and r["to"] in shown and key not in seen:
+                seen.add(key)
+                out.append(r)
+        return out
+
     async def list(self, user_id: str) -> List[Row]:
+        """Every edge in the space."""
         rels: List[Row] = []
         for edge_type, label in (("CONTAINS", "'CONTAINS'"), ("RELATED_TO", "'RELATED_TO'"),
                                  ("LINK", "type"), ("EVOLVES", "kind")):

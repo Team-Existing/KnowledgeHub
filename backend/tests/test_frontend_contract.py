@@ -20,7 +20,10 @@ from app.main import app
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "src" / "app"
 
 # Endpoints that are deliberately not called from the UI, with the reason.
-NOT_FOR_THE_UI: Set[Tuple[str, str]] = set()
+NOT_FOR_THE_UI: Set[Tuple[str, str]] = {
+    # one item by id, for API clients; the item page loads it with its context (/context)
+    ("GET", "/knowledge/items/{item_id}"),
+}
 
 _HTTP_CALL = re.compile(
     r"http\.(get|post|put|patch|delete|request)\s*(?:<(?:[^<>]|<[^<>]*>)*>)?\s*\(\s*(?:'([A-Z]+)'\s*,\s*)?"

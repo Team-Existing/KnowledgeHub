@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from app.arcadedb import ArcadeSession
-from app.repositories._common import tag_fields
+from app.repositories._common import contains_pattern, page, tag_fields
 
 Row = Dict[str, Any]
 
@@ -21,27 +21,59 @@ class KnowledgeItemRepository:
             f"SELECT {_FIELDS} FROM KnowledgeItem WHERE id = :id AND user_id = :u", {"id": item_id, "u": user_id}
         )
 
-    async def list(
-        self,
-        user_id: str,
-        *,
-        type: Optional[str] = None,
-        review_status: Optional[str] = None,
-        exclude_rejected: bool = False,
-        with_embedding: bool = False,
-    ) -> List[Row]:
-        fields = _FIELDS + (", embedding" if with_embedding else "")
-        sql = f"SELECT {fields} FROM KnowledgeItem WHERE user_id = :u"
-        params: Row = {"u": user_id}
+    @staticmethod
+    def _where(
+        user_id: str, *, type: Optional[str] = None, types: Optional[List[str]] = None,
+        review_status: Optional[str] = None, exclude_rejected: bool = False, q: Optional[str] = None,
+    ) -> tuple[str, Row]:
+        sql, params = "user_id = :u", {"u": user_id}
         if type:
             sql += " AND type = :type"
             params["type"] = type
+        if types:
+            sql += " AND type IN :types"
+            params["types"] = list(types)
         if review_status:
             sql += " AND review_status = :rs"
             params["rs"] = review_status
         if exclude_rejected:
             sql += " AND review_status <> 'rejected'"
-        return await self.session.query(sql + " ORDER BY @rid", params)
+        if q and q.strip():
+            sql += " AND (title.toLowerCase() LIKE :q OR tags_text.toLowerCase() LIKE :q)"
+            params["q"] = contains_pattern(q)
+        return sql, params
+
+    async def list(
+        self,
+        user_id: str,
+        *,
+        type: Optional[str] = None,
+        types: Optional[List[str]] = None,
+        review_status: Optional[str] = None,
+        exclude_rejected: bool = False,
+        q: Optional[str] = None,
+        with_embedding: bool = False,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        newest_first: bool = False,
+    ) -> List[Row]:
+        fields = _FIELDS + (", embedding" if with_embedding else "")
+        where, params = self._where(user_id, type=type, types=types, review_status=review_status,
+                                    exclude_rejected=exclude_rejected, q=q)
+        sql = page(f"SELECT {fields} FROM KnowledgeItem WHERE {where}",
+                   newest_first=newest_first, limit=limit, offset=offset, newest_by="date")
+        return await self.session.query(sql, params)
+
+    async def get_many(self, user_id: str, ids: List[str]) -> List[Row]:
+        if not ids:
+            return []
+        return await self.session.query(
+            f"SELECT {_FIELDS} FROM KnowledgeItem WHERE user_id = :u AND id IN :ids", {"u": user_id, "ids": list(ids)}
+        )
+
+    async def count(self, user_id: str, **filters: Any) -> int:
+        where, params = self._where(user_id, **filters)
+        return await self.session.scalar(f"SELECT count(*) AS n FROM KnowledgeItem WHERE {where}", params, 0)
 
     async def count_embedded(self, user_id: str) -> int:
         return await self.session.scalar(

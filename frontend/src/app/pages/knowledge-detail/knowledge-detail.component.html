@@ -6,7 +6,7 @@
   }
 
   @if (!error && !item) {
-    <section class="empty-state"><h3>{{ data ? 'Knowledge item not found' : 'Loading…' }}</h3></section>
+    <section class="empty-state"><h3>{{ ctx || error ? 'Knowledge item not found' : 'Loading…' }}</h3></section>
   }
 
   @if (!error && item) {
@@ -14,7 +14,7 @@
       <div class="detail-title">
         <span class="type-pill">{{ item.type }}</span>
         @if (!editing) {
-          <h2>{{ item.title }}</h2>
+          <h1>{{ item.title }}</h1>
         } @else {
           <input [(ngModel)]="editedTitle" style="font-size:1.4rem;font-weight:600;width:100%" />
         }
@@ -155,7 +155,7 @@
       </aside>
     </div>
     <!-- Status, decision chain, lineage links and event history -->
-    <app-item-lineage [item]="item" [items]="data?.knowledge_items ?? []" (changed)="load()"></app-item-lineage>
+    <app-item-lineage [item]="item" [items]="candidates" (changed)="load()"></app-item-lineage>
     <!-- Relationships: resolved name + link instead of raw ID -->
     <section id="rels" class="detail-panel">
       <h3>Relationships</h3>

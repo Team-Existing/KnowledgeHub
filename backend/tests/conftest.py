@@ -45,6 +45,8 @@ os.environ["SECRET_KEY"] = secrets.token_urlsafe(48)
 os.environ["ALLOW_REGISTRATION"] = "true"
 # every test signs in from the same address; test_security turns the limiter back on
 os.environ["AUTH_RATE_LIMIT"] = "false"
+# the fake Ollama's installed models change mid-test: never serve a cached answer
+os.environ["OLLAMA_STATUS_CACHE_SECONDS"] = "0"
 os.environ.pop("SETUP_TOKEN", None)
 # the inactivity job would race the tests on the shared database; tests run it explicitly
 os.environ["RETENTION_ENABLED"] = "false"

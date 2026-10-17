@@ -32,6 +32,13 @@ RETENTION_LOCK_TTL = 3600
 # Redis being down must fail fast, never hang: /health would otherwise exceed the
 # load balancer's check and take every app instance out of rotation.
 REDIS_TIMEOUT = 2.0
+# After Redis fails, nothing that can do without it (the health probe, the sign-in
+# rate limiter) dials it again for this long. With the Redis container gone, even
+# resolving its name hangs in the event loop's shared resolver threads; probing it
+# every few seconds piles those lookups up until unrelated ones, such as Ollama's
+# host name, time out too.
+REDIS_BACKOFF = 30.0
+_redis_down_until: Dict[str, float] = {}       # REDIS_URL -> monotonic time to try again
 
 # compare-and-delete / compare-and-extend, so a lock is only touched by its holder
 _RELEASE = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
@@ -139,13 +146,30 @@ async def sync_running(connector_id: str) -> bool:
     return await is_held(sync_lock(connector_id))
 
 
+def redis_backing_off() -> bool:
+    """True while Redis recently failed and optional callers should not dial it."""
+    return worker_mode() and time.monotonic() < _redis_down_until.get(redis_url() or "", 0.0)
+
+
+def note_redis_failure() -> None:
+    if worker_mode():
+        _redis_down_until[redis_url() or ""] = time.monotonic() + REDIS_BACKOFF
+
+
+def reset_redis_backoff() -> None:
+    _redis_down_until.clear()
+
+
 async def ping() -> Optional[bool]:
     """Redis reachability for /health: None in in-process mode."""
     if not worker_mode():
         return None
+    if redis_backing_off():
+        return False
     try:
         return bool(await asyncio.wait_for(_redis().ping(), timeout=REDIS_TIMEOUT))
     except Exception:
+        note_redis_failure()
         return False
 
 

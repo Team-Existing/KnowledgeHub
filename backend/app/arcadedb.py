@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+import random
+import time
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -49,12 +52,20 @@ class ArcadeClient:
     election). Timeouts and dropped connections are NOT retried elsewhere:
     the statement may have been applied, and running it twice could
     duplicate a write. A transaction stays on the node where it began.
+
+    With several nodes the client prefers the current leader (looked up at
+    most every LEADER_REFRESH seconds). A follower can answer a read before it
+    has applied a write just made through it, so a group created a moment ago
+    could be missing from the next list; the leader has applied everything it
+    acknowledged. ArcadeDB's linearizable reads would fix that too, but cost
+    about three seconds per read that follows a write.
     """
 
     # A dead node must cost seconds, not the whole request timeout: connecting is
     # quick or it isn't happening. Queries themselves may legitimately run longer.
     CONNECT_TIMEOUT = 3.0
     PROBE_TIMEOUT = 2.0
+    LEADER_REFRESH = 10.0
 
     def __init__(self, url: str, database: str, user: str, password: str, timeout: float = 60) -> None:
         self.database = database
@@ -65,6 +76,7 @@ class ArcadeClient:
                                       timeout=httpx.Timeout(timeout, connect=self.CONNECT_TIMEOUT))
         self._preferred = 0
         self._session_nodes: Dict[str, str] = {}   # transaction id -> node it lives on
+        self._leader_checked = float("-inf")
 
     @staticmethod
     def _error(response: httpx.Response) -> ArcadeDBError:
@@ -87,9 +99,33 @@ class ArcadeClient:
         n = len(self.nodes)
         return [(self._preferred + i) % n for i in range(n)]
 
+    async def _leader_address(self) -> Optional[str]:
+        """The leader's HTTP "host:port", as the cluster reports it; None if unknown."""
+        for node in (self.nodes[i] for i in self._order()):
+            try:
+                response = await self.http.get(f"{node}/server", params={"mode": "cluster"},
+                                               timeout=self.PROBE_TIMEOUT)
+            except httpx.HTTPError:
+                continue
+            if response.status_code < 400:
+                return (response.json().get("ha") or {}).get("leaderAddress")
+        return None
+
+    async def _follow_leader(self) -> None:
+        if len(self.nodes) < 2 or time.monotonic() - self._leader_checked < self.LEADER_REFRESH:
+            return
+        self._leader_checked = time.monotonic()
+        address = (await self._leader_address() or "").lower()
+        for index, node in enumerate(self.nodes):
+            if address and urlsplit(node).netloc.lower() == address:
+                self._preferred = index
+                return
+
     async def _post(self, path: str, body: Optional[Record] = None,
                     session_id: Optional[str] = None) -> Tuple[httpx.Response, str]:
         headers = {"arcadedb-session-id": session_id} if session_id else None
+        if not session_id:
+            await self._follow_leader()
         if session_id:
             node = self._session_nodes.get(session_id, self.nodes[self._preferred])
             try:
@@ -229,8 +265,18 @@ class ArcadeClient:
         await self.http.aclose()
 
 
+T = TypeVar("T")
+
+
+def is_write_conflict(exc: Exception) -> bool:
+    """ArcadeDB's "someone else changed this page first; retry the operation"."""
+    return isinstance(exc, ArcadeDBError) and "ConcurrentModification" in f"{exc.exception} {exc.detail}"
+
+
 class ArcadeSession:
     """One per request. Use query() for reads and execute() for writes."""
+
+    WRITE_ATTEMPTS = 4
 
     def __init__(self, client: ArcadeClient) -> None:
         self.client = client
@@ -262,6 +308,29 @@ class ArcadeSession:
         if self._session_id is not None:
             session_id, self._session_id = self._session_id, None
             await self.client.commit(session_id)
+
+    async def transaction(self, work: Callable[[], Awaitable[T]]) -> T:
+        """
+        Run `work` (writes, no commit of its own) and commit it, running it again
+        after a write conflict. ArcadeDB checks concurrency per storage page, so two
+        transactions writing different records on the same page conflict and the one
+        that commits second is told to retry: a long import failed that way when a
+        summary was saved meanwhile. Retried only when no transaction was already
+        open here, since rolling back would also undo the writes made before it.
+        """
+        retryable = self._session_id is None
+        for attempt in range(1, self.WRITE_ATTEMPTS + 1):
+            try:
+                result = await work()
+                await self.commit()
+                return result
+            except ArcadeDBError as exc:
+                await self.rollback()
+                if not (retryable and is_write_conflict(exc)) or attempt == self.WRITE_ATTEMPTS:
+                    raise
+                logger.warning("Write conflict, retrying (%d of %d)", attempt + 1, self.WRITE_ATTEMPTS)
+                await asyncio.sleep(0.05 * 2 ** attempt + random.uniform(0, 0.1))
+        raise AssertionError("unreachable")
 
     async def rollback(self) -> None:
         if self._session_id is not None:

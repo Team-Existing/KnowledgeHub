@@ -6,7 +6,7 @@ import { HttpClient } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
-import { Artifact, CrossLink, KnowledgeItem, KnowledgeResponse, Relationship } from '../../models/api'
+import { Artifact, CrossLink, ItemContext, ItemsResponse, KnowledgeItem, Relationship } from '../../models/api'
 import { ItemLineageComponent } from '../../components/item-lineage/item-lineage.component'
 import { SpaceService } from '../../services/space.service'
 import { SpaceInfo } from '../../models/api'
@@ -21,7 +21,11 @@ type RelatedItem = { item: KnowledgeItem; score: number }
   styleUrl: './knowledge-detail.component.css'
 })
 export class KnowledgeDetailComponent implements OnInit {
-  data: KnowledgeResponse | null = null; error = ''; id = ''
+  /** the item with what its page shows around it (GET /knowledge/items/{id}/context) */
+  ctx: ItemContext | null = null; error = ''; id = ''
+  /** link targets for the lineage panel: the newest LINK_CANDIDATES items */
+  candidates: KnowledgeItem[] = []
+  private readonly LINK_CANDIDATES = 500
   private loadedItem: KnowledgeItem | null = null
   editing = false; saving = false; deleting = false; crudError = ''
   editedTitle = ''
@@ -34,15 +38,13 @@ export class KnowledgeDetailComponent implements OnInit {
   private readonly SKIP_KEYS = new Set(['what', 'steps', 'okf_original_id'])
 
   get item(): KnowledgeItem | undefined {
-    return this.loadedItem ?? this.data?.knowledge_items.find(i => i.id === this.id)
+    return this.loadedItem ?? this.ctx?.item
   }
   get artifact(): Artifact | undefined {
-    return this.data?.artifacts.find(a => a.id === this.item?.artifact_id)
+    return this.ctx?.artifact ?? undefined
   }
   get relationships(): Relationship[] {
-    const item = this.item
-    if (!this.data || !item) return []
-    return this.data.relationships.filter(e => e.from === item.id || e.to === item.id)
+    return this.ctx?.relationships ?? []
   }
 
   // Deduplicated, filtered detail entries
@@ -81,14 +83,15 @@ export class KnowledgeDetailComponent implements OnInit {
   }
 
   get relatedItems(): RelatedItem[] {
-    const data = this.data, item = this.item
-    if (!data || !item) return []
+    const ctx = this.ctx, item = this.item
+    if (!ctx || !item) return []
     return this.crossLinks
       .filter(l => l.item_id_a === item.id || l.item_id_b === item.id)
       .map(l => {
         const otherId = l.item_id_a === item.id ? l.item_id_b : l.item_id_a
-        const other = data.knowledge_items.find(i => i.id === otherId)
-        return other ? { item: other, score: l.score } : null
+        const node = ctx.nodes[otherId]
+        return node?.kind === 'item'
+          ? { item: { id: otherId, title: node.title, type: node.type } as KnowledgeItem, score: l.score } : null
       })
       .filter((x): x is RelatedItem => x !== null)
       .sort((a, b) => b.score - a.score)
@@ -97,11 +100,9 @@ export class KnowledgeDetailComponent implements OnInit {
   // Resolve a relationship edge to a display label + route
   resolveNode(edge: Relationship): { label: string; route: string[] } | null {
     const otherId = edge.from === this.item?.id ? edge.to : edge.from
-    const ki = this.data?.knowledge_items.find(i => i.id === otherId)
-    if (ki) return { label: ki.title, route: ['/knowledge', ki.id] }
-    const art = this.data?.artifacts.find(a => a.id === otherId)
-    if (art) return { label: art.title, route: ['/knowledge'] }
-    return null
+    const node = this.ctx?.nodes[otherId]
+    if (!node) return null
+    return { label: node.title, route: node.kind === 'item' ? ['/knowledge', otherId] : ['/knowledge'] }
   }
 
   // Highlight evidence phrases from details in the source content
@@ -165,13 +166,17 @@ export class KnowledgeDetailComponent implements OnInit {
 
   async load() {
     try {
-      const [item, links, kr] = await Promise.all([
-        firstValueFrom(this.http.get<KnowledgeItem>(`${API_BASE}/knowledge/items/${this.id}`)),
+      const id = encodeURIComponent(this.id)
+      const [ctx, links, candidates] = await Promise.all([
+        firstValueFrom(this.http.get<ItemContext>(`${API_BASE}/knowledge/items/${id}/context`)),
         firstValueFrom(this.http.get<CrossLink[]>(`${API_BASE}/knowledge/links`)).catch((): CrossLink[] => []),
-        firstValueFrom(this.http.get<KnowledgeResponse>(`${API_BASE}/knowledge`)),
+        firstValueFrom(this.http.get<ItemsResponse>(`${API_BASE}/knowledge/items`,
+          { params: { exclude_rejected: true, limit: this.LINK_CANDIDATES } }))
+          .catch((): ItemsResponse => ({ items: [], total: 0 })),
       ])
-      this.loadedItem = item
-      this.data = kr
+      this.loadedItem = ctx.item
+      this.ctx = ctx
+      this.candidates = candidates.items
       this.crossLinks = links
     } catch (e) { this.error = errorMessage(e, 'Could not load knowledge item') }
   }

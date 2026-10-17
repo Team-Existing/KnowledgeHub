@@ -53,7 +53,7 @@
           <div class="model-card" [class.is-installed]="model.installed" [class.ram-warn]="tooBig(model)">
             <div class="model-card-top">
               <div>
-                <h3>{{ model.name }}</h3>
+                <h2>{{ model.name }}</h2>
                 <p class="model-meta">{{ model.size }} · needs {{ model.ramRequired }} RAM</p>
               </div>
               <div class="badge-group">
@@ -117,7 +117,7 @@
     </section>
 
     <section class="ingest-panel">
-      <h3>Embeddings</h3>
+      <h2>Embeddings</h2>
       <p class="muted-text">
         Model: {{ service.modelStatus()?.embedding?.model || 'all-MiniLM-L6-v2' }}.
         After changing <code>LOCAL_EMBED_MODEL</code> on the server, re-embed so search and GraphRAG

@@ -30,6 +30,8 @@ Where settings go depends on how you run it:
 | `LOCAL_EMBED_MODEL` | `all-MiniLM-L6-v2` | sentence-transformers model |
 | `MAX_UPLOAD_MB` | `20` | Cap on request bodies, uploaded files and fetched pages |
 | `GRAPHRAG_RERANK` | `on` | `off` disables the LLM rerank step |
+| `OLLAMA_STATUS_CACHE_SECONDS` | `5` | How long the answer to "is Ollama up, which models are installed" is reused (the public model catalog and every sign-in ask it). Installing or removing a model refreshes it. `0` asks every time |
+| `APP_WORKERS` (deploy) / `WEB_CONCURRENCY` | `2` / `1` | Server processes per app instance. More than 1 needs `REDIS_URL` (worker mode): without it the API refuses to start. Each process loads the embedding model, about 500 MB |
 | `LLM_PROVIDER`, `EMBEDDING_PROVIDER` | `ollama`, `local` | Read but not used: those are the only implementations |
 
 **Changing the embedding model.** Vector indexes are sized to the model's dimension.

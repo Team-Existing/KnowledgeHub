@@ -84,7 +84,8 @@ def test_works_with_no_llm_reachable(client, kb, llm):
     assert body["context_nodes"]
     assert "PostgreSQL" in body["answer"]            # extractive fallback answer built from context
     assert body["sub_queries"] == ["What did we decide about PostgreSQL?"]
-    assert body["citations"] == []
+    # that answer quotes the items it came from, so they're its (inferred) sources
+    assert body["citations"] and all(c["inferred"] for c in body["citations"])
 
 
 def test_malformed_transform_output_is_tolerated(client, kb, llm):
@@ -216,3 +217,38 @@ def test_query_is_logged(client, kb, llm, db_query):
     assert log["context_node_ids"] == [n["id"] for n in body["context_nodes"]]
     assert log["llm_provider"] == "fake:llm"
     assert log["citations"] == body["citations"]
+
+
+# ── citations the model didn't write ───────────────────────────────────────
+
+_ADRS = [
+    {"id": "decisions_a3", "title": "ADR-0003: Use ArcadeDB for graph, documents and vectors", "type": "decision"},
+    {"id": "decisions_a1", "title": "ADR-0001: Use PostgreSQL as the primary store", "type": "decision",
+     "status": "superseded"},
+    {"id": "risks_r", "title": "Risk: on-call burnout if releases slip to Friday", "type": "risk"},
+]
+
+
+def test_sources_are_inferred_when_the_model_names_them_without_ids():
+    """Regression: llama3.1:8b wrote "(ADR-0001)" instead of [id], so a grounded answer showed no sources."""
+    from app.services.graphrag import _infer_citations
+    answer = ("The chosen database is ArcadeDB. It replaced PostgreSQL, which was previously chosen as the "
+              "primary store (ADR-0001). Note that ADR-0003 supersedes ADR-0001.")
+    cited = _infer_citations(answer, _ADRS)
+    assert {c["id"] for c in cited} == {"decisions_a1", "decisions_a3"}
+    assert all(c["inferred"] for c in cited)
+    assert next(c for c in cited if c["id"] == "decisions_a1")["status"] == "superseded"
+
+
+def test_no_sources_are_inferred_for_an_answer_that_uses_none():
+    from app.services.graphrag import _infer_citations
+    refusal = ("I'm unable to answer the question as the provided context does not contain any "
+               "information about our parental leave policy.")
+    assert _infer_citations(refusal, _ADRS) == []
+    assert _infer_citations("Use the release checklist.", _ADRS) == []   # one shared word is not enough
+
+
+def test_written_citations_win_over_inferred_ones(client, kb, llm):
+    llm.handlers["generate"] = cite_first
+    body = ask(client, kb)
+    assert body["citations"] and not any(c.get("inferred") for c in body["citations"])

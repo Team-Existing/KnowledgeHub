@@ -18,6 +18,9 @@ type ReviewItem = KnowledgeItem
 })
 export class ReviewComponent implements OnInit {
   items: ReviewItem[] = []; editingId: string | null = null
+  /** the whole queue's length (the page holds the oldest PAGE_SIZE) */
+  total = 0
+  readonly PAGE_SIZE = 50
   editTitle = ''; editNote = ''; loading = false; error = ''
 
   constructor(private http: HttpClient) {}
@@ -26,7 +29,10 @@ export class ReviewComponent implements OnInit {
 
   async load() {
     try {
-      this.items = await firstValueFrom(this.http.get<ReviewItem[]>(`${API_BASE}/knowledge/review`))
+      const res = await firstValueFrom(this.http.get<ReviewItem[]>(`${API_BASE}/knowledge/review`,
+        { params: { limit: this.PAGE_SIZE }, observe: 'response' }))
+      this.items = res.body ?? []
+      this.total = Number(res.headers.get('X-Total-Count') ?? this.items.length)
     } catch (e) {
       this.error = errorMessage(e, 'Could not load review queue')
       console.error('review load error:', e)

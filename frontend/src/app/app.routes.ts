@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router'
 import { inject } from '@angular/core'
 import { Router } from '@angular/router'
-import { authGuard } from './services/auth.guard'
+import { adminGuard, authGuard } from './services/auth.guard'
 import { AuthService } from './services/auth.service'
 
 /** Decode the JWT payload without verifying the signature (client-side only). */
@@ -41,6 +41,8 @@ export const routes: Routes = [
   { path: 'settings/models', loadComponent: () => import('./pages/model-manager/model-manager.component').then(m => m.ModelManagerComponent), canActivate: [authGuard] },
   { path: 'playbooks', loadComponent: () => import('./pages/playbooks/playbooks.component').then(m => m.PlaybooksComponent), canActivate: [authGuard] },
   { path: 'groups', loadComponent: () => import('./pages/groups/groups.component').then(m => m.GroupsComponent), canActivate: [authGuard] },
-  { path: 'admin/users', loadComponent: () => import('./pages/admin-users/admin-users.component').then(m => m.AdminUsersComponent), canActivate: [authGuard] },
+  { path: 'admin/users', loadComponent: () => import('./pages/admin-users/admin-users.component').then(m => m.AdminUsersComponent), canActivate: [adminGuard] },
+  // an empty stop SpaceService.switchTo passes through, so the page you're on is rebuilt for the new space
+  { path: 'switching-space', children: [] },
   { path: 'privacy-policy', loadComponent: () => import('./pages/privacy-policy/privacy-policy.component').then(m => m.PrivacyPolicyComponent) },
 ]

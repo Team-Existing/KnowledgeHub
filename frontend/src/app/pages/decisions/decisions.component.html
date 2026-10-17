@@ -1,7 +1,7 @@
 <div class="knowledge-shell">
   <section class="toolbar">
     <div>
-      <h2>{{ register === 'decision' ? 'Decision log' : 'Risk register' }}</h2>
+      <h1>{{ register === 'decision' ? 'Decision log' : 'Risk register' }}</h1>
       <p>{{ register === 'decision'
         ? 'Every decision, newest first, with what replaced it.'
         : 'Every risk, and whether it was mitigated or actually happened.' }}</p>
@@ -26,7 +26,7 @@
 
   @if (!loading && !error && rows.length === 0) {
     <section class="empty-state">
-      <h3>No {{ register }}s yet</h3>
+      <h2>No {{ register }}s yet</h2>
       <p>Ingest meeting notes or connect a source of ADRs, pull requests or issues.</p>
       <a class="detail-link" routerLink="/connectors">Set up a connector →</a>
     </section>
@@ -41,9 +41,9 @@
           @if (r.item.review_status === 'pending') { <span class="engine-badge">needs review</span> }
           @for (t of r.item.tags.slice(0, 3); track t) { <span class="engine-badge">#{{ t }}</span> }
         </div>
-        <h3 style="margin:0.6rem 0 0.25rem;font-size:1rem">
+        <h2 style="margin:0.6rem 0 0.25rem;font-size:1rem">
           <a [routerLink]="['/knowledge', r.item.id]" class="rel-name-link" style="font-size:1rem">{{ r.item.title }}</a>
-        </h3>
+        </h2>
         @if (r.item.details.why) { <p class="muted-text" style="font-size:0.85rem">{{ r.item.details.why }}</p> }
         @for (x of r.replacedBy; track x.id) {
           <p style="font-size:0.85rem;margin-top:0.35rem">↳ {{ verb(x.kind) }} by
@@ -60,4 +60,10 @@
       </div>
     }
   </div>
+  @if (rows.length < total) {
+    <div style="display:flex;justify-content:center;align-items:center;gap:0.75rem;margin:1rem 0">
+      <span class="muted-text">Showing the newest {{ rows.length }} of {{ total }}</span>
+      <button (click)="loadMore()" [disabled]="loading">{{ loading ? 'Loading…' : 'Load more' }}</button>
+    </div>
+  }
 </div>

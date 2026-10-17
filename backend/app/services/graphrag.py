@@ -503,16 +503,10 @@ def _format_fallback_answer(question: str, context: str) -> str:
 # 11. Citation extraction
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _extract_citations(
-    answer: str,
-    nodes: List[Dict[str, Any]],
-    summaries: Optional[List[Dict[str, Any]]] = None,
-) -> List[Dict[str, str]]:
-    """
-    Citation format is the full id in brackets — `[item_id]` for knowledge
-    items, `[artifact_id]` for artifact summaries — exactly as written by
-    _build_context. Only exact matches against the supplied context count.
-    """
+def _citable(
+    nodes: List[Dict[str, Any]], summaries: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Dict[str, str]]:
+    """Everything the answer could cite, by id: the context items and artifact summaries."""
     by_id: Dict[str, Dict[str, str]] = {}
     for n in nodes:
         nid = n.get("id")
@@ -528,7 +522,20 @@ def _extract_citations(
         aid = s.get("artifact_id")
         if aid and aid not in by_id:
             by_id[aid] = {"id": aid, "title": s.get("title") or aid, "type": "artifact"}
+    return by_id
 
+
+def _extract_citations(
+    answer: str,
+    nodes: List[Dict[str, Any]],
+    summaries: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, str]]:
+    """
+    Citation format is the full id in brackets — `[item_id]` for knowledge
+    items, `[artifact_id]` for artifact summaries — exactly as written by
+    _build_context. Only exact matches against the supplied context count.
+    """
+    by_id = _citable(nodes, summaries)
     cited: List[Dict[str, str]] = []
     seen_ids = set()
     for token in re.findall(r"\[([^\]]+)\]", answer):
@@ -539,6 +546,45 @@ def _extract_citations(
                 seen_ids.add(cid)
                 cited.append(by_id[cid])
     return cited
+
+
+_CITE_STOPWORDS = frozenset(
+    "the and for with that this from into our your their was were are has have had not but use used "
+    "using will would can could should may might its it's about which what when where who how all any "
+    "also than then them they there these those been being does did done per via".split()
+)
+_INFERRED_MAX = 4
+
+
+def _significant_words(text: str) -> set:
+    # "ADR-0001" stays one word: it names a record
+    return {w for w in re.findall(r"[a-z0-9]+(?:-[0-9]+)?", text.lower())
+            if len(w) > 2 and w not in _CITE_STOPWORDS}
+
+
+def _infer_citations(
+    answer: str,
+    nodes: List[Dict[str, Any]],
+    summaries: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, str]]:
+    """
+    Sources for an answer that cites none. Small local models often name a
+    source ("(ADR-0001)") instead of writing its [id], which left a grounded
+    answer with no sources at all. A context entry counts when the answer names
+    an identifier from its title (a word with a digit, such as ADR-0003), or
+    when at least half of its title's words, and at least two, appear in the
+    answer. Marked `inferred`, so the UI can say these were matched, not cited.
+    """
+    answer_words = _significant_words(answer)
+    scored = []
+    for entry in _citable(nodes, summaries).values():
+        title_words = _significant_words(entry["title"])
+        shared = title_words & answer_words
+        names_it = any(any(ch.isdigit() for ch in w) for w in shared)
+        if title_words and (names_it or len(shared) >= max(2, math.ceil(len(title_words) / 2))):
+            scored.append((len(shared) / len(title_words), {**entry, "inferred": True}))
+    scored.sort(key=lambda pair: -pair[0])
+    return [entry for _, entry in scored[:_INFERRED_MAX]]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -659,7 +705,8 @@ async def graphrag_query(
     context   = _build_context(summaries_used, primary, graph_nbr)
     answer    = await _generate(question, context, route, history)
     lap("generate")
-    citations = _extract_citations(answer, reranked, summaries_used)
+    citations = (_extract_citations(answer, reranked, summaries_used)
+                 or _infer_citations(answer, reranked, summaries_used))
 
     return {
         "answer": answer,

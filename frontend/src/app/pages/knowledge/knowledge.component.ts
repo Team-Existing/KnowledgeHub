@@ -2,7 +2,7 @@ import { Component, OnInit, ElementRef, ViewChild, HostListener } from '@angular
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { RouterLink } from '@angular/router'
-import { HttpClient } from '@angular/common/http'
+import { HttpClient, HttpParams } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
@@ -24,6 +24,10 @@ export class KnowledgeComponent implements OnInit {
   data: KnowledgeResponse = { artifacts: [], knowledge_items: [], relationships: [], playbooks: [] }
   graph: GraphResponse = { nodes: [], edges: [], layout: 'force-directed' }
   query = ''; typeFilter = 'all'; loading = false; error = ''
+  // the space a page at a time: GET /knowledge returns the newest PAGE_SIZE after `offset`
+  readonly PAGE_SIZE = 100
+  loadingMore = false
+  private filterTimer: ReturnType<typeof setTimeout> | null = null
   selectedNodeId = ''; ingestMode: IngestMode = 'text'
   title = ''; author = ''; tags = ''; content = ''
   fileTitle = ''; fileAuthor = ''; fileTags = ''; selectedFile: File | null = null
@@ -99,15 +103,52 @@ export class KnowledgeComponent implements OnInit {
 
   ngOnInit() { this.loadKnowledge() }
 
-  get filteredItems() {
-    return this.data.knowledge_items.filter(item => {
-      const matchQ = `${item.title} ${item.tags.join(' ')}`.toLowerCase().includes(this.query.toLowerCase())
-      return matchQ && (this.typeFilter === 'all' || item.type === this.typeFilter)
-    })
+  /** the server filters (title / tags and type), so the page holds only matching items */
+  get filteredItems() { return this.data.knowledge_items }
+
+  get itemTypes() { return this.data.item_types ?? [...new Set(this.data.knowledge_items.map(i => i.type))].sort() }
+  get pendingCount() {
+    return this.data.totals?.pending_review ?? this.data.knowledge_items.filter(i => i.review_status === 'pending').length
+  }
+  get artifactTotal() { return this.data.totals?.artifacts ?? this.data.artifacts.length }
+  get itemTotal() { return this.data.totals?.knowledge_items ?? this.data.knowledge_items.length }
+  get matchingTotal() { return this.data.totals?.matching_items ?? this.data.knowledge_items.length }
+  get filtering() { return !!this.query.trim() || this.typeFilter !== 'all' }
+  get hasMore() {
+    return this.data.knowledge_items.length < this.matchingTotal || this.data.artifacts.length < this.artifactTotal
   }
 
-  get itemTypes() { return [...new Set(this.data.knowledge_items.map(i => i.type))].sort() }
-  get pendingCount() { return this.data.knowledge_items.filter(i => i.review_status === 'pending').length }
+  /** Typing in the filter: ask the server again once the typing pauses. */
+  onFilterChange() {
+    if (this.filterTimer) clearTimeout(this.filterTimer)
+    this.filterTimer = setTimeout(() => this.loadKnowledge(), 300)
+  }
+
+  private pageParams(offset: number): HttpParams {
+    let params = new HttpParams().set('limit', this.PAGE_SIZE).set('offset', offset)
+    if (this.query.trim()) params = params.set('q', this.query.trim())
+    if (this.typeFilter !== 'all') params = params.set('type', this.typeFilter)
+    return params
+  }
+
+  async loadMore() {
+    this.loadingMore = true
+    try {
+      const offset = Math.max(this.data.knowledge_items.length, this.data.artifacts.length)
+      const more = await firstValueFrom(this.http.get<KnowledgeResponse>(`${API_BASE}/knowledge`,
+        { params: this.pageParams(offset) }))
+      const have = new Set(this.data.relationships.map(r => `${r.from}|${r.to}|${r.type}`))
+      this.data = {
+        ...more,
+        artifacts: [...this.data.artifacts, ...more.artifacts],
+        knowledge_items: [...this.data.knowledge_items, ...more.knowledge_items],
+        relationships: [...this.data.relationships,
+                        ...more.relationships.filter(r => !have.has(`${r.from}|${r.to}|${r.type}`))],
+      }
+    } catch (e) {
+      this.error = errorMessage(e, 'Failed to load more knowledge')
+    } finally { this.loadingMore = false }
+  }
   get selectedNode() { return this.graph.nodes.find(n => n.id === this.selectedNodeId) }
   get selectedNodeLinks() {
     if (!this.selectedNode) return []
@@ -241,7 +282,7 @@ export class KnowledgeComponent implements OnInit {
   async loadKnowledge() {
     try {
       const [kr, gr] = await Promise.all([
-        firstValueFrom(this.http.get<KnowledgeResponse>(`${API_BASE}/knowledge`)),
+        firstValueFrom(this.http.get<KnowledgeResponse>(`${API_BASE}/knowledge`, { params: this.pageParams(0) })),
         firstValueFrom(this.http.get<GraphResponse>(`${API_BASE}/knowledge/graph`)),
       ])
       this.data = kr

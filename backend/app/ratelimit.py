@@ -13,17 +13,21 @@ from elsewhere by failing on purpose.
 
 If Redis is unreachable the limiter lets requests through (and logs it):
 sign-in must keep working while the queue is down, as everything else does.
+Each operation gets REDIS_TIMEOUT in all, and after a failure Redis is left
+alone for coordination.REDIS_BACKOFF seconds: with the Redis container gone,
+even resolving its name can take seconds, and every sign-in would pay that.
 
 AUTH_RATE_LIMIT=false turns it off (the test suite does; its own tests turn
 it back on).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import os
 import time
-from typing import Dict, Tuple
+from typing import Awaitable, Callable, Dict, Optional, Tuple, TypeVar
 
 from fastapi import HTTPException, Request
 
@@ -40,6 +44,8 @@ REGISTRATIONS_PER_ADDRESS = 20
 _local: Dict[str, Tuple[int, float]] = {}    # key -> (count, window ends at)
 _LOCAL_MAX_KEYS = 10_000
 
+T = TypeVar("T")
+
 
 def enabled() -> bool:
     return os.getenv("AUTH_RATE_LIMIT", "true").strip().lower() not in ("false", "0", "no", "off")
@@ -52,8 +58,27 @@ def client_address(request: Request) -> str:
 
 
 def reset() -> None:
-    """Forget every in-memory counter (tests)."""
+    """Forget every in-memory counter and any Redis back-off (tests)."""
     _local.clear()
+    coordination.reset_redis_backoff()
+
+
+async def _guarded(op: Callable[[], Awaitable[T]], what: str) -> Optional[T]:
+    """
+    Run op() within REDIS_TIMEOUT. If Redis fails (or is in back-off), fail open:
+    return None, so the request goes ahead unthrottled. A 429 passes through.
+    """
+    if coordination.redis_backing_off():
+        return None
+    try:
+        return await asyncio.wait_for(op(), coordination.REDIS_TIMEOUT)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        coordination.note_redis_failure()
+        logger.warning("Rate limiter unavailable (%s), not enforcing it for %.0fs: %r",
+                       what, coordination.REDIS_BACKOFF, exc)
+        return None
 
 
 def _prune(now: float) -> None:
@@ -111,34 +136,29 @@ async def check(*limits: Tuple[str, int]) -> None:
     """Raise 429 if any (key, limit) has already been reached."""
     if not enabled():
         return
-    try:
+
+    async def op() -> None:
         for key, limit in limits:
             count, retry_after = await _count(key)
             if count >= limit:
                 raise _too_many(retry_after)
-    except HTTPException:
-        raise
-    except Exception as exc:   # Redis down: fail open
-        logger.warning("Rate limiter unavailable, allowing the request: %s", exc)
+    await _guarded(op, "check")
 
 
 async def hit(*keys: str, window: int) -> None:
     if not enabled():
         return
-    try:
+
+    async def op() -> None:
         for key in keys:
             await _hit(key, window)
-    except Exception as exc:
-        logger.warning("Rate limiter unavailable, attempt not counted: %s", exc)
+    await _guarded(op, "count")
 
 
 async def clear(key: str) -> None:
     if not enabled():
         return
-    try:
-        await _clear(key)
-    except Exception as exc:
-        logger.warning("Rate limiter unavailable, counter not cleared: %s", exc)
+    await _guarded(lambda: _clear(key), "clear")
 
 
 def login_keys(request: Request, username_key: str) -> Tuple[str, str]:
@@ -148,4 +168,3 @@ def login_keys(request: Request, username_key: str) -> Tuple[str, str]:
 
 def register_key(request: Request) -> str:
     return f"register:{client_address(request)}"
-

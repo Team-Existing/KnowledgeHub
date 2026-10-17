@@ -73,7 +73,7 @@ h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.025em; margin-botto
 .ram-note { color: var(--warning-text); }
 
 .model-card-top { display: flex; justify-content: space-between; align-items: flex-start; }
-.model-card h3 { font-size: 1rem; margin: 0; }
+.model-card h2 { font-size: 1rem; margin: 0; }
 .model-meta { font-size: 0.8rem; color: var(--text-3); margin-top: 0.2rem; }
 
 .badge-group { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; }

@@ -18,7 +18,16 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 - `API_DOCS`: `false` hides `/docs`, `/redoc` and `/openapi.json`; the production stack sets it.
 - [`deploy/backup.sh`](deploy/backup.sh): a consistent ArcadeDB backup copied to `deploy/backups/`, with old copies pruned. The deployment guide describes restoring.
 
+- `GET /knowledge/items` (filtered, paged items) and `GET /knowledge/items/{id}/context` (what an item's page shows).
+- GraphRAG answers whose model names its sources without writing their ids get those sources inferred from the wording, marked "matched".
+
 ### Changed
+- **Lists are bounded.** `GET /knowledge` returns a page (default 100) with `totals`, filters items on the server, and leaves out document text unless `include_content=true`; the review queue, decision register, graph and search have limits too. On 3,000 items the Hub's response was 4 MB and, under load, ran ArcadeDB out of memory. The pages show **Load more**.
+- **Ingestion no longer waits for the summary.** The LLM summary of a new source is built after the response (about 30 s on a CPU).
+- **App instances run several server processes** (`APP_WORKERS`, default 2), and bcrypt runs on a worker thread.
+- The Ollama status behind the public model catalog and sign-in is cached for 5 seconds (`OLLAMA_STATUS_CACHE_SECONDS`).
+- **Passwords:** at least 8 characters (was 6), not a common password, not the username. Existing passwords keep working.
+- Accessibility: one `<h1>` per page, labelled filters, a group role for the graph, underlined links in text, and text colours with at least 4.5:1 contrast in both themes.
 - **License: GPL-3.0 → AGPL-3.0.**
 - Angular 17 → 21. Building the frontend needs Node 20.19+ or 22.12+; the Docker images use Node 22.
 - Backend dependencies upgraded to current releases, including FastAPI 0.142 (Starlette 1.7), Pydantic 2.13, sentence-transformers 6, NumPy 2 and Celery 5.6.
@@ -27,6 +36,15 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 - Docker base images: Caddy 2.10, Node 22.
 
 ### Fixed
+- A write that collided with another on the same ArcadeDB storage page failed outright ("Concurrent modification… Please retry"): a 3,000-item import was lost when a summary was saved meanwhile. Ingest, embedding and summary writes now run again on such a conflict (only the writes; extraction isn't repeated).
+- Finding the relationships for a page scanned every edge in the space: about a second for the Hub on 6,000 items. They're now found by walking out from the page's nodes (Hub 2.4 s → 0.2 s, graph 1.3 s → 0.16 s).
+- Signing in with an unknown username answered faster than with a known one, which told them apart.
+- Source results in search couldn't be opened.
+- First run: the onboarding page had no setup-token field, so with `SETUP_TOKEN` set the first account couldn't be created there. It now asks for the token, as the sign-in page does.
+- Switching spaces while on the Hub kept showing the previous space's knowledge until a reload (the switch navigated through `/`, which redirects to the Hub itself).
+- A group, playbook or other record created a moment ago could be missing from the next list in the clustered stack: reads went to a follower that hadn't applied the write yet. The app now sends its work to the cluster's leader.
+- With Redis down, sign-in took up to 15 seconds and sometimes answered 503 "Ollama is not running". The rate limiter and the health probe now give Redis 2 seconds and then leave it alone for 30.
+- Members opening `/admin/users` saw the account form with an error; they're now sent to the Hub.
 - URL fetching could be redirected to a private address by DNS rebinding. The address is now checked again when connecting, and the connection goes to exactly that address.
 - The production frontend build no longer loads its stylesheet through an inline `onload` handler (`inlineCritical` off), which the Content Security Policy would block.
 - Reloading a page whose path is also an API path (such as `/knowledge`) made the app show "Failed to load knowledge": the browser reused the cached page for the app's data request. The web server now sends `Vary: Accept`.

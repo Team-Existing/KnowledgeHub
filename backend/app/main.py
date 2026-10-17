@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     check_secret_key()   # refuse to run with a forgeable JWT signing key
+    if int(os.getenv("WEB_CONCURRENCY", "1") or 1) > 1 and not coordination.worker_mode():
+        # without Redis, locks, sign-in throttling and the clean-up live in each process's memory
+        raise RuntimeError("WEB_CONCURRENCY > 1 needs REDIS_URL (worker mode); see docs/deployment.md")
     # vector indexes are sized to the active embedding model
     embedder = get_embedding_provider()
     await init_db(embedder.dimensions, embedder.name)
