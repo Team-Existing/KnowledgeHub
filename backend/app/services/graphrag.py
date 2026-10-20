@@ -35,35 +35,35 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ── route → system prompt ────────────────────────────────────────────────────
-_SYSTEM: Dict[str, str] = {
-    "factual": (
-        "You are a precise knowledge assistant. "
-        "Answer using ONLY the provided context nodes — do not infer, extrapolate, or stitch together implications. "
-        "Every factual claim MUST be directly stated in a context node and cited as [item_id]. "
-        "If the context does not explicitly contain the answer, say so. "
-        "Implying an answer from weak or tangential context is a worse failure than declining to answer."
-    ),
-    "exploratory": (
-        "You are a knowledge assistant helping with open-ended exploration. "
-        "Synthesise ONLY what is explicitly stated across the context nodes — do not infer connections that are not directly supported. "
-        "Cite every claim as [item_id]. "
-        "Acknowledge gaps honestly. "
-        "Implying an answer from weak or tangential context is a worse failure than declining to answer."
-    ),
-    "comparative": (
-        "You are a knowledge assistant specialised in comparison. "
-        "Compare ONLY what is explicitly stated in the context nodes — do not infer attributes that are not directly present. "
-        "Cite each point as [item_id]. "
-        "If the context does not support a direct comparison, say so rather than implying one."
-    ),
-    "procedural": (
-        "You are a knowledge assistant specialised in step-by-step guidance. "
-        "Present steps using ONLY content explicitly found in the context nodes. "
-        "Cite each step as [item_id]. "
-        "Do not fill gaps with assumed or inferred steps — if a step is missing from the context, say so."
-    ),
+# ── the answer prompt ───────────────────────────────────────────────────────
+# Written for small local models (llama3.1:8b class). Measured on evals/: the
+# earlier prompts ("implying an answer is a worse failure than declining")
+# made the model deny facts that were in its context, and asking it to copy
+# long ids made it cite by title instead; numbered entries fix both.
+NO_ANSWER = "The knowledge base doesn't cover this."
+
+_ANSWER_SYSTEM = f"""\
+You answer questions about a team's knowledge base: its decisions, risks, action items, lessons,
+how-tos and best practices. Use only the numbered context entries.
+
+- State what the entries say, including reasons, owners, dates and what replaced what. Leave out
+  details the entries don't give: never write "not specified".
+- After each statement, cite the entries it comes from by number, like [2] or [1][3].
+- If an entry answers the question even in part, answer with what it says.
+- Only if no entry is about the question at all, reply with exactly: {NO_ANSWER}
+- An entry marked superseded or reversed is history: give the one that replaced it as current.
+- Be brief. Answer first, in at most 120 words. Use a short bullet list only for several separate
+  points. No preamble and no closing summary.\
+"""
+
+_ROUTE_HINT: Dict[str, str] = {
+    "factual": "Answer the specific question directly.",
+    "exploratory": "Cover the main points the entries make.",
+    "comparative": "Compare the options point by point.",
+    "procedural": "If the question asks how to do something, give the steps in order.",
 }
+# kept for route classification and older callers
+_SYSTEM: Dict[str, str] = {route: _ANSWER_SYSTEM + "\n" + hint for route, hint in _ROUTE_HINT.items()}
 _SYSTEM["fallback"] = _SYSTEM["factual"]
 
 
@@ -94,6 +94,12 @@ def _item_text(item: Dict[str, Any]) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Query transformation  (sub-queries + HyDE)
 # ─────────────────────────────────────────────────────────────────────────────
+
+# GRAPHRAG_QUERY_REWRITE=on rewrites the question into sub-queries plus a hypothetical
+# answer (HyDE) with the LLM before retrieving. Off by default: on evals/ it cost a full
+# LLM call (about 25 s on a CPU) and retrieval found the right source without it.
+QUERY_REWRITE = os.getenv("GRAPHRAG_QUERY_REWRITE", "off").lower() in ("1", "on", "true", "yes")
+
 
 async def transform_query(question: str) -> Dict[str, Any]:
     prompt = (
@@ -207,6 +213,12 @@ def route_query(question: str) -> str:
     return "exploratory"
 
 
+# GRAPHRAG_LLM_ROUTE=on asks the LLM to classify questions the embedding classifier is
+# unsure about. Off by default: the route only picks a one-line hint in the answer prompt,
+# not worth an LLM call (about 5 s on a CPU); the keyword rules decide instead.
+LLM_ROUTE = os.getenv("GRAPHRAG_LLM_ROUTE", "off").lower() in ("1", "on", "true", "yes")
+
+
 async def route_query_llm(question: str, q_vec: Optional[List[float]] = None) -> str:
     """q_vec: the question's embedding, if the caller already has it."""
     # Phase 3: try embedding-similarity classifier first to save an LLM call
@@ -215,6 +227,8 @@ async def route_query_llm(question: str, q_vec: Optional[List[float]] = None) ->
     embedding_route = await _route_by_embedding(q_vec)
     if embedding_route:
         return embedding_route
+    if not LLM_ROUTE:
+        return route_query(question)
 
     # Ambiguous — fall back to LLM classification
     prompt = (
@@ -270,8 +284,10 @@ def _rrf(ranked_lists: List[List[Dict[str, Any]]], k: int = 60) -> List[Dict[str
 # 8. LLM reranking
 # ─────────────────────────────────────────────────────────────────────────────
 
-# GRAPHRAG_RERANK=off skips the LLM rerank entirely (RRF order is used).
-RERANK_ENABLED = os.getenv("GRAPHRAG_RERANK", "on").lower() not in ("0", "off", "false", "no")
+# GRAPHRAG_RERANK=on adds an LLM rerank of the fused candidates. Off by default: on
+# evals/ it cost about 27 s per question on a CPU, and the fusion (RRF) order already
+# put the right source in the context every time.
+RERANK_ENABLED = os.getenv("GRAPHRAG_RERANK", "off").lower() in ("1", "on", "true", "yes")
 # Only worth an LLM call when there is a real choice to make: with at most
 # top_n * RERANK_MIN_RATIO candidates, the RRF order is kept as-is.
 RERANK_MIN_RATIO = 2
@@ -328,39 +344,112 @@ async def rerank(
 # 9. Context assembly
 # ─────────────────────────────────────────────────────────────────────────────
 
+_DETAIL_SKIP = {"extractor", "confidence", "evidence", "what", "okf_original_id"}
+
+
+def _detail_line(details: Dict[str, Any]) -> str:
+    parts = []
+    for key, value in (details or {}).items():
+        if key in _DETAIL_SKIP or value in (None, "", [], {}):
+            continue
+        if isinstance(value, list):
+            value = "; ".join(str(v) for v in value[:8])
+        parts.append(f"{key}: {str(value)[:200]}")
+    return " | ".join(parts)
+
+
 def _build_context(
     summaries: List[Dict[str, Any]],
     ranked_items: List[Dict[str, Any]],
     graph_neighbours: List[Dict[str, Any]],
-) -> str:
+) -> Tuple[str, Dict[int, Dict[str, Any]]]:
+    """
+    The numbered context the model answers from, and what each number refers to.
+    Items carry their details (who, why, due, steps…) and the passage of the source
+    they came from: without them the model saw only titles, and answered "the context
+    doesn't say who" for an action item whose owner was on record.
+    """
+    refs: Dict[int, Dict[str, Any]] = {}
     parts: List[str] = []
-    if summaries:
-        lines = ["=== ARTIFACT SUMMARIES ==="]
-        for s in summaries:
-            lines.append(f"[{s.get('artifact_id','?')}] {s.get('title','')}: {s.get('summary','')}")
-        parts.append("\n".join(lines))
+
+    def add(entry: Dict[str, Any]) -> int:
+        refs[len(refs) + 1] = entry
+        return len(refs)
+
+    # number every item first, so "replaced by" can point at a later entry
+    numbers = {id(n): add(n) for n in ranked_items}
+    number_of = {n.get("id"): numbers[id(n)] for n in ranked_items}
     if ranked_items:
         lines = ["=== KNOWLEDGE ITEMS ==="]
         for n in ranked_items:
-            nid   = n.get("id", "?")
-            title = n.get("title") or n.get("label", "")
-            kind  = n.get("kind") or n.get("type", "")
-            score = n.get("rrf_score") or n.get("score") or 0.0
-            status = f" status={n['status']}" if n.get("status") else ""
-            lines.append(f"[{nid}] ({kind}{status}) relevance={score:.3f}: {title}")
+            num = numbers[id(n)]
+            kind = n.get("kind") or n.get("type", "")
+            status = f", {n['status']}" if n.get("status") else ""
+            lines.append(f"[{num}] {kind}{status}: {n.get('title') or n.get('label', '')}")
+            details = _detail_line(n.get("details") or {})
+            if details:
+                lines.append(f"    {details}")
             for succ in n.get("replaced_by") or []:
-                lines.append(f"  replaced_by: [{succ['id']}] ({succ['kind']}) {succ.get('title') or ''}")
-            for k, v in (n.get("details") or {}).items():
-                if isinstance(v, str) and v and k not in ("evidence", "confidence"):
-                    lines.append(f"  {k}: {v}")
+                ref = f"[{number_of[succ['id']]}] " if succ.get("id") in number_of else ""
+                lines.append(f"    replaced by: {ref}{succ.get('title') or succ['id']}")
+            if n.get("passage"):
+                lines.append(f'    from "{n.get("source_title") or "a source"}": "{n["passage"]}"')
         parts.append("\n".join(lines))
     if graph_neighbours:
-        lines = ["=== RELATED CONTEXT (graph) ==="]
+        lines = ["=== RELATED ITEMS ==="]
         for n in graph_neighbours:
-            status = f" status={n['status']}" if n.get("status") else ""
-            lines.append(f"[{n.get('id','?')}] ({n.get('kind') or n.get('type','')}{status}): {n.get('title') or n.get('label','')}")
+            num = add(n)
+            status = f", {n['status']}" if n.get("status") else ""
+            lines.append(f"[{num}] {n.get('kind') or n.get('type', '')}{status}: {n.get('title') or n.get('label', '')}")
         parts.append("\n".join(lines))
-    return "\n\n".join(parts)
+    if summaries:
+        lines = ["=== SOURCE SUMMARIES ==="]
+        for sm in summaries:
+            num = add({"id": sm.get("artifact_id"), "title": sm.get("title"), "kind": "artifact"})
+            lines.append(f'[{num}] summary of "{sm.get("title", "")}": {sm.get("summary", "")}')
+        parts.append("\n".join(lines))
+    return "\n\n".join(parts), refs
+
+
+def _sentences(text: str) -> List[str]:
+    return [p.strip() for p in re.split(r"(?<=[.!?])\s+|\n+", text) if p.strip()]
+
+
+def _passage(content: str, about: str, limit: int = 360) -> str:
+    """The stretch of a source that best matches `about`: its best sentence and the next ones."""
+    sentences = _sentences(content or "")
+    words = _significant_words(about)
+    if not sentences or not words:
+        return ""
+    scores = [len(_significant_words(sn) & words) for sn in sentences]
+    best = max(range(len(sentences)), key=lambda i: scores[i])
+    if scores[best] == 0:
+        return ""
+    passage, i = sentences[best], best + 1
+    while i < len(sentences) and len(passage) + len(sentences[i]) < limit:
+        passage += " " + sentences[i]
+        i += 1
+    return passage[:limit]
+
+
+async def _hydrate(store: "GraphStore", user_id: str, nodes: List[Dict[str, Any]]) -> None:
+    """Add details, the source title and a source passage to each retrieved item, in place."""
+    from app.repositories import ArtifactRepository, KnowledgeItemRepository
+    ids = [n["id"] for n in nodes if n.get("id") and n.get("kind") != "artifact"]
+    full = {r["id"]: r for r in await KnowledgeItemRepository(store.session).get_many(user_id, ids)}
+    artifacts: Dict[str, Dict[str, Any]] = {}
+    for n in nodes:
+        item = full.get(n.get("id"))
+        if not item:
+            continue
+        n["details"] = item.get("details") or {}
+        aid = item.get("artifact_id")
+        if aid and aid not in artifacts:
+            artifacts[aid] = await ArtifactRepository(store.session).get_owned(user_id, aid) or {}
+        art = artifacts.get(aid) or {}
+        n["source_title"] = art.get("title")
+        about = " ".join([item.get("title") or ""] + [str(v) for v in n["details"].values() if isinstance(v, str)])
+        n["passage"] = _passage(art.get("content") or "", about)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -372,23 +461,9 @@ async def _generate(
     context: str,
     route: str,
     history: Optional[List[Dict[str, str]]] = None,
+    nodes: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     system = _SYSTEM.get(route, _SYSTEM["factual"])
-    system += """
-    
-When citing sources, copy the exact bracketed id shown before each context entry, e.g. [decision_1a2b3c4d5e6f].
-Never cite by title and never shorten or invent ids.
-
-Entries marked status=superseded or status=reversed are history, not current policy.
-Never present them as the current decision: give the decision that replaced them
-(named in "replaced_by") as current, and mention the older one only as background.
-
-Format your answer as a well-structured response:
-- Use bullet points for lists
-- Group related information together
-- Provide clear, actionable advice
-- End with a brief summary
-"""
     user_msg = f"Context:\n{context}\n\nQuestion: {question}"
     messages = [{"role": "system", "content": system}]
     if history:
@@ -397,106 +472,30 @@ Format your answer as a well-structured response:
 
     content = await llm_client.chat(
         messages=messages,
-        temperature=0.2,
-        max_tokens=1000,
+        temperature=0.1,
+        max_tokens=450,
     )
     if content:
         return content
-    
-    # ✅ Improved fallback - group by type and format nicely
-    return _format_fallback_answer(question, context)
+    return _format_fallback_answer(question, nodes or [])
 
 
-def _format_fallback_answer(question: str, context: str) -> str:
-    """Format a nice fallback answer when LLM is unavailable."""
-    lines = context.splitlines()
-    
-    best_practices = []
-    how_tos = []
-    lessons = []
-    decisions = []
-    risks = []
-    
-    current_section = None
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        if line == "=== KNOWLEDGE ITEMS ===":
-            current_section = "items"
-            continue
-        if line == "=== ARTIFACT SUMMARIES ===":
-            current_section = "summaries"
-            continue
-        if line == "=== RELATED CONTEXT (graph) ===":
-            current_section = "graph"
-            continue
-        if line.startswith("==="):
-            current_section = None
-            continue
-        
-        # Parse item lines
-        if current_section == "items" and "(" in line and ")" in line:
-            # Extract type and content
-            parts = line.split(":", 1)
-            if len(parts) == 2:
-                meta = parts[0].strip()
-                content_text = parts[1].strip()
-
-                # Extract type (and lifecycle status, if any) from "[id] (type status=x) relevance=…"
-                m = re.match(r"\[[^\]]*\]\s*\(([\w-]+)(?:\s+status=(\w+))?\)", meta)
-                kind, status = (m.group(1), m.group(2)) if m else ("", None)
-                if status in ("superseded", "reversed"):
-                    content_text = f"{content_text} _({status})_"
-                if kind == "best-practice":
-                    best_practices.append(content_text)
-                elif kind == "how-to":
-                    how_tos.append(content_text)
-                elif kind == "lesson":
-                    lessons.append(content_text)
-                elif kind == "decision":
-                    decisions.append(content_text)
-                elif kind == "risk":
-                    risks.append(content_text)
-    
-    # Build formatted answer
-    answer_parts = []
-    answer_parts.append(f"Based on the provided context, here are insights about **{question}**:\n")
-    
-    if how_tos:
-        answer_parts.append("### 📋 How-To Steps")
-        for i, item in enumerate(how_tos[:5], 1):
-            answer_parts.append(f"{i}. {item}")
-        answer_parts.append("")
-    
-    if best_practices:
-        answer_parts.append("### ✅ Best Practices")
-        for item in best_practices[:5]:
-            answer_parts.append(f"• {item}")
-        answer_parts.append("")
-    
-    if lessons:
-        answer_parts.append("### 📚 Lessons Learned")
-        for item in lessons[:5]:
-            answer_parts.append(f"• {item}")
-        answer_parts.append("")
-    
-    if decisions:
-        answer_parts.append("### 📝 Key Decisions")
-        for item in decisions[:5]:
-            answer_parts.append(f"• {item}")
-        answer_parts.append("")
-    
-    if risks:
-        answer_parts.append("### ⚠️ Risks to Consider")
-        for item in risks[:5]:
-            answer_parts.append(f"• {item}")
-        answer_parts.append("")
-    
-    if not any([how_tos, best_practices, lessons, decisions, risks]):
+def _format_fallback_answer(question: str, nodes: List[Dict[str, Any]]) -> str:
+    """An answer without the LLM: the retrieved items, grouped by type."""
+    groups = [("how-to", "How-to steps"), ("best-practice", "Best practices"), ("lesson", "Lessons learned"),
+              ("decision", "Decisions"), ("risk", "Risks"), ("action-item", "Action items")]
+    parts = [f"The local model didn't answer, so here is what the knowledge base holds on **{question}**:\n"]
+    for kind, heading in groups:
+        entries = [n for n in nodes if (n.get("kind") or n.get("type")) == kind][:5]
+        if entries:
+            parts.append(f"### {heading}")
+            for n in entries:
+                status = f" _({n['status']})_" if n.get("status") in ("superseded", "reversed") else ""
+                parts.append(f"- {n.get('title') or n.get('label', '')}{status}")
+            parts.append("")
+    if len(parts) == 1:
         return f"No specific guidance found for: *{question}*. Please try rephrasing your question."
-    
-    return "\n".join(answer_parts)
+    return "\n".join(parts)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -529,19 +528,25 @@ def _extract_citations(
     answer: str,
     nodes: List[Dict[str, Any]],
     summaries: Optional[List[Dict[str, Any]]] = None,
+    refs: Optional[Dict[int, Dict[str, Any]]] = None,
 ) -> List[Dict[str, str]]:
     """
-    Citation format is the full id in brackets — `[item_id]` for knowledge
-    items, `[artifact_id]` for artifact summaries — exactly as written by
-    _build_context. Only exact matches against the supplied context count.
+    Citations are the entry numbers of the context, "[2]" or "[1][3]" or "[1, 3]"
+    (see _build_context), mapped back through `refs`; a full id in brackets is
+    accepted too. Only entries of the supplied context count.
     """
     by_id = _citable(nodes, summaries)
+    for ref in (refs or {}).values():
+        if ref.get("id") and ref["id"] not in by_id:
+            by_id[ref["id"]] = {"id": ref["id"], "title": ref.get("title") or ref["id"],
+                                "type": ref.get("kind") or ref.get("type") or "item"}
+    numbered = {str(num): ref.get("id") for num, ref in (refs or {}).items()}
     cited: List[Dict[str, str]] = []
     seen_ids = set()
     for token in re.findall(r"\[([^\]]+)\]", answer):
         # tolerate "[id1, id2]" groupings
         for part in token.split(","):
-            cid = part.strip()
+            cid = numbered.get(part.strip(), part.strip())
             if cid in by_id and cid not in seen_ids:
                 seen_ids.add(cid)
                 cited.append(by_id[cid])
@@ -562,6 +567,17 @@ def _significant_words(text: str) -> set:
             if len(w) > 2 and w not in _CITE_STOPWORDS}
 
 
+_NO_ANSWER_MARKERS = ("doesn't cover", "does not cover", "no information", "not mention", "does not contain",
+                      "doesn't contain", "unable to answer", "cannot answer", "no relevant", "not provide")
+
+
+def is_no_answer(answer: str) -> bool:
+    """A reply saying the knowledge base has nothing on the question (short, with a refusal phrase)."""
+    a = answer.strip().lower()
+    return a.startswith(NO_ANSWER.lower().rstrip(".")) or (
+        len(a) < 400 and any(m in a for m in _NO_ANSWER_MARKERS))
+
+
 def _infer_citations(
     answer: str,
     nodes: List[Dict[str, Any]],
@@ -575,6 +591,8 @@ def _infer_citations(
     when at least half of its title's words, and at least two, appear in the
     answer. Marked `inferred`, so the UI can say these were matched, not cited.
     """
+    if is_no_answer(answer):
+        return []   # a refusal names the topics it didn't find; they aren't its sources
     answer_words = _significant_words(answer)
     scored = []
     for entry in _citable(nodes, summaries).values():
@@ -613,7 +631,11 @@ async def graphrag_query(
 
     # Query transformation (LLM) and routing depend only on the question, so
     # they run concurrently; routing reuses the question embedding.
-    transformed, (q_vec, route) = await asyncio.gather(transform_query(question), embed_and_route())
+    if QUERY_REWRITE:
+        transformed, (q_vec, route) = await asyncio.gather(transform_query(question), embed_and_route())
+    else:
+        transformed = {"sub_queries": [question], "hyde_doc": question}
+        q_vec, route = await embed_and_route()
     sub_queries  = transformed["sub_queries"]
     hyde_doc     = transformed["hyde_doc"]
     lap("transform_route")
@@ -701,12 +723,17 @@ async def graphrag_query(
 
     primary   = [n for n in reranked if "graph" not in n.get("retrieved_by", "")]
     graph_nbr = [n for n in reranked if "graph" in n.get("retrieved_by", "")]
+    await _hydrate(store, user_id, primary)
+    lap("hydrate")
 
-    context   = _build_context(summaries_used, primary, graph_nbr)
-    answer    = await _generate(question, context, route, history)
+    context, refs = _build_context(summaries_used, primary, graph_nbr)
+    answer    = await _generate(question, context, route, history, nodes=reranked)
     lap("generate")
-    citations = (_extract_citations(answer, reranked, summaries_used)
-                 or _infer_citations(answer, reranked, summaries_used))
+    if is_no_answer(answer):
+        citations = []
+    else:
+        citations = (_extract_citations(answer, reranked, summaries_used, refs)
+                     or _infer_citations(answer, reranked, summaries_used))
 
     return {
         "answer": answer,

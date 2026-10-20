@@ -12,7 +12,7 @@ async def chat(
     messages: List[Dict[str, str]],
     temperature: float = 0,
     max_tokens: int = 1000,
-    json_mode: bool = False,
+    json_mode: bool | Dict[str, Any] = False,   # True, or a JSON schema the reply must follow
     workspace: Optional[Any] = None,
 ) -> Optional[str]:
     return await get_llm_provider(workspace).chat(

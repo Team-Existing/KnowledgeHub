@@ -21,7 +21,17 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 - `GET /knowledge/items` (filtered, paged items) and `GET /knowledge/items/{id}/context` (what an item's page shows).
 - GraphRAG answers whose model names its sources without writing their ids get those sources inferred from the wording, marked "matched".
 
+- [`backend/evals/`](backend/evals/): an end-to-end evaluation of extraction and GraphRAG against a real model, with a fixed corpus, answer key and questions.
+
 ### Changed
+- **GraphRAG answers are grounded, cited by number, and about 6× faster** (measured with `backend/evals/` on llama3.1:8b, CPU: 15 → 19 of 19 answers correct, 4 → 0 false "not covered" replies, median answer time 78 s → 13 s):
+  - The model now sees each item's details (who, why, due, steps), its source's title, and the passage it came from. It used to see titles only, and answered "the context doesn't say who" for owners on record.
+  - Context entries are numbered and cited as `[1]`, `[2]`, mapped back to items; small models copied long ids poorly.
+  - One fixed reply when nothing in the knowledge base is about the question ("The knowledge base doesn't cover this."), with no sources. A refusal no longer gets sources inferred from the topics it names.
+  - The LLM question rewrite (sub-queries + HyDE), LLM rerank and LLM routing are off by default (`GRAPHRAG_QUERY_REWRITE`, `GRAPHRAG_RERANK`, `GRAPHRAG_LLM_ROUTE`): each cost about as long as the answer itself, and retrieval found the right source every time without them.
+  - Shorter answers (at most about 120 words, no preamble or closing summary).
+- Extraction replies are constrained to a JSON schema (Ollama structured outputs), and a decision is kept in one item with its reason.
+- Ollama keeps the model loaded for 30 minutes between calls (`OLLAMA_KEEP_ALIVE`) instead of unloading it after 5.
 - **Lists are bounded.** `GET /knowledge` returns a page (default 100) with `totals`, filters items on the server, and leaves out document text unless `include_content=true`; the review queue, decision register, graph and search have limits too. On 3,000 items the Hub's response was 4 MB and, under load, ran ArcadeDB out of memory. The pages show **Load more**.
 - **Ingestion no longer waits for the summary.** The LLM summary of a new source is built after the response (about 30 s on a CPU).
 - **App instances run several server processes** (`APP_WORKERS`, default 2), and bcrypt runs on a worker thread.

@@ -13,7 +13,7 @@ import os
 import threading
 from contextvars import ContextVar
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,9 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 # Ollama's default context (2-4k tokens) silently truncates long prompts;
 # extraction sends up to ~3k tokens of input plus a 1.5k-token reply.
 OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
+# How long Ollama keeps the model in memory after a call. Its default (5 minutes)
+# unloads it between quiet spells, and reloading an 8B model costs 30-60 s on a CPU.
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
 
 LOCAL_EMBED_MODEL  = os.getenv("LOCAL_EMBED_MODEL", "all-MiniLM-L6-v2")
 
@@ -51,7 +54,7 @@ class LLMProvider(ABC):
         messages: List[dict],
         temperature: float = 0,
         max_tokens: int = 1000,
-        json_mode: bool = False,
+        json_mode: bool | Dict[str, Any] = False,
     ) -> Optional[str]: ...
 
     @property
@@ -82,21 +85,25 @@ class OllamaProvider(LLMProvider):
         messages: List[dict],
         temperature: float = 0,
         max_tokens: int = 1000,
-        json_mode: bool = False,
+        json_mode: bool | Dict[str, Any] = False,
     ) -> Optional[str]:
+        """json_mode: True for any JSON object, or a JSON schema the reply must follow (structured output)."""
         try:
             import httpx
             payload: dict[str, Any] = {
                 "model": self.model,
                 "messages": messages,
                 "stream": False,
+                "keep_alive": OLLAMA_KEEP_ALIVE,
                 "options": {
                     "temperature": temperature,
                     "num_predict": max_tokens,
                     "num_ctx": OLLAMA_NUM_CTX,
                 },
             }
-            if json_mode:
+            if isinstance(json_mode, dict):
+                payload["format"] = json_mode
+            elif json_mode:
                 payload["format"] = "json"
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=3.0, read=120.0, write=10.0, pool=5.0)

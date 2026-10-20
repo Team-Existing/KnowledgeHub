@@ -15,7 +15,7 @@ TRANSFORM = json.dumps({
 
 
 def context_ids(messages):
-    """Item ids shown to the LLM in the KNOWLEDGE ITEMS section of the prompt."""
+    """The entry numbers shown to the LLM in the KNOWLEDGE ITEMS section of the prompt."""
     context = messages[-1]["content"]
     section = context.split("=== KNOWLEDGE ITEMS ===", 1)[-1].split("===", 1)[0]
     return re.findall(r"^\[([^\]]+)\]", section, flags=re.M)
@@ -48,13 +48,13 @@ def test_answer_is_grounded_and_cited(client, kb, llm):
     assert body["retrieval_mode"] == "graph_vector_keyword"
     assert body["sub_queries"][0] == "What did we decide about PostgreSQL?"
     shown = context_ids(llm.last("generate"))
-    assert shown, "generate prompt should list context items"
-    # the most relevant item for the question is the PostgreSQL decision
-    top = next(n for n in body["context_nodes"] if n["id"] == shown[0])
+    assert shown == [str(n) for n in range(1, len(shown) + 1)], "context entries are numbered [1], [2]…"
+    # entry [1] is the most relevant item for the question: the PostgreSQL decision
+    top = next(n for n in body["context_nodes"] if "graph" not in n.get("retrieved_by", ""))
     assert "PostgreSQL" in top["title"]
-    # citations carry the decision's lifecycle status, so the UI can flag superseded sources
-    assert body["citations"] == [{"id": shown[0], "title": top["title"], "type": "decision", "status": "active"}]
-    assert f"[{shown[0]}]" in body["answer"]
+    # "[1]" is mapped back to the item; citations carry its lifecycle status for the UI
+    assert body["citations"] == [{"id": top["id"], "title": top["title"], "type": "decision", "status": "active"}]
+    assert "[1]" in body["answer"]
 
 
 def test_hallucinated_citations_are_dropped(client, kb, llm):
@@ -252,3 +252,36 @@ def test_written_citations_win_over_inferred_ones(client, kb, llm):
     llm.handlers["generate"] = cite_first
     body = ask(client, kb)
     assert body["citations"] and not any(c.get("inferred") for c in body["citations"])
+
+
+def test_the_model_sees_item_details_and_the_source_passage(client, alice, llm):
+    """Regression: only titles reached the prompt, so "who owns it?" got "the context doesn't say"."""
+    r = client.post("/knowledge/artifacts/transcript", headers=alice, json={
+        "title": "Ops sync", "content": "Wen will add cache metrics to the dashboard by Friday."})
+    assert r.status_code == 200
+    item = {"what": "add cache metrics to the dashboard", "who": "Wen", "due": "Friday"}
+    llm.handlers["transcript"] = lambda m: json.dumps({"decisions": [], "action_items": [item], "risks": [],
+                                                       "summary": ""})
+    client.post("/knowledge/artifacts/transcript", headers=alice, json={
+        "title": "Ops sync 2", "content": "Wen will add cache metrics to the dashboard by Friday. Owner confirmed."})
+    llm.handlers["generate"] = lambda m: "Wen, by Friday [1]."
+    body = ask(client, alice, question="Who adds the cache metrics, and when?")
+    prompt = llm.last("generate")[-1]["content"]
+    assert "who: Wen" in prompt and "due: Friday" in prompt
+    assert 'from "Ops sync' in prompt and "by Friday" in prompt
+    assert body["citations"] and body["citations"][0]["type"] == "action-item"
+
+
+def test_a_no_answer_reply_cites_nothing(client, kb, llm):
+    from app.services.graphrag import NO_ANSWER
+    llm.handlers["generate"] = lambda m: NO_ANSWER
+    body = ask(client, kb, question="What did we decide about PostgreSQL autoscaling?")
+    assert body["answer"] == NO_ANSWER and body["citations"] == []
+
+
+def test_a_refusal_naming_topics_infers_no_sources():
+    """Regression: "nothing on Kubernetes; the context only covers trunk-based development…" got those as sources."""
+    from app.services.graphrag import _infer_citations
+    refusal = ("There is no information about Kubernetes autoscaling in the provided context. The context only "
+               "discusses ADR-0003 and trunk-based development.")
+    assert _infer_citations(refusal, _ADRS) == []

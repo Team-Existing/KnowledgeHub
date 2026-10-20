@@ -41,6 +41,9 @@ os.environ["ARCADEDB_PASSWORD"] = ARCADEDB_AUTH[1]
 os.environ["ARCADEDB_DATABASE"] = TEST_DATABASE
 os.environ["MAX_UPLOAD_MB"] = "1"
 os.environ["GRAPHRAG_RERANK"] = "on"
+# both off by default (evals/): the tests still cover them
+os.environ["GRAPHRAG_QUERY_REWRITE"] = "on"
+os.environ["GRAPHRAG_LLM_ROUTE"] = "on"
 os.environ["SECRET_KEY"] = secrets.token_urlsafe(48)
 os.environ["ALLOW_REGISTRATION"] = "true"
 # every test signs in from the same address; test_security turns the limiter back on

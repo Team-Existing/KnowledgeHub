@@ -150,7 +150,8 @@ def test_lineage_search_and_graphrag_work_inside_the_group(client, alice, bob, t
 
     llm.handlers["generate"] = lambda messages: f"PostgreSQL [{new_id}]"
     r = client.post("/knowledge/graphrag/query", headers=in_space(alice, gid), json={"question": "billing database?"})
-    assert r.status_code == 200 and new_id in llm.last("generate")[-1]["content"]
+    context = llm.last("generate")[-1]["content"]
+    assert r.status_code == 200 and "superseded" in context and "replaced by:" in context and "PostgreSQL" in context
 
 
 def test_connectors_belong_to_the_group(client, alice, bob, team):
