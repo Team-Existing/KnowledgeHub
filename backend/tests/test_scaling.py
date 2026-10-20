@@ -34,6 +34,7 @@ def _client(handler) -> tuple[ArcadeClient, List[str]]:
 
     client = ArcadeClient("http://node-a:2480,http://node-b:2480", "db", "u", "p")
     client.http = httpx.AsyncClient(transport=httpx.MockTransport(wrapped))
+    client._leader_checked = float("inf")   # these tests are about failover; leader lookup has its own
     return client, seen
 
 
@@ -271,6 +272,137 @@ def test_an_unreachable_redis_fails_fast(monkeypatch):
     started = time.monotonic()
     assert asyncio.run(coordination.ping()) is False
     assert time.monotonic() - started < coordination.REDIS_TIMEOUT + 1.5
+
+
+def test_a_failed_redis_is_left_alone_for_a_while(monkeypatch):
+    """
+    Regression: with the Redis container stopped, every health probe started another
+    lookup of its (now unknown) host name; they piled up in the resolver threads until
+    the sign-in's Ollama check timed out and sign-in answered 503 "Ollama is not running".
+    """
+    monkeypatch.setenv("REDIS_URL", "redis://10.255.255.2:6379/0")
+    coordination._redis_clients.clear()
+    coordination.reset_redis_backoff()
+    dials = []
+
+    class Hanging:
+        async def ping(self):
+            dials.append(1)
+            await asyncio.sleep(60)
+    monkeypatch.setattr(coordination, "_redis", lambda: Hanging())
+    monkeypatch.setattr(coordination, "REDIS_TIMEOUT", 0.2)
+    try:
+        assert asyncio.run(coordination.ping()) is False and dials == [1]
+        assert coordination.redis_backing_off()
+        assert asyncio.run(coordination.ping()) is False and dials == [1]     # not dialled again
+        monkeypatch.setattr(coordination, "_redis_down_until", {"redis://10.255.255.2:6379/0": 0.0})
+        assert asyncio.run(coordination.ping()) is False and dials == [1, 1]  # tried again after the back-off
+    finally:
+        coordination.reset_redis_backoff()
+
+
+def test_the_client_sends_its_work_to_the_leader(monkeypatch):
+    """
+    Regression: a follower answered reads before applying the write just made through
+    it, so a group created a moment ago was missing from the next list (4 in 30).
+    """
+    seen: List[str] = []
+    leader = {"address": "node-b:2480"}
+    down: set = set()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        host = request.url.netloc.decode()
+        if host in down:
+            raise httpx.ConnectError("refused", request=request)
+        if request.url.path.endswith("/server"):
+            seen.append(f"lookup@{host}")
+            return httpx.Response(200, json={"ha": {"leader": "b", "leaderAddress": leader["address"]}})
+        seen.append(host)
+        return httpx.Response(200, json={"result": []})
+
+    client = ArcadeClient("http://node-a:2480,http://node-b:2480,http://node-c:2480", "db", "u", "p")
+    client.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    asyncio.run(client.command("SELECT 1"))
+    asyncio.run(client.command("SELECT 1"))
+    assert seen == ["lookup@node-a:2480", "node-b:2480", "node-b:2480"]   # one lookup per LEADER_REFRESH
+
+    # the leader dies: the request fails over to the next node, and the next lookup follows the new leader
+    seen.clear()
+    down.add("node-b:2480")
+    asyncio.run(client.command("SELECT 1"))
+    assert seen == ["node-c:2480"]
+    leader["address"] = "node-a:2480"
+    monkeypatch.setattr(client, "_leader_checked", float("-inf"))
+    seen.clear()
+    asyncio.run(client.command("SELECT 1"))
+    assert seen == ["lookup@node-c:2480", "node-a:2480"]
+
+    # one node: nothing to look up
+    single = ArcadeClient("http://only:2480", "db", "u", "p")
+    single.http = client.http
+    seen.clear()
+    asyncio.run(single.command("SELECT 1"))
+    assert seen == ["only:2480"]
+
+
+class _ConflictingClient:
+    """Fails the first `conflicts` commits with ArcadeDB's page-version conflict."""
+
+    def __init__(self, conflicts: int) -> None:
+        from app.arcadedb import ArcadeDBError
+        self.conflicts, self.error = conflicts, ArcadeDBError
+        self.log: List[str] = []
+
+    async def begin(self) -> str:
+        self.log.append("begin")
+        return f"tx{len(self.log)}"
+
+    async def command(self, sql, params=None, *, language="sql", session_id=None):
+        self.log.append(sql)
+        return []
+
+    async def commit(self, session_id: str) -> None:
+        if self.conflicts:
+            self.conflicts -= 1
+            raise self.error(503, "com.arcadedb.exception.ConcurrentModificationException",
+                             "Concurrent modification on page PageId(db/9/8). Please retry the operation")
+        self.log.append("commit")
+
+    async def rollback(self, session_id: str) -> None:
+        self.log.append("rollback")
+
+
+def test_a_write_conflict_reruns_the_writes(monkeypatch):
+    """Regression: a long import failed at commit because a summary was saved on the same page meanwhile."""
+    from app.arcadedb import ArcadeSession
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    client = _ConflictingClient(conflicts=2)
+    session = ArcadeSession(client)
+
+    async def work():
+        await session.execute("UPDATE Artifact SET x = 1")
+        return "done"
+    assert asyncio.run(session.transaction(work)) == "done"
+    assert client.log.count("UPDATE Artifact SET x = 1") == 3 and client.log[-1] == "commit"
+    assert client.log.count("begin") == 3          # each attempt in a fresh transaction (a failed commit ends one)
+
+
+def test_a_conflict_is_not_retried_over_earlier_writes(monkeypatch):
+    from app.arcadedb import ArcadeDBError, ArcadeSession
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    client = _ConflictingClient(conflicts=1)
+    session = ArcadeSession(client)
+
+    async def run():
+        await session.execute("INSERT INTO Earlier SET x = 1")      # already in this transaction
+        await session.transaction(lambda: session.execute("UPDATE Artifact SET x = 1"))
+    with pytest.raises(ArcadeDBError):
+        asyncio.run(run())            # rerunning would silently drop the earlier insert
+    assert client.log.count("UPDATE Artifact SET x = 1") == 1
+
+
+async def _no_sleep(_seconds):
+    return None
 
 
 def test_provisioning_waits_for_an_elected_leader_not_just_ready_nodes():

@@ -54,4 +54,8 @@ pytest -m live
 
 Use read-only credentials scoped to test data. The offline contract tests stay alongside them: they cover error paths a live service can't be made to produce on demand, and keep the suite meaningful without credentials.
 
-**Frontend coverage:** the auth interceptor and error handling (22 tests).
+**Frontend coverage:** the auth interceptor and error handling, the sign-in model gate, first-run onboarding (with the setup token), and switching spaces (27 tests).
+
+## LLM quality
+
+The tests above use a fake LLM. To measure what users actually get from the local model (answers, citations, extraction and speed), run the evaluation in [`backend/evals/`](../backend/evals/README.md) before and after changing a prompt, a retrieval step or the model.

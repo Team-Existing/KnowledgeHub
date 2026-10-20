@@ -5,6 +5,10 @@
  */
 export const USERNAME_RULES = '3 to 60 characters: letters, numbers, dot, underscore or hyphen. Not case-sensitive.'
 
+/** Mirrors check_new_password in backend/app/auth.py (the server also refuses common passwords). */
+export const PASSWORD_MIN_LENGTH = 8
+export const PASSWORD_RULES = `At least ${PASSWORD_MIN_LENGTH} characters, not a common password and not your username.`
+
 const PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,59}$/
 
 export function isValidUsername(name: string): boolean {

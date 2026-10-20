@@ -57,11 +57,13 @@ async def link_kinds(space: Space = Depends(current_space)) -> Dict[str, Any]:
 @router.get("/register")
 async def register(
     type: List[str] = Query(default=["decision"]),
+    limit: int = Query(default=300, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    """Decisions (and/or risks) with their status and lineage edges — the data behind the decision log."""
-    return await lineage.register(session, space.id, type)
+    """Decisions (and/or risks) with their status and lineage edges, newest first: the data behind the decision log."""
+    return await lineage.register(session, space.id, type, limit=limit, offset=offset)
 
 
 @router.get("/items/{item_id}/lineage")

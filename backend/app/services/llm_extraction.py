@@ -24,7 +24,8 @@ OUTPUT RULES — follow exactly:
   "risks": [{"risk": "...", "severity": "low|medium|high"}],
   "summary": "..."
 }
-3. decisions: things explicitly agreed, decided, or confirmed — in any format.
+3. decisions: things explicitly agreed, decided, or confirmed — in any format. Keep one decision in one
+   item with all its parts ("keep X and add Y"), and put its reason in "why".
 4. action_items: concrete tasks assigned or volunteered by a person.
 5. risks: concerns, blockers, open questions, or uncertainties raised.
 6. summary: 2-3 sentences covering the main outcome or thread conclusion.
@@ -53,6 +54,7 @@ OUTPUT RULES — follow exactly:
   "risks": [{"risk": "...", "severity": "low|medium|high"}]
 }
 3. decisions: choices the text states were made or agreed — not proposals or options still being considered.
+   Keep one decision in one item with all its parts ("keep X and add Y"), and put its reason in "why".
 4. action_items: concrete tasks assigned to someone or explicitly still to be done.
 5. how_tos: procedures with at least two ordered steps. "what" names the goal; steps are short imperative phrases.
 6. best_practices: explicit recommendations or rules the text tells the reader to follow.
@@ -68,6 +70,36 @@ _SUMMARY_SYSTEM = """\
 Summarise the document below in 2-3 sentences.
 Return ONLY the summary text. No labels, no JSON, no markdown.\
 """
+
+
+# The reply shapes as JSON schemas: Ollama then constrains its output to them (structured
+# outputs), so a small model can't return malformed JSON, stray keys or wrapped text.
+def _entries(*fields: str, lists: tuple = ()) -> Dict[str, Any]:
+    props: Dict[str, Any] = {f: {"type": "string"} for f in fields}
+    props.update({f: {"type": "array", "items": {"type": "string"}} for f in lists})
+    return {"type": "array", "maxItems": 10,
+            "items": {"type": "object", "properties": props, "required": list(fields) + list(lists)}}
+
+
+_RISK = {"type": "array", "maxItems": 10, "items": {"type": "object", "properties": {
+    "risk": {"type": "string"}, "severity": {"type": "string", "enum": ["low", "medium", "high"]}},
+    "required": ["risk", "severity"]}}
+
+_TRANSCRIPT_SCHEMA: Dict[str, Any] = {"type": "object", "properties": {
+    "decisions": _entries("what", "why", "who"),
+    "action_items": _entries("task", "owner", "due"),
+    "risks": _RISK,
+    "summary": {"type": "string"},
+}, "required": ["decisions", "action_items", "risks", "summary"]}
+
+_DOCUMENT_SCHEMA: Dict[str, Any] = {"type": "object", "properties": {
+    "decisions": _entries("what", "why", "who"),
+    "action_items": _entries("task", "owner", "due"),
+    "how_tos": _entries("what", lists=("steps",)),
+    "best_practices": _entries("what", "why"),
+    "lessons": _entries("what", "why"),
+    "risks": _RISK,
+}, "required": ["decisions", "action_items", "how_tos", "best_practices", "lessons", "risks"]}
 
 
 def _extract_json(raw: str) -> Dict[str, Any]:
@@ -115,7 +147,7 @@ async def extract_from_transcript(text: str, source_type: str = "transcript", wo
         ],
         temperature=0,
         max_tokens=1500,
-        json_mode=True,
+        json_mode=_TRANSCRIPT_SCHEMA,
         workspace=workspace,
     )
     if content:
@@ -256,7 +288,7 @@ async def extract_from_document(text: str, workspace: Optional[Any] = None) -> D
             ],
             temperature=0,
             max_tokens=1500,
-            json_mode=True,
+            json_mode=_DOCUMENT_SCHEMA,
             workspace=workspace,
         )
         if content is None and index == 0:

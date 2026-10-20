@@ -5,7 +5,7 @@ import { HttpClient } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
-import { KnowledgeItem, KnowledgeResponse, Playbook, PlaybookStep } from '../../models/api'
+import { ItemsResponse, KnowledgeItem, Playbook, PlaybookStep } from '../../models/api'
 
 /** Item types that make sense as playbook steps */
 const STEP_TYPES = new Set(['how-to', 'checklist', 'best-practice', 'action-item', 'lesson'])
@@ -36,10 +36,11 @@ export class PlaybooksComponent implements OnInit {
     try {
       const [playbooks, knowledge] = await Promise.all([
         firstValueFrom(this.http.get<Playbook[]>(`${API_BASE}/knowledge/playbooks`)),
-        firstValueFrom(this.http.get<KnowledgeResponse>(`${API_BASE}/knowledge`)),
+        firstValueFrom(this.http.get<ItemsResponse>(`${API_BASE}/knowledge/items`,
+          { params: { type: [...STEP_TYPES], exclude_rejected: true, limit: 1000 } })),
       ])
       this.playbooks = playbooks
-      this.stepItems = knowledge.knowledge_items.filter(i => STEP_TYPES.has(i.type) && i.review_status !== 'rejected')
+      this.stepItems = knowledge.items
     } catch (e) { this.error = errorMessage(e, 'Could not load playbooks') }
   }
 

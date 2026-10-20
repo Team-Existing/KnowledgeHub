@@ -1,7 +1,7 @@
 <div class="knowledge-shell">
   <section class="toolbar">
     <div>
-      <h2>Search Knowledge Base</h2>
+      <h1>Search Knowledge Base</h1>
       @if (result) { <p>{{ result.total }} result{{ result.total === 1 ? '' : 's' }} for "{{ result.query || 'all' }}"</p> }
     </div>
     <button (click)="copyShareLink()">{{ copied ? 'Copied!' : 'Share link' }}</button>
@@ -11,11 +11,11 @@
     <div class="search-box">
       <input [(ngModel)]="q" (keydown.enter)="runSearch()" placeholder="Search decisions, risks, action items…" autofocus />
     </div>
-    <select [(ngModel)]="typeFilter">
+    <select [(ngModel)]="typeFilter" aria-label="Item type">
       <option value="">All types</option>
       @for (t of ITEM_TYPES; track t) { <option [value]="t">{{ t }}</option> }
     </select>
-    <select [(ngModel)]="sourceFilter">
+    <select [(ngModel)]="sourceFilter" aria-label="Source type">
       <option value="">All sources</option>
       @for (s of SOURCE_TYPES; track s) { <option [value]="s">{{ s }}</option> }
     </select>
@@ -38,7 +38,7 @@
               @if (item.status) { <span class="status-badge" [ngClass]="'status-' + item.status">{{ item.status }}</span> }
               <span>{{ item.date | date }}</span>
             </div>
-            <h3>{{ item.title }}</h3>
+            <h2>{{ item.title }}</h2>
             <p>by {{ item.author }}</p>
             <div class="tag-row">@for (t of item.tags; track t) { <span>#{{ t }}</span> }</div>
           </a>
@@ -51,25 +51,37 @@
       </div>
       <section class="knowledge-grid">
         @for (a of result.artifacts; track a.id) {
-          <div class="knowledge-card">
+          <ng-template #artifactCard>
             <div class="card-topline">
               <span class="type-pill">{{ a.source_type }}</span>
               <span>{{ a.created_at | date }}</span>
             </div>
-            <h3>{{ a.title }}</h3>
+            <h2>{{ a.title }}</h2>
             <p>by {{ a.author }}</p>
             @if (a.snippet) { <p class="muted-text" style="font-style:italic">“{{ a.snippet }}”</p> }
             <div class="tag-row">@for (t of a.tags; track t) { <span>#{{ t }}</span> }</div>
-          </div>
+          </ng-template>
+          @if (a.first_item_id) {
+            <!-- a source has no page of its own: an item extracted from it shows the source text -->
+            <a class="knowledge-card knowledge-card-link" [routerLink]="['/knowledge', a.first_item_id]"
+               [attr.aria-label]="'Open ' + a.title">
+              <ng-container [ngTemplateOutlet]="artifactCard" />
+            </a>
+          } @else {
+            <div class="knowledge-card">
+              <ng-container [ngTemplateOutlet]="artifactCard" />
+              <p class="muted-text" style="font-size:0.8rem">Nothing was extracted from this source.</p>
+            </div>
+          }
         }
       </section>
     }
     @if (result.total === 0) {
-      <div class="empty-state"><h3>No results</h3><p>Try a different query or remove a filter.</p></div>
+      <div class="empty-state"><h2>No results</h2><p>Try a different query or remove a filter.</p></div>
     }
   }
 
   @if (!result && !loading) {
-    <div class="empty-state"><h3>Start searching</h3><p>Enter a query above — results are instant and links are shareable.</p></div>
+    <div class="empty-state"><h2>Start searching</h2><p>Enter a query above — results are instant and links are shareable.</p></div>
   }
 </div>

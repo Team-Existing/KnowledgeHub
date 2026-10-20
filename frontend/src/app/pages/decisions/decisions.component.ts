@@ -28,6 +28,9 @@ export class DecisionsComponent implements OnInit {
   query = ''
   rows: Row[] = []
   error = ''; loading = false
+  /** register entries in all; the page holds the newest `limit` */
+  total = 0
+  limit = 300
 
   constructor(private http: HttpClient) {}
 
@@ -35,22 +38,28 @@ export class DecisionsComponent implements OnInit {
 
   async switchTo(register: Register) {
     if (register === this.register) return
-    this.register = register; this.statusFilter = ''
+    this.register = register; this.statusFilter = ''; this.limit = 300
     await this.load()
   }
 
   async load() {
     this.loading = true; this.error = ''
     try {
-      const params = new HttpParams().set('type', this.register)
+      const params = new HttpParams().set('type', this.register).set('limit', this.limit)
       const data = await firstValueFrom(this.http.get<RegisterResponse>(`${API_BASE}/knowledge/register`, { params }))
       this.rows = this.toRows(data)
+      this.total = data.total ?? data.items.length
     } catch (e) { this.error = errorMessage(e, 'Could not load the register') }
     finally { this.loading = false }
   }
 
+  async loadMore() {
+    this.limit += 300
+    await this.load()
+  }
+
   private toRows(data: RegisterResponse): Row[] {
-    const titles = new Map(data.items.map(i => [i.id, i.title]))
+    const titles = new Map([...data.items, ...(data.related ?? [])].map(i => [i.id, i.title]))
     const ref = (id: string, kind: string): Ref => ({ id, title: titles.get(id) ?? id, kind })
     const byTarget = new Map<string, LineageEdge[]>()
     const bySource = new Map<string, LineageEdge[]>()

@@ -9,12 +9,12 @@ All endpoints except `/auth/register`, `/auth/setup`, `/auth/token`, `GET /healt
 | Spaces & groups | `GET /spaces`; `POST/GET /groups`, `PATCH/DELETE /groups/{id}`, `GET /groups/{id}/members`, `GET /groups/{id}/candidates?q=` (search users), `POST /groups/{id}/invitations`, `DELETE /groups/{id}/members/{user_id}`, `POST /groups/{id}/leave`; `GET /invitations`, `POST /invitations/{group_id}/accept`, `/decline` |
 | Ingest | `POST /knowledge/artifacts` (text), `/artifacts/upload` (multipart), `/artifacts/url`, `/artifacts/transcript` |
 | Artifacts | `PUT /knowledge/artifacts/{id}` (a content change re-extracts items), `DELETE /knowledge/artifacts/{id}`, `POST /knowledge/artifacts/{id}/share` (copy into another space) |
-| Items | `GET/PUT/DELETE /knowledge/items/{id}`, `GET /knowledge/{ref}` (by id, id suffix or title) |
-| Browse | `GET /knowledge` (everything in the space), `GET /knowledge/graph` |
-| Review | `GET /knowledge/review`, `PATCH /knowledge/review/{id}` |
-| Search | `GET /knowledge/search?q=&type=&source_type=&tag=&limit=` |
+| Items | `GET /knowledge/items?q=&type=&type=&exclude_rejected=&limit=&offset=` (newest first, with `total`), `GET/PUT/DELETE /knowledge/items/{id}`, `GET /knowledge/items/{id}/context` (its source with text, its relationships and their titles), `GET /knowledge/{ref}` (by id, id suffix or title) |
+| Browse | `GET /knowledge?limit=&offset=&q=&type=&include_content=` (a page of artifacts and items, newest first, default 100, at most 1,000; `totals`; artifacts without their text unless `include_content`), `GET /knowledge/graph?limit=` (the newest 300 nodes by default; `truncated`, `total_nodes`) |
+| Review | `GET /knowledge/review?limit=&offset=` (oldest first, default 50; `X-Total-Count` header), `PATCH /knowledge/review/{id}` |
+| Search | `GET /knowledge/search?q=&type=&source_type=&tag=&limit=` (default 50; artifacts come with a `snippet` and a `first_item_id`, not their text) |
 | Links | `POST /knowledge/link`, `GET /knowledge/links` |
-| Lineage | `GET /knowledge/lineage/kinds`, `GET/POST /knowledge/items/{id}/lineage`, `DELETE /knowledge/items/{id}/lineage/{other}`, `GET …/lineage/suggestions`, `PUT /knowledge/items/{id}/status`, `GET /knowledge/register` |
+| Lineage | `GET /knowledge/lineage/kinds`, `GET/POST /knowledge/items/{id}/lineage`, `DELETE /knowledge/items/{id}/lineage/{other}`, `GET …/lineage/suggestions`, `PUT /knowledge/items/{id}/status`, `GET /knowledge/register?type=&limit=&offset=` (newest first, default 300; `total`, and `related` for chain items outside the page) |
 | Playbooks | `GET /knowledge/playbooks`, `POST /knowledge/playbooks` (same title replaces), `DELETE /knowledge/playbooks/{id}` |
 | OKF | `GET /knowledge/okf/export`, `POST /knowledge/okf/import` |
 | GraphRAG | `POST /knowledge/graphrag/query`, `POST /knowledge/reembed` |

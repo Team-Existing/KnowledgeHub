@@ -1,8 +1,8 @@
 <div class="knowledge-shell">
   <section class="toolbar">
     <div>
-      <h2>Review Queue</h2>
-      <p>{{ items.length }} pending item{{ items.length === 1 ? '' : 's' }} awaiting review</p>
+      <h1>Review Queue</h1>
+      <p>{{ total }} pending item{{ total === 1 ? '' : 's' }} awaiting review{{ total > items.length ? ' · showing the oldest ' + items.length : '' }}</p>
     </div>
     <a class="back-link" routerLink="/knowledge"><app-icon name="back" [size]="16" /> Back to hub</a>
   </section>
@@ -11,7 +11,7 @@
 
   @if (items.length === 0 && !error) {
     <section class="empty-state">
-      <h3>Queue is clear</h3>
+      <h2>Queue is clear</h2>
       <p>All extracted knowledge has been reviewed.</p>
     </section>
   }
@@ -35,7 +35,7 @@
             </div>
           </div>
         } @else {
-          <h3 style="margin:0.75rem 0 0.25rem">{{ item.title }}</h3>
+          <h2 style="margin:0.75rem 0 0.25rem">{{ item.title }}</h2>
           <p class="muted-text">by {{ item.author }}</p>
           <div class="tag-row">@for (t of item.tags; track t) { <span>#{{ t }}</span> }</div>
           <div class="review-actions">

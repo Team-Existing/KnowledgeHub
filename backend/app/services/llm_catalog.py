@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import time
 from dataclasses import asdict, dataclass
 from typing import Any, AsyncIterator, Dict, List, Optional, Set, Tuple
 
@@ -60,12 +62,31 @@ async def installed_models() -> Set[str]:
     return {model_id for model_id in CATALOG_IDS if model_id in names}
 
 
+# availability() is behind the unauthenticated catalog and every sign-in, so each call
+# used to ask Ollama: anyone could put load on it, and it capped the catalog at about
+# 10 requests a second. The answer is kept this long (0 = ask every time).
+_STATUS_TTL = float(os.getenv("OLLAMA_STATUS_CACHE_SECONDS", "5"))
+_status: Optional[Tuple[float, bool, Set[str]]] = None    # (expires at, reachable, installed)
+
+
 async def availability() -> Tuple[bool, Set[str]]:
     """(ollama_reachable, installed catalog models) — never raises."""
+    global _status
+    if _status and _status[0] > time.monotonic():
+        return _status[1], set(_status[2])
     try:
-        return True, await installed_models()
+        reachable, installed = True, await installed_models()
     except OllamaUnavailable:
-        return False, set()
+        reachable, installed = False, set()
+    if _STATUS_TTL > 0:
+        _status = (time.monotonic() + _STATUS_TTL, reachable, set(installed))
+    return reachable, installed
+
+
+def forget_availability() -> None:
+    """After a model is installed or removed: the next availability() asks Ollama again."""
+    global _status
+    _status = None
 
 
 def pick_default(installed: Set[str], preferred: Optional[str] = None) -> Optional[str]:

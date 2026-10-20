@@ -1,7 +1,7 @@
 <div class="knowledge-shell">
   <section class="toolbar">
     <div>
-      <h2>Users</h2>
+      <h1>Users</h1>
       <p>Admins manage accounts, the machine's shared models, and folder connectors. Members manage only their own knowledge.</p>
     </div>
   </section>
@@ -10,16 +10,16 @@
   @if (notice) { <p class="muted-text" style="padding:0 0.25rem">{{ notice }}</p> }
 
   <section class="ingest-panel">
-    <h3 style="font-size:1rem;margin-bottom:0.75rem">Create an account</h3>
+    <h2 style="font-size:1rem;margin-bottom:0.75rem">Create an account</h2>
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
-      <input [(ngModel)]="newUsername" placeholder="Username" autocomplete="off" style="flex:1;min-width:160px"
+      <input [(ngModel)]="newUsername" placeholder="Username" aria-label="Username for the new account" autocomplete="off" style="flex:1;min-width:160px"
              [title]="usernameRules" />
-      <input [(ngModel)]="newPassword" type="password" placeholder="Initial password (6+ characters)"
+      <input [(ngModel)]="newPassword" type="password" placeholder="Initial password (8+ characters)"
              autocomplete="new-password" style="flex:1;min-width:200px" />
       <select [(ngModel)]="newRole" style="width:auto" aria-label="Role">
         @for (r of roles; track r) { <option [value]="r">{{ r }}</option> }
       </select>
-      <button class="primary" [disabled]="creating || !usernameOk || newPassword.length < 6" (click)="create()">
+      <button class="primary" [disabled]="creating || !usernameOk || newPassword.length < 8" (click)="create()">
         {{ creating ? 'Creating…' : 'Create' }}</button>
     </div>
     <p class="field-help" [class.error-text]="newUsername && !usernameOk" style="margin-top:0.4rem">{{ usernameRules }}</p>
@@ -28,7 +28,7 @@
   <!-- Inactivity retention -->
   @if (retention) {
     <section class="ingest-panel">
-      <h3 style="font-size:1rem;margin-bottom:0.5rem">Inactive accounts and groups</h3>
+      <h2 style="font-size:1rem;margin-bottom:0.5rem">Inactive accounts and groups</h2>
       @if (retention.enabled) {
         <p class="field-help">Accounts and groups unused for {{ retention.inactive_days }} days are deleted with all their data.
           Checked every {{ retention.check_hours }} h@if (retention.last_run) {; last run {{ retention.last_run.ran_at | date:'medium' }}}.
@@ -37,7 +37,7 @@
         <p class="field-help">Automatic deletion is <strong>off</strong> on this server (RETENTION_ENABLED=false). The lists below show what it would delete.</p>
       }
 
-      <h4 style="font-size:0.875rem;margin:0.75rem 0 0.4rem">Due for deletion now ({{ dueCount }})</h4>
+      <h3 style="font-size:0.875rem;margin:0.75rem 0 0.4rem">Due for deletion now ({{ dueCount }})</h3>
       @if (dueCount === 0) { <p class="muted-text" style="font-size:0.85rem">Nothing is due.</p> }
       <div class="lineage-list">
         @for (u of retention.due.users; track u.id) {
@@ -55,7 +55,7 @@
       }
 
       @if (retention.upcoming.users.length || retention.upcoming.groups.length) {
-        <h4 style="font-size:0.875rem;margin:0.9rem 0 0.4rem">Due within 30 days</h4>
+        <h3 style="font-size:0.875rem;margin:0.9rem 0 0.4rem">Due within 30 days</h3>
         <div class="lineage-list">
           @for (u of retention.upcoming.users; track u.id) {
             <div class="lineage-row"><span class="type-pill">account</span><span class="grow">{{ u.username }}</span>

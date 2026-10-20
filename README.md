@@ -13,7 +13,9 @@ A **local-first knowledge base** for teams. It turns meeting notes, retros, deci
 - **Personal and group spaces.** Everyone has a private space and can create or join groups that share one. A switcher in the nav picks where you're working.
 - **Decisions have a history.** A decision can supersede, reverse or amend an older one, and risks can be mitigated or actually happen. The app tracks each item's status and shows how it evolved.
 - **Connects only where you point it.** Knowledge can come from folders, git repositories (ADRs), GitHub, Jira and Linear, but only from addresses a user enters, and only when they click **Sync now**.
+- **Answers you can check.** GraphRAG answers from the items it retrieves, the details recorded on them and the passages of the sources they came from, cites them by number, and says plainly when the knowledge base doesn't cover a question. A [built-in evaluation](backend/evals/) measures answers, citations and extraction against a real model.
 - **One command to try it, a resilient stack for production.** `docker compose up` runs everything on one machine. [`deploy/`](deploy/) runs it behind a TLS load balancer, with two app instances, a Celery worker and a three-node ArcadeDB cluster.
+- **Ready to face the internet.** In production the first (admin) account needs a setup token, sign-ins are throttled, sessions can be revoked, and the web server sends a strict Content Security Policy. See [Security notes](docs/security.md).
 
 | Page | What you do there |
 |---|---|
@@ -23,7 +25,7 @@ A **local-first knowledge base** for teams. It turns meeting notes, retros, deci
 | [**Decisions**](docs/images/decisions.png) | The decision log and risk register, with each item's status and what replaced it |
 | [**Playbooks**](docs/images/playbooks.png) | Repeatable procedures, written as steps or built from how-tos and checklists in the space |
 | [**Sources**](docs/images/sources.png) | Connectors that pull in transcripts, notes, ADRs, pull requests and issues |
-| [**GraphRAG**](docs/images/graphrag.png) | Ask questions; answers cite the items they used and flag superseded decisions |
+| [**GraphRAG**](docs/images/graphrag.png) | Ask questions; answers cite their sources, flag superseded decisions, and say so when nothing covers the question |
 | [**Groups**](docs/images/groups.png) | Create groups, invite people and share a space with them |
 | [**Models**](docs/images/models.png) | Download, switch or remove the local LLMs; re-embed the knowledge base |
 | [**Users**](docs/images/users.png) *(server admins)* | Create accounts, change roles, see inactive accounts due for deletion |
@@ -41,6 +43,8 @@ docker compose up --build
 ```
 
 Open **http://localhost:8080**, create an account (the first one is the server admin) and pick a model to download. No configuration file is needed: secrets are generated on first start.
+
+The local stack listens on this machine only. Before letting other machines in (`KH_BIND=0.0.0.0`), set `SETUP_TOKEN` so that nobody else can create the admin account; for anything on the internet, use the [production stack](docs/deployment.md).
 
 To use a GPU, an Ollama you already run, or to work on the code with live reload, see [Getting started](docs/getting-started.md).
 
@@ -62,7 +66,9 @@ To use a GPU, an Ollama you already run, or to work on the code with live reload
 | [API](docs/api.md) | Every endpoint |
 | [Security notes](docs/security.md) | How accounts, data, credentials and inputs are protected |
 | [Testing](docs/testing.md) | Running the backend and frontend test suites |
+| [LLM evaluation](backend/evals/README.md) | Measuring answer quality, citations, extraction and speed against a real model |
 | [Known limitations](docs/known-limitations.md) | What it doesn't do (yet) |
+| [Changelog](CHANGELOG.md) | What changed, including steps to take when upgrading |
 
 ## Contributing
 

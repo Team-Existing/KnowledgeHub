@@ -65,15 +65,22 @@ Run against this stack, through the load balancer:
 | Sync started from the UI | queued by the API, run by the worker, never by an app instance |
 | Clean-up | scheduled by beat; locked so concurrent runs can't overlap |
 | Database access | the app connects as `kh_app`; the root password reaches only the ArcadeDB nodes and `provision` |
-| Redis stopped | `/health` `degraded` in under 2 s; reads, ingest, search and the connectors list kept working; starting a sync answered 503 "background queue unavailable"; syncs queued again once Redis was back |
+| Redis stopped | `/health` `degraded` in under 2 s; reads, ingest, search, sign-in and the connectors list kept working; starting a sync answered 503 "background queue unavailable"; syncs queued again once Redis was back |
+| A group created, then listed at once (60 times, app on a follower node) | listed every time (before the fix: missing 4 times in 30) |
 | Rolling restart (`app1`, then `app2`) | one instance was serving at all times |
 
 Two scenarios found real bugs, both now fixed and covered by tests. They were the same mistake twice: a slow dependency made `/health` slower than the load balancer's 5-second check, so the balancer took every healthy instance out of rotation and turned a partial outage into a full one.
 
 The first run of the "leader stopped" scenario found the first one. `/health` probed the database nodes one by one, so a dead node made each check take 15 seconds. The load balancer then marked **both** healthy app instances as down. Probes now run in parallel with a 2-second limit, and the database client gives up connecting to a dead node after 3 seconds. The second: with Redis stopped, the health check's Redis ping had no timeout and hung. Redis calls now time out after 2 seconds.
 
+A later walkthrough found two more:
+
+- **Stale reads after a write.** Every node accepts reads, but a follower can answer before it has applied a write the app just made through it (followers forward writes to the leader). A group created a moment ago was missing from the next list 4 times in 30. The app now sends its work to the current leader, which it looks up at most every 10 seconds; the other nodes take over if the leader is unreachable. ArcadeDB's `arcadedb.ha.readConsistency=linearizable` fixes this too, but measured at about 3 seconds per read that follows a write (against 15 ms).
+- **Sign-in failing while Redis was down.** With the Redis container stopped, even looking up its host name hangs, in resolver threads the whole process shares. The health probe and the sign-in rate limiter kept starting new lookups until unrelated ones, such as Ollama's, timed out: 2 sign-ins in 8 answered 503 "Ollama is not running". After a Redis failure, both now leave Redis alone for 30 seconds, so `/health` can take up to 30 seconds to report `healthy` again once Redis is back.
+
 ## Operating it
 
+- **More processes per instance:** `APP_WORKERS` in `deploy/.env` (default 2) sets how many server processes each app instance runs. Each loads the embedding model (about 500 MB); one per CPU core is a good start.
 - **More app instances:** copy `app2` in `docker-compose.yml` and add it to `APP_UPSTREAMS`. More sync throughput: raise the worker's `--concurrency`, or run more `worker` replicas. Keep **one** `beat`.
 - **Logs:** `docker compose logs -f app1 worker`. Health: `curl -k https://<site>/health` shows each node, the queue and the background mode.
 - **Backups:** run [`deploy/backup.sh`](../deploy/backup.sh) (`sh deploy/backup.sh`) while the stack is up, nightly from the host's crontab: `0 3 * * * sh /path/to/deploy/backup.sh`. It has ArcadeDB write a consistent snapshot, as the app's own user, copies the zip to `deploy/backups/` and deletes local copies older than `BACKUP_KEEP_DAYS` (14). Copy that folder off the machine as well. Queued syncs in `redis-data` don't need backing up: a lost sync runs again the next time someone clicks **Sync now**.

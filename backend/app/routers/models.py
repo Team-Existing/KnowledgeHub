@@ -69,6 +69,7 @@ def _pull_stream(model_id: str) -> StreamingResponse:
         try:
             async for chunk in llm_catalog.pull_events(model_id):
                 yield f"data: {json.dumps(chunk)}\n\n"
+            llm_catalog.forget_availability()
             installed = await llm_catalog.installed_models()
             if model_id not in installed:
                 raise RuntimeError(f"{model_id} did not finish installing")
@@ -166,6 +167,8 @@ async def remove_local_model(
         await llm_catalog.delete_model(body.model_id)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Could not remove the local model: {exc}")
+    finally:
+        llm_catalog.forget_availability()
 
     # Ollama is shared by every account on this machine: move anyone using it to another model
     replacement = llm_catalog.pick_default(remaining)

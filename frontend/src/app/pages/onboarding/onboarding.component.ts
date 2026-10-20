@@ -12,7 +12,7 @@ import { errorMessage } from '../../services/http-error'
  * step, because signing in needs one.
  */
 type Step = 'welcome' | 'model' | 'account' | 'done'
-import { USERNAME_RULES, isValidUsername } from '../../services/usernames'
+import { PASSWORD_MIN_LENGTH, PASSWORD_RULES, USERNAME_RULES, isValidUsername } from '../../services/usernames'
 
 @Component({
   selector: 'app-onboarding',
@@ -26,14 +26,23 @@ export class OnboardingComponent implements OnInit {
   checking = true
   username = ''
   readonly usernameRules = USERNAME_RULES
+  readonly passwordRules = PASSWORD_RULES
+  get passwordOk(): boolean { return this.password.length >= PASSWORD_MIN_LENGTH }
   get usernameOk(): boolean { return isValidUsername(this.username) }
   password = ''
+  // a fresh server with SETUP_TOKEN set: this first account becomes the admin and needs it
+  needsSetupToken = false
+  setupToken = ''
   isCreating = false
   setupError = ''
 
   constructor(private auth: AuthService, private models: ModelService, private router: Router) {}
 
-  ngOnInit() { this.refreshCatalog() }
+  ngOnInit() {
+    this.refreshCatalog()
+    this.auth.setupStatus().then(s => this.needsSetupToken = s.setup_token_required)
+      .catch(() => { /* refreshCatalog reports an unreachable server */ })
+  }
 
   async refreshCatalog() {
     this.checking = true
@@ -68,7 +77,8 @@ export class OnboardingComponent implements OnInit {
     this.isCreating = true
     this.setupError = ''
     try {
-      await this.auth.registerAndLogin(this.username, this.password)
+      await this.auth.registerAndLogin(this.username, this.password,
+        this.needsSetupToken ? this.setupToken : undefined)
       this.step = 'done'
     } catch (e) {
       this.setupError = errorMessage(e, 'Could not create account')

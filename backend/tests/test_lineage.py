@@ -1,6 +1,8 @@
 """Decision tracking over time: lineage links, derived statuses, history, suggestions, GraphRAG awareness."""
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from app.services.lineage import LineageError, derive_status, validate_link
@@ -212,12 +214,16 @@ def test_graphrag_marks_superseded_decisions_and_names_successor(client, alice, 
     old, new = two_decisions
     client.post(f"/knowledge/items/{new['id']}/lineage", headers=alice,
                 json={"target_id": old["id"], "kind": "supersedes"})
-    llm.handlers["generate"] = lambda messages: f"Use PostgreSQL [{new['id']}]."
+    llm.handlers["generate"] = lambda messages: "Use PostgreSQL [2]."
     r = client.post("/knowledge/graphrag/query", headers=alice,
                     json={"question": "Which database do we use for billing?"})
     assert r.status_code == 200, r.text
     context = llm.last("generate")[-1]["content"]
     system = llm.last("generate")[0]["content"]
-    assert "status=superseded" in context
-    assert f"replaced_by: [{new['id']}]" in context
-    assert "history, not current policy" in system
+    entries = dict(re.findall(r"^\[(\d+)\] (.+)$", context, flags=re.M))
+    old_num = next(k for k, v in entries.items() if v.startswith("decision, superseded:") and "MySQL" in v)
+    # the stale decision points at the entry that replaced it, so the model can cite the current one
+    block = context.split(f"[{old_num}] ", 1)[1].split("\n[", 1)[0]     # the entry and its indented lines
+    replaced = re.search(r"replaced by: \[(\d+)\]", block)
+    assert replaced and "PostgreSQL" in entries[replaced.group(1)]
+    assert "is history" in system

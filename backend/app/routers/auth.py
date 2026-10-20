@@ -8,10 +8,12 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, Field, field_validator
+from starlette.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.arcadedb import ArcadeSession, DuplicateKeyError
-from app.auth import TokenResponse, create_token, get_current_user, hash_password, verify_password
+from app.auth import (TokenResponse, burn_password_check, check_new_password, create_token, get_current_user,
+                      hash_password, verify_password)
 from app.db import User, get_session
 from app.rbac import DEFAULT_ROLE, Permission, Role, has_permission
 from app.repositories import UserRepository
@@ -24,7 +26,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=60)
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=1, max_length=256)
     # required for the first (admin) account when the server sets SETUP_TOKEN
     setup_token: str | None = Field(default=None, max_length=512)
 
@@ -32,6 +34,11 @@ class RegisterRequest(BaseModel):
     @classmethod
     def _valid_username(cls, value: str) -> str:
         return check_new_username(value)
+
+    @model_validator(mode="after")
+    def _valid_password(self) -> "RegisterRequest":
+        check_new_password(self.password, self.username)
+        return self
 
 
 def registration_open() -> bool:
@@ -67,9 +74,13 @@ async def create_user(session: ArcadeSession, username: str, password: str, role
     if await users.get_by_username(username):
         raise HTTPException(status_code=409, detail="Username already taken")
 
+    # bcrypt takes about a quarter of a second of CPU: off the event loop, which
+    # every other request on this instance is waiting on
+    hashed = await run_in_threadpool(hash_password, password)
+
     async def insert(as_role: Role, claim_admin: bool) -> Dict[str, Any]:
         user = {"id": str(uuid.uuid4()), "username": username, "username_key": username_key(username),
-                "hashed_password": hash_password(password),
+                "hashed_password": hashed,
                 "role": as_role.value, "created_at": datetime.now(timezone.utc).isoformat()}
         if claim_admin:
             await session.execute("INSERT INTO Meta CONTENT :doc",
@@ -156,7 +167,10 @@ async def login(
                           (address_key, ratelimit.LOGIN_FAILURES_PER_ADDRESS))
     users = UserRepository(session)
     user = await users.get_by_username(form.username)
-    if not user or not verify_password(form.password, user["hashed_password"]):
+    if not user:
+        # same cost as a wrong password: the timing reveals nothing
+        await run_in_threadpool(burn_password_check, form.password)
+    if not user or not await run_in_threadpool(verify_password, form.password, user["hashed_password"]):
         await ratelimit.hit(account_key, address_key, window=ratelimit.LOGIN_WINDOW)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     await ratelimit.clear(account_key)

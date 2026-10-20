@@ -3,13 +3,16 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from app.arcadedb import ArcadeSession
-from app.repositories._common import tag_fields
+from app.repositories._common import page, tag_fields
 
 Row = Dict[str, Any]
 
 # everything except the (large) vectors
 _FIELDS = ("id, user_id, title, content, source, source_type, author, tags, extraction_engine, "
            "created_at, metadata, summary")
+# for lists: without the document text, which can be megabytes per space
+_LIST_FIELDS = ("id, user_id, title, source, source_type, author, tags, extraction_engine, "
+                "created_at, metadata")
 
 
 class ArtifactRepository:
@@ -21,13 +24,19 @@ class ArtifactRepository:
             f"SELECT {_FIELDS} FROM Artifact WHERE id = :id AND user_id = :u", {"id": artifact_id, "u": user_id}
         )
 
-    async def list(self, user_id: str, source_type: Optional[str] = None) -> List[Row]:
-        sql = f"SELECT {_FIELDS} FROM Artifact WHERE user_id = :u"
+    async def list(
+        self, user_id: str, source_type: Optional[str] = None, *, with_content: bool = True,
+        limit: Optional[int] = None, offset: int = 0, newest_first: bool = False,
+    ) -> List[Row]:
+        sql = f"SELECT {_FIELDS if with_content else _LIST_FIELDS} FROM Artifact WHERE user_id = :u"
         params: Row = {"u": user_id}
         if source_type:
             sql += " AND source_type = :st"
             params["st"] = source_type
-        return await self.session.query(sql + " ORDER BY @rid", params)
+        return await self.session.query(page(sql, newest_first=newest_first, limit=limit, offset=offset), params)
+
+    async def count(self, user_id: str) -> int:
+        return await self.session.scalar("SELECT count(*) AS n FROM Artifact WHERE user_id = :u", {"u": user_id}, 0)
 
     async def ids_with_source_type(self, user_id: str, source_type: str) -> List[str]:
         rows = await self.session.query(

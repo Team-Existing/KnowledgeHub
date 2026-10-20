@@ -7,6 +7,7 @@ import { ModelCatalog, ModelService } from '../../services/model.service'
 import { ModelSetupComponent } from '../../components/model-setup/model-setup.component'
 import { errorMessage } from '../../services/http-error'
 import { IconComponent } from '../../components/icon/icon.component'
+import { PASSWORD_RULES } from '../../services/usernames'
 
 /**
  * Sign-in starts with a model check: one of the three local models must be
@@ -29,6 +30,7 @@ export class LoginComponent implements OnInit {
   username = ''; password = ''; error = ''; loading = false
   // a fresh server with SETUP_TOKEN set: the first account (the admin) needs it
   needsSetupToken = false; setupToken = ''
+  readonly passwordRules = PASSWORD_RULES
   // set by authInterceptor when the API rejected a stored token
   readonly sessionExpired: boolean
 

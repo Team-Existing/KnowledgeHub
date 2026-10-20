@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.arcadedb import ArcadeSession
 from app.db import User, get_session
@@ -13,6 +13,7 @@ from app.repositories import UserRepository
 from app.routers.auth import create_user
 from app import activity
 from app.services import retention
+from app.auth import check_new_password
 from app.usernames import check_new_username
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -22,13 +23,18 @@ admin_only = require(Permission.MANAGE_USERS)
 
 class CreateUserRequest(BaseModel):
     username: str = Field(min_length=3, max_length=60)
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=1, max_length=256)
     role: Role = Role.MEMBER
 
     @field_validator("username")
     @classmethod
     def _valid_username(cls, value: str) -> str:
         return check_new_username(value)
+
+    @model_validator(mode="after")
+    def _valid_password(self) -> "CreateUserRequest":
+        check_new_password(self.password, self.username)
+        return self
 
 
 class RoleUpdate(BaseModel):

@@ -163,7 +163,7 @@ def sync(client, headers, connector_id: str) -> Dict[str, Any]:
 
 
 def artifacts(client, headers):
-    return client.get("/knowledge", headers=headers).json()
+    return client.get("/knowledge", headers=headers, params={"include_content": True}).json()
 
 
 # ── folder ──────────────────────────────────────────────────────────────────

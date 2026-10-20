@@ -37,14 +37,28 @@
         </div>
         <div class="form-group">
           <label>Password</label>
-          <input type="password" [(ngModel)]="password" placeholder="Choose a password" class="input-field" />
+          <input type="password" [(ngModel)]="password" placeholder="Choose a password" class="input-field"
+                 autocomplete="new-password" aria-describedby="password-rules" />
+          <small id="password-rules" [class.error-text]="password && !passwordOk"
+                 style="display:block;margin-top:0.3rem;font-size:0.78rem">{{ passwordRules }}</small>
         </div>
+        @if (needsSetupToken) {
+          <div class="form-group">
+            <label for="setup-token">Setup token</label>
+            <input id="setup-token" type="password" [(ngModel)]="setupToken" placeholder="Setup token"
+                   class="input-field" autocomplete="off" aria-describedby="setup-token-help" />
+            <small id="setup-token-help" style="display:block;margin-top:0.3rem;font-size:0.78rem">
+              This is a new hub: the first account becomes its administrator. Enter the
+              <code>SETUP_TOKEN</code> from the server's configuration.</small>
+          </div>
+        }
 
         @if (setupError) { <p class="error-text">{{ setupError }}</p> }
 
         <div class="step-actions">
           <button class="btn-secondary" (click)="step = 'welcome'">Back</button>
-          <button class="btn-primary" [disabled]="!usernameOk || !password || isCreating" (click)="createAccount()">
+          <button class="btn-primary" [disabled]="!usernameOk || !passwordOk || isCreating || (needsSetupToken && !setupToken)"
+                  (click)="createAccount()">
             {{ isCreating ? 'Creating Account...' : 'Create Account' }}
           </button>
         </div>

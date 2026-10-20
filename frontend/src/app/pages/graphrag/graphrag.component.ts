@@ -59,6 +59,7 @@ export class GraphragComponent implements AfterViewChecked {
 
   isNoAnswer(content: string): boolean {
     const noAnswerPhrases = [
+      "the knowledge base doesn't cover this",
       'no relevant knowledge found',
       'does not contain sufficiently relevant information',
       'I don\'t have an answer',
@@ -239,7 +240,8 @@ export class GraphragComponent implements AfterViewChecked {
       })
     }
          
-      const hasRealAnswer = !data.answer?.includes('No relevant knowledge found') &&
+      const hasRealAnswer = !data.answer?.includes("The knowledge base doesn't cover this") &&
+                          !data.answer?.includes('No relevant knowledge found') &&
                           !data.answer?.includes('I don\'t have an answer') &&
                           !data.answer?.includes('does not contain sufficiently relevant information')
       

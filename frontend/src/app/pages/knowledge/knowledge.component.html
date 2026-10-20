@@ -1,8 +1,8 @@
 <div class="knowledge-shell">
   <section class="toolbar">
     <div>
-      <h2>Knowledge Hub</h2>
-      <p>{{ data.artifacts.length }} artifacts · {{ data.knowledge_items.length }} items{{ pendingCount > 0 ? ' · ' + pendingCount + ' pending review' : '' }}</p>
+      <h1>Knowledge Hub</h1>
+      <p>{{ artifactTotal }} artifacts · {{ itemTotal }} items{{ pendingCount > 0 ? ' · ' + pendingCount + ' pending review' : '' }}</p>
     </div>
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
       <a routerLink="/search"><button>Search</button></a>
@@ -31,7 +31,7 @@
   <section class="ingest-panel">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.75rem">
       <div>
-        <h3>Ingest Artifact</h3>
+        <h2>Ingest Artifact</h2>
         <p>Paste text, upload a file, fetch a URL, or extract decisions from a meeting transcript / email / Slack thread using AI.</p>
       </div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
@@ -97,7 +97,7 @@
         <input [(ngModel)]="txTitle" placeholder="Title" />
         <input [(ngModel)]="txAuthor" placeholder="Author" />
         <input [(ngModel)]="txTags" placeholder="Tags, comma separated" />
-        <select [(ngModel)]="txSourceType">
+        <select [(ngModel)]="txSourceType" aria-label="Kind of conversation">
           <option value="transcript">Transcript</option>
           <option value="email">Email thread</option>
           <option value="slack">Slack thread</option>
@@ -122,7 +122,7 @@
   <!-- Artifacts list with edit / delete -->
   @if (data.artifacts.length > 0) {
     <section class="ingest-panel">
-      <h3>Artifacts <span style="font-weight:400;color:var(--text-3);font-size:0.875rem">({{ data.artifacts.length }})</span></h3>
+      <h2>Artifacts <span style="font-weight:400;color:var(--text-3);font-size:0.875rem">({{ data.artifacts.length < artifactTotal ? data.artifacts.length + ' of ' + artifactTotal : artifactTotal }})</span></h2>
       <div class="artifact-list">
         @for (a of data.artifacts; track a) {
           <div class="artifact-row">
@@ -156,8 +156,8 @@
   <section class="graph-panel">
     <div class="graph-header">
       <div>
-        <h3>Knowledge Graph</h3>
-        <p>{{ graph.nodes.length }} nodes · {{ graph.edges.length }} relationships</p>
+        <h2>Knowledge Graph</h2>
+        <p>{{ graph.nodes.length }} nodes · {{ graph.edges.length }} relationships{{ graph.truncated ? ' · the newest ' + graph.nodes.length + ' of ' + graph.total_nodes : '' }}</p>
       </div>
       <div style="display:flex;align-items:center;gap:0.5rem">
         @if (selectedNode && selectedNode.type !== 'artifact') {
@@ -175,7 +175,7 @@
             <button class="graph-zoom-btn" (click)="resetView()" title="Reset view">⊙</button>
           </div>
           <svg #graphSvg class="knowledge-graph"
-            role="img" aria-label="Knowledge graph visualization"
+            role="group" aria-label="Knowledge graph: select a node to see its relationships"
             (wheel)="onWheel($event)"
             (mousedown)="onSvgMouseDown($event)"
             (mousemove)="onMouseMove($event)"
@@ -203,10 +203,10 @@
               </g>
             </svg>
           </div>
-          <aside class="graph-inspector">
+          <section class="graph-inspector" aria-label="Selected node">
             @if (selectedNode) {
               <span class="type-pill">{{ selectedNode.type }}</span>
-              <h4>{{ selectedNode.label }}</h4>
+              <h3>{{ selectedNode.label }}</h3>
               <p>{{ selectedNodeLinks.length }} relationship{{ selectedNodeLinks.length === 1 ? '' : 's' }}</p>
               @if (selectedNode.type === 'artifact') {
                 <p class="muted-text">Artifact nodes are source documents; select a connected knowledge item to open its details.</p>
@@ -221,15 +221,15 @@
               </div>
             } @else {
               <div class="graph-empty">
-                <h4>Select a node</h4>
+                <h3>Select a node</h3>
                 <p>Inspect its relationships and jump into the detail page.</p>
               </div>
             }
-          </aside>
+          </section>
         </div>
       } @else {
         <div class="empty-state">
-          <h3>No graph yet</h3>
+          <h2>No graph yet</h2>
           <p>Ingest an artifact to generate artifact-to-knowledge relationships.</p>
         </div>
       }
@@ -237,9 +237,10 @@
 
     <section class="filters">
       <div class="search-box">
-        <input [(ngModel)]="query" placeholder="Filter extracted knowledge" />
+        <input [(ngModel)]="query" (ngModelChange)="onFilterChange()" placeholder="Filter extracted knowledge"
+               aria-label="Filter extracted knowledge by title or tag" />
       </div>
-      <select [(ngModel)]="typeFilter">
+      <select [(ngModel)]="typeFilter" (ngModelChange)="loadKnowledge()" aria-label="Filter by type">
         <option value="all">All types</option>
         @for (t of itemTypes; track t) {
           <option [value]="t">{{ t }}</option>
@@ -260,7 +261,7 @@
             }
             <span>{{ item.date | date }}</span>
           </div>
-          <h3>{{ item.title }}</h3>
+          <h2>{{ item.title }}</h2>
           <p>by {{ item.author }}</p>
           @if (item.review_status === 'pending') {
             <span class="review-badge">pending review</span>
@@ -272,9 +273,20 @@
       }
       @if (filteredItems.length === 0) {
         <div class="empty-state">
-          <h3>No knowledge items yet</h3>
-          <p>Add an artifact above to extract decisions, risks, best practices, and checklists.</p>
+          @if (filtering) {
+            <h2>No matching items</h2>
+            <p>Try another word or type, or use Advanced search for the full text of sources.</p>
+          } @else {
+            <h2>No knowledge items yet</h2>
+            <p>Add an artifact above to extract decisions, risks, best practices, and checklists.</p>
+          }
         </div>
       }
     </section>
+    @if (hasMore) {
+      <div style="display:flex;justify-content:center;align-items:center;gap:0.75rem;margin:1rem 0">
+        <span class="muted-text">Showing {{ filteredItems.length }} of {{ matchingTotal }} items</span>
+        <button (click)="loadMore()" [disabled]="loadingMore">{{ loadingMore ? 'Loading…' : 'Load more' }}</button>
+      </div>
+    }
   </div>

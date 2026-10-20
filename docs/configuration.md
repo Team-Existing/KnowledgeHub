@@ -29,7 +29,12 @@ Where settings go depends on how you run it:
 | `OLLAMA_NUM_CTX` | `8192` | Context window requested from Ollama. Lower it on small machines |
 | `LOCAL_EMBED_MODEL` | `all-MiniLM-L6-v2` | sentence-transformers model |
 | `MAX_UPLOAD_MB` | `20` | Cap on request bodies, uploaded files and fetched pages |
-| `GRAPHRAG_RERANK` | `on` | `off` disables the LLM rerank step |
+| `GRAPHRAG_RERANK` | `off` | `on` adds an LLM rerank of the retrieved candidates (about one more LLM call per question) |
+| `GRAPHRAG_QUERY_REWRITE` | `off` | `on` rewrites each question into sub-queries plus a hypothetical answer with the LLM before retrieving (one more LLM call) |
+| `GRAPHRAG_LLM_ROUTE` | `off` | `on` asks the LLM to classify questions the embedding classifier is unsure about |
+| `OLLAMA_KEEP_ALIVE` | `30m` | How long Ollama keeps the model loaded after a call. Reloading an 8B model takes 30–60 s on a CPU |
+| `OLLAMA_STATUS_CACHE_SECONDS` | `5` | How long the answer to "is Ollama up, which models are installed" is reused (the public model catalog and every sign-in ask it). Installing or removing a model refreshes it. `0` asks every time |
+| `APP_WORKERS` (deploy) / `WEB_CONCURRENCY` | `2` / `1` | Server processes per app instance. More than 1 needs `REDIS_URL` (worker mode): without it the API refuses to start. Each process loads the embedding model, about 500 MB |
 | `LLM_PROVIDER`, `EMBEDDING_PROVIDER` | `ollama`, `local` | Read but not used: those are the only implementations |
 
 **Changing the embedding model.** Vector indexes are sized to the model's dimension.

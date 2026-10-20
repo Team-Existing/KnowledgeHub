@@ -231,3 +231,27 @@ def test_management_reports_ollama_down(client, ollama, make_user):
     ollama.reachable = False
     assert client.post("/models/install", headers=h, json={"model_id": "mistral:7b"}).status_code == 503
     assert client.get("/models/status", headers=h).json()["llm"]["ollamaReachable"] is False
+
+
+def test_ollama_status_is_cached_briefly_and_refreshed_after_changes(client, ollama, monkeypatch):
+    """Regression: every catalog request and sign-in asked Ollama, so anyone could load it from outside."""
+    import asyncio
+    from app.services import llm_catalog
+    calls = []
+    real = llm_catalog.installed_models
+
+    async def counting():
+        calls.append(1)
+        return await real()
+    monkeypatch.setattr(llm_catalog, "installed_models", counting)
+    monkeypatch.setattr(llm_catalog, "_STATUS_TTL", 60.0)
+    llm_catalog.forget_availability()
+    try:
+        for _ in range(5):
+            assert client.get("/models/catalog").json()["anyInstalled"]
+        assert len(calls) == 1
+        llm_catalog.forget_availability()             # what install and remove do
+        asyncio.run(llm_catalog.availability())
+        assert len(calls) == 2
+    finally:
+        llm_catalog.forget_availability()

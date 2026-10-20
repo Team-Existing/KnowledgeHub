@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from app.arcadedb import ArcadeSession
@@ -125,17 +125,48 @@ async def _update_item(
 # Read / export
 # ---------------------------------------------------------------------------
 
+# A page of a space is bounded: a large space returned everything at once (4 MB for
+# 3,000 items), which made each Hub load take seconds and, under load, ran the
+# database out of memory.
+PAGE_DEFAULT = 100
+PAGE_MAX = 1000
+
+
 @router.get("")
 async def list_knowledge(
+    limit: int = Query(default=PAGE_DEFAULT, ge=1, le=PAGE_MAX),
+    offset: int = Query(default=0, ge=0),
+    q: Optional[str] = Query(default=None, max_length=200),
+    type: Optional[str] = None,
+    include_content: bool = False,
     space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
+    """
+    The space, a page at a time: the newest `limit` artifacts and items after
+    `offset` (items filtered by `q`, matching title or tags, and `type`), the
+    relationships between the returned nodes, every playbook, and `totals`.
+    Artifacts come without their text unless `include_content` is set.
+    """
     user_id = space.id
+    items_repo, artifacts_repo = KnowledgeItemRepository(session), ArtifactRepository(session)
+    artifacts = await artifacts_repo.list(user_id, with_content=include_content,
+                                          limit=limit, offset=offset, newest_first=True)
+    items = await items_repo.list(user_id, q=q, type=type, limit=limit, offset=offset, newest_first=True)
+    types = await session.query("SELECT DISTINCT(type) AS type FROM KnowledgeItem WHERE user_id = :u", {"u": user_id})
     return {
-        "artifacts": [artifact_dict(a) for a in await ArtifactRepository(session).list(user_id)],
-        "knowledge_items": [item_dict(i) for i in await KnowledgeItemRepository(session).list(user_id)],
-        "relationships": await RelationshipRepository(session).list(user_id),
+        "artifacts": [artifact_dict(a, content=include_content) for a in artifacts],
+        "knowledge_items": [item_dict(i) for i in items],
+        "relationships": await RelationshipRepository(session).among(
+            user_id, [i["id"] for i in items], [a["id"] for a in artifacts]),
         "playbooks": [playbook_dict(p) for p in await PlaybookRepository(session).list(user_id)],
+        "totals": {
+            "artifacts": await artifacts_repo.count(user_id),
+            "knowledge_items": await items_repo.count(user_id),
+            "matching_items": await items_repo.count(user_id, q=q, type=type),
+            "pending_review": await items_repo.count(user_id, review_status="pending"),
+        },
+        "item_types": sorted({r["type"] for r in types if r.get("type")}),
     }
 
 
@@ -169,17 +200,20 @@ async def export_okf(
 @router.post("/artifacts")
 async def ingest_artifact(
     request: ArtifactRequest,
+    background: BackgroundTasks,
     space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     return await pipeline.ingest_text(
         session, space.id, request.title, request.content,
         source=request.source, source_type="manual", author=request.author, tags=request.tags,
+        background=background,
     )
 
 
 @router.post("/artifacts/upload")
 async def ingest_file(
+    background: BackgroundTasks,
     file: UploadFile = File(...),
     title: str = Form(...),
     author: str = Form("unknown"),
@@ -191,13 +225,14 @@ async def ingest_file(
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     return await pipeline.ingest_document(
         session, space.id, title, content,
-        source="file", source_type="file", author=author, tags=tag_list,
+        source="file", source_type="file", author=author, tags=tag_list, background=background,
     )
 
 
 @router.post("/artifacts/url")
 async def ingest_url(
     request: UrlIngestRequest,
+    background: BackgroundTasks,
     space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
@@ -205,18 +240,21 @@ async def ingest_url(
     return await pipeline.ingest_document(
         session, space.id, request.title, content,
         source=request.url, source_type="url", author=request.author, tags=request.tags,
+        background=background,
     )
 
 
 @router.post("/artifacts/transcript")
 async def ingest_transcript(
     request: TranscriptRequest,
+    background: BackgroundTasks,
     space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     return await pipeline.ingest_transcript(
         session, space.id, request.title, request.content,
         source_type=request.source_type, author=request.author, tags=request.tags,
+        background=background,
     )
 
 
@@ -226,10 +264,16 @@ async def ingest_transcript(
 
 @router.get("/review")
 async def list_review_queue(
+    response: Response,
+    limit: int = Query(default=50, ge=1, le=PAGE_MAX),
+    offset: int = Query(default=0, ge=0),
     space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> List[Dict[str, Any]]:
-    items = await KnowledgeItemRepository(session).list(space.id, review_status="pending")
+    """Pending items, oldest first, a page at a time; X-Total-Count holds the length of the queue."""
+    repo = KnowledgeItemRepository(session)
+    items = await repo.list(space.id, review_status="pending", limit=limit, offset=offset)
+    response.headers["X-Total-Count"] = str(await repo.count(space.id, review_status="pending"))
     return [item_dict(i) for i in items]
 
 
@@ -292,7 +336,7 @@ async def search_knowledge(
     type: Optional[str] = None,
     source_type: Optional[str] = None,
     tag: Optional[str] = None,
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=50, ge=1, le=500),
     space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
@@ -310,12 +354,24 @@ async def search_knowledge(
     artifacts, artifact_total, snippets = await search.search_artifacts(
         space.id, q, source_type=source_type, tag=tag, limit=limit
     )
+    # sources have no page of their own: link each to an item extracted from it, whose
+    # page shows the source text (artifact results used to be dead ends)
+    first_items: Dict[str, str] = {}
+    if artifacts:
+        for row in await session.query(
+            "SELECT artifact_id, min(id) AS id FROM KnowledgeItem WHERE user_id = :u AND artifact_id IN :a "
+            "GROUP BY artifact_id", {"u": space.id, "a": [a["id"] for a in artifacts]},
+        ):
+            first_items[row["artifact_id"]] = row["id"]
     return {
         "query": q,
         "filters": {"type": type, "source_type": source_type, "tag": tag},
         "knowledge_items": [item_dict(i) for i in items],
+        # without their text: a matching passage comes back as `snippet`
         "artifacts": [
-            {**artifact_dict(a), **({"snippet": snippets[a["id"]]} if a["id"] in snippets else {})}
+            {**artifact_dict(a, content=False),
+             **({"snippet": snippets[a["id"]]} if a["id"] in snippets else {}),
+             **({"first_item_id": first_items[a["id"]]} if a["id"] in first_items else {})}
             for a in artifacts
         ],
         "total": item_total + artifact_total,
@@ -429,6 +485,49 @@ async def delete_artifact(
 # Knowledge items – read / update / delete
 # ---------------------------------------------------------------------------
 
+@router.get("/items")
+async def list_items(
+    q: Optional[str] = Query(default=None, max_length=200),
+    type: List[str] = Query(default=[]),
+    exclude_rejected: bool = False,
+    limit: int = Query(default=PAGE_DEFAULT, ge=1, le=PAGE_MAX),
+    offset: int = Query(default=0, ge=0),
+    space: Space = Depends(current_space),
+    session: ArcadeSession = Depends(get_session),
+) -> Dict[str, Any]:
+    """Items newest first, filtered by `q` (title or tags) and any of `type`, with the total that match."""
+    repo = KnowledgeItemRepository(session)
+    filters: Row = {"q": q, "types": type or None, "exclude_rejected": exclude_rejected}
+    items = await repo.list(space.id, **filters, limit=limit, offset=offset, newest_first=True)
+    return {"items": [item_dict(i) for i in items], "total": await repo.count(space.id, **filters)}
+
+
+@router.get("/items/{item_id}/context")
+async def item_context(
+    item_id: str,
+    space: Space = Depends(current_space),
+    session: ArcadeSession = Depends(get_session),
+) -> Dict[str, Any]:
+    """What the page of an item shows around it: its source (with text), its relationships, their titles."""
+    item = await _owned_item(session, space, item_id)
+    artifacts = ArtifactRepository(session)
+    artifact = await artifacts.get_owned(space.id, item["artifact_id"]) if item.get("artifact_id") else None
+    relationships = await RelationshipRepository(session).touching(space.id, [item_id])
+    other_ids = sorted({r[end] for r in relationships for end in ("from", "to")} - {item_id})
+    nodes = {i["id"]: {"title": i.get("title"), "kind": "item", "type": i.get("type")}
+             for i in await KnowledgeItemRepository(session).get_many(space.id, other_ids)}
+    for aid in [oid for oid in other_ids if oid not in nodes]:
+        a = await artifacts.get_owned(space.id, aid)
+        if a:
+            nodes[aid] = {"title": a.get("title"), "kind": "artifact", "type": "artifact"}
+    return {
+        "item": item_dict(item),
+        "artifact": artifact_dict(artifact) if artifact else None,
+        "relationships": relationships,
+        "nodes": nodes,
+    }
+
+
 @router.get("/items/{item_id}")
 async def get_item(
     item_id: str,
@@ -479,10 +578,12 @@ async def delete_item(
 
 @router.get("/graph")
 async def knowledge_graph(
+    limit: int = Query(default=300, ge=1, le=PAGE_MAX),
     space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    return await GraphStore(session).visualization(space.id)
+    """The newest `limit` nodes and the edges between them; `truncated` says whether there are more."""
+    return await GraphStore(session).visualization(space.id, limit=limit)
 
 
 # Must stay last: the catch-all path would otherwise shadow the GET routes above.

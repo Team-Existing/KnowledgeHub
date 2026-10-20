@@ -51,8 +51,8 @@ export class AuthService {
     return firstValueFrom(this.http.get<SetupStatus>(`${API_BASE}/auth/setup`))
   }
 
-  async registerAndLogin(username: string, password: string): Promise<void> {
-    await this.register(username, password)
+  async registerAndLogin(username: string, password: string, setupToken?: string): Promise<void> {
+    await this.register(username, password, setupToken)
     await this.login(username, password)
   }
 

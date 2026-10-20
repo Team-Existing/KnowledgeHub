@@ -2,7 +2,7 @@
   <div class="auth-card" [class.wide]="stage === 'needs-model'">
     <div class="auth-brand">
       <span class="brand-mark"><app-icon name="logo" [size]="22" /></span>
-      <h2>Knowledge Hubs</h2>
+      <h1>Knowledge Hubs</h1>
     </div>
 
     @if (stage === 'checking') {
@@ -14,7 +14,10 @@
       @if (justInstalled) { <p class="success-text">✓ {{ justInstalled }} is installed. Sign in to start.</p> }
       <div class="form-stack">
         <input placeholder="Username" [(ngModel)]="username" class="input-field" />
-        <input placeholder="Password" type="password" [(ngModel)]="password" class="input-field" (keydown.enter)="submit()" />
+        <input placeholder="Password" type="password" [(ngModel)]="password" class="input-field" (keydown.enter)="submit()"
+               [attr.autocomplete]="mode === 'register' ? 'new-password' : 'current-password'"
+               [attr.aria-describedby]="mode === 'register' ? 'password-rules' : null" />
+        @if (mode === 'register') { <p id="password-rules" class="muted-text" style="font-size:0.78rem">{{ passwordRules }}</p> }
         @if (mode === 'register' && needsSetupToken) {
           <input placeholder="Setup token" type="password" [(ngModel)]="setupToken" class="input-field"
                  autocomplete="off" aria-describedby="setup-token-help" (keydown.enter)="submit()" />

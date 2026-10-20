@@ -41,10 +41,15 @@ os.environ["ARCADEDB_PASSWORD"] = ARCADEDB_AUTH[1]
 os.environ["ARCADEDB_DATABASE"] = TEST_DATABASE
 os.environ["MAX_UPLOAD_MB"] = "1"
 os.environ["GRAPHRAG_RERANK"] = "on"
+# both off by default (evals/): the tests still cover them
+os.environ["GRAPHRAG_QUERY_REWRITE"] = "on"
+os.environ["GRAPHRAG_LLM_ROUTE"] = "on"
 os.environ["SECRET_KEY"] = secrets.token_urlsafe(48)
 os.environ["ALLOW_REGISTRATION"] = "true"
 # every test signs in from the same address; test_security turns the limiter back on
 os.environ["AUTH_RATE_LIMIT"] = "false"
+# the fake Ollama's installed models change mid-test: never serve a cached answer
+os.environ["OLLAMA_STATUS_CACHE_SECONDS"] = "0"
 os.environ.pop("SETUP_TOKEN", None)
 # the inactivity job would race the tests on the shared database; tests run it explicitly
 os.environ["RETENTION_ENABLED"] = "false"

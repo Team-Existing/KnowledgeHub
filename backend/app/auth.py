@@ -53,6 +53,44 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(_bcrypt_input(password), bcrypt.gensalt()).decode("ascii")
 
 
+# New passwords only; existing ones keep working. Short of a full breached-password
+# check, refuse the handful that guessing tools try first.
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_RULES = f"at least {PASSWORD_MIN_LENGTH} characters, not a common password and not your username"
+_COMMON_PASSWORDS = frozenset("""
+password password1 password12 password123 passw0rd p@ssw0rd p@ssword 12345678 123456789 1234567890
+12341234 11111111 00000000 87654321 qwertyui qwerty123 qwertyuiop 1q2w3e4r 1qaz2wsx asdfghjk
+iloveyou letmein1 welcome1 welcome123 admin123 administrator changeme changeme1 football baseball
+sunshine princess superman starwars trustno1 whatever monkey123 dragon123 abcd1234 abc12345
+""".split())
+
+
+def check_new_password(password: str, username: str = "") -> str:
+    """Validate a password for a new account. Raises ValueError (a 422 from Pydantic validators)."""
+    if len(password) < PASSWORD_MIN_LENGTH:
+        raise ValueError(f"Password must be {PASSWORD_RULES}")
+    lowered = password.lower()
+    if lowered in _COMMON_PASSWORDS or len(set(password)) == 1:
+        raise ValueError("That password is too common. Choose a less predictable one.")
+    if username and lowered == username.strip().lower():
+        raise ValueError("The password can't be the same as the username.")
+    return password
+
+
+# bcrypt of a random value, checked when the username doesn't exist, so that answering
+# "Invalid credentials" takes as long either way: the time no longer says whether a
+# name is registered (it was 15 ms for an unknown name against 250 ms for a real one).
+_DUMMY_HASH: Optional[str] = None
+
+
+def burn_password_check(plain: str) -> None:
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        import secrets
+        _DUMMY_HASH = hash_password(secrets.token_urlsafe(16))
+    verify_password(plain, _DUMMY_HASH)
+
+
 def verify_password(plain: str, hashed: str) -> bool:
     try:
         return bcrypt.checkpw(_bcrypt_input(plain), hashed.encode("ascii"))

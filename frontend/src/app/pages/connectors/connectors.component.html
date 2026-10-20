@@ -1,7 +1,7 @@
 <div class="knowledge-shell">
   <section class="toolbar">
     <div>
-      <h2>Connectors</h2>
+      <h1>Connectors</h1>
       <p>Pull knowledge from where it already lives. Syncs only re-process documents that changed.</p>
     </div>
     <a class="back-link" routerLink="/decisions">Decision log →</a>
@@ -11,7 +11,7 @@
 
   <!-- Add a source -->
   <section class="ingest-panel">
-    <h3 style="font-size:1rem;margin-bottom:0.75rem">Add a source</h3>
+    <h2 style="font-size:1rem;margin-bottom:0.75rem">Add a source</h2>
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
       @for (k of kinds; track k.kind) {
         <button [disabled]="!k.allowed" [title]="k.disabled_reason ?? ''" (click)="openNew(k)">{{ k.label }}</button>
@@ -26,7 +26,7 @@
 
     @if (formOpen && kind) {
       <div class="form-stack" style="margin-top:1rem;max-width:640px">
-        <h4 style="font-size:0.95rem">{{ editingId ? 'Edit' : 'New' }}: {{ kind.label }}</h4>
+        <h3 style="font-size:0.95rem">{{ editingId ? 'Edit' : 'New' }}: {{ kind.label }}</h3>
         <label class="form-row">
           <span class="muted-text">Name</span>
           <input [(ngModel)]="formName" />
@@ -63,7 +63,7 @@
 
   @if (connectors.length === 0 && !error) {
     <section class="empty-state">
-      <h3>No sources connected</h3>
+      <h2>No sources connected</h2>
       <p>Start with a folder of meeting transcripts or a repository of ADRs.</p>
     </section>
   }
@@ -75,7 +75,7 @@
           <span class="type-pill">{{ c.kind }}</span>
           <span class="status-badge" [ngClass]="statusClass(c)" style="text-transform:none">{{ statusLabel(c) }}</span>
         </div>
-        <h3>{{ c.name }}</h3>
+        <h2>{{ c.name }}</h2>
         <p class="muted-text" style="font-size:0.8rem;word-break:break-all">{{ summary(c) }}</p>
         @if (c.created_by) { <p class="muted-text" style="font-size:0.75rem">Added by {{ c.created_by }}</p> }
         @if (c.last_sync_at) { <p class="muted-text" style="font-size:0.75rem">Last sync {{ c.last_sync_at | date:'medium' }}</p> }

@@ -72,18 +72,21 @@ The schema lives in [`backend/app/schema.py`](../backend/app/schema.py) and is a
 
 `POST /knowledge/graphrag/query` with `{question, top_k, history}` runs these steps in the active space:
 
-1. **Transform and route, concurrently.** One LLM call rewrites the question into sub-queries plus a hypothetical answer (HyDE). At the same time, the question is embedded and classified (factual, exploratory, comparative or procedural) by comparing it with example phrases. The LLM classifier is used only when that comparison is ambiguous.
-2. **Embed** the HyDE document and sub-queries in a single batch.
+1. **Route.** The question is embedded and classified (factual, exploratory, comparative or procedural) by comparing it with example phrases, or by keywords when that's ambiguous. The route only adds a one-line hint to the answer prompt.
+2. **Rewrite (optional, `GRAPHRAG_QUERY_REWRITE=on`).** One LLM call rewrites the question into sub-queries plus a hypothetical answer (HyDE), embedded in one batch. Off by default: see *Measured* below. `GRAPHRAG_LLM_ROUTE=on` also asks the LLM to classify ambiguous questions.
 3. **Retrieve** several ranked lists:
-   - for the question and HyDE vectors: vector search, then a one-hop expansion along `CONTAINS`, `RELATED_TO`, `LINK` and `EVOLVES` edges
-   - for each sub-query: vector search
+   - for the question (and the HyDE text, if rewritten): vector search, then a one-hop expansion along `CONTAINS`, `RELATED_TO`, `LINK` and `EVOLVES` edges
+   - for each sub-query, if rewritten: vector search
    - for the question: full-text keyword search
 
    Rejected items are excluded from all of them.
 4. **Fuse** the ranked lists with Reciprocal Rank Fusion. Scores are normalised to 0–1.
-5. **Rerank (optional).** An LLM rerank runs only when there are more than 2 × `top_k` candidates. Set `GRAPHRAG_RERANK=off` to always keep the fusion order.
+5. **Rerank (optional, `GRAPHRAG_RERANK=on`).** An LLM rerank, when there are more than 2 × `top_k` candidates. Off by default.
 6. **Gate.** If the best fused score is below 0.5, the API returns "not enough relevant information" instead of asking the LLM.
-7. **Generate.** The LLM gets the context entries labelled with their full ids and cites them as `[item_id]`. Only ids that were actually in the context are returned as citations. Superseded or reversed decisions are marked as such, together with the decision that replaced them, and the prompt tells the LLM to present the replacement as current.
+7. **Ground.** Each selected item gets its details (who, why, due, steps…), the title of its source, and the passage of the source it came from.
+8. **Generate.** The context entries are numbered, `[1]`, `[2]`…; the LLM cites them by number, and the numbers are mapped back to items (a full id in brackets is accepted too). Only entries that were actually in the context count. If no entry is about the question, the LLM answers exactly "The knowledge base doesn't cover this." and nothing is cited. When an answer names its sources in words without citing them, they're matched by title and marked `inferred` ("matched" in the UI). Superseded or reversed decisions are marked as such, with what replaced them, and the prompt tells the LLM to present the replacement as current.
+
+**Measured.** [`backend/evals/`](../backend/evals/) ingests a fixed corpus and asks fixed questions against a real model; see its README. On llama3.1:8b on a laptop CPU, the rewrite and rerank calls took about 25 s each per question while retrieval already found the right source every time without them, and the model answered "the context doesn't say who" for owners that were on record, because only item titles reached the prompt. Grounding, numbered citations and dropping those calls took answers from 15 to 19 correct out of 19, "not covered" replies to answerable questions from 4 to 0, and the median answer time from 78 s to 13 s.
 
 The response includes `route`, `sub_queries`, `retrieval_mode`, `context_nodes`, `citations` (with each item's status), and `timings_ms` per stage. Every query is logged as a `QueryLog` document.
 

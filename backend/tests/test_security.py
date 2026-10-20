@@ -238,6 +238,41 @@ def test_mass_registration_is_throttled(client, rate_limited):
     assert register(client)[0].status_code == 429
 
 
+def test_sign_in_stays_fast_when_redis_hangs(client, rate_limited, monkeypatch):
+    # with the Redis container gone, even resolving its name can take many seconds:
+    # the limiter must give up within its budget, then leave Redis alone for a while
+    import asyncio
+    import time
+    from app import coordination
+    calls = []
+
+    class Hanging:
+        def __getattr__(self, name):
+            async def never(*a, **kw):
+                calls.append(name)
+                await asyncio.sleep(60)
+            return never
+
+    _, username = register(client)
+    t0 = time.perf_counter()
+    client.post("/auth/token", data={"username": username, "password": "secret123"})
+    baseline = time.perf_counter() - t0          # a sign-in here, with the limiter in memory
+    monkeypatch.setenv("REDIS_URL", "redis://redis.invalid:6379/0")
+    monkeypatch.setattr(coordination, "_redis", lambda: Hanging())
+    monkeypatch.setattr(coordination, "REDIS_TIMEOUT", 0.5)
+    t0 = time.perf_counter()
+    assert client.post("/auth/token", data={"username": username, "password": "secret123"}).status_code == 200
+    # one Redis call hangs, then the limiter gives up after its 0.5 s budget
+    assert time.perf_counter() - t0 < baseline + 1.5, "the sign-in waited on Redis past the limiter's budget"
+    first = len(calls)
+    assert first == 1
+    t0 = time.perf_counter()
+    assert client.post("/auth/token", data={"username": username, "password": "wrong"}).status_code == 401
+    assert client.post("/auth/token", data={"username": username, "password": "secret123"}).status_code == 200
+    assert len(calls) == first, "Redis was retried during its back-off"
+    assert time.perf_counter() - t0 < 2 * baseline + 1
+
+
 def test_rate_limits_are_shared_through_redis(client, rate_limited, monkeypatch):
     # in worker mode every app instance counts in Redis, so guesses spread over instances add up
     import os
@@ -419,3 +454,30 @@ def test_roles_migration_demotes_everyone_but_the_earliest_admin(client):
     demoted, again, roles = client.portal.call(go)
     assert sorted(demoted) == ["later", "latest"] and again == []
     assert roles == {"old_founder": "admin", "later": "member", "latest": "member"}
+
+
+# ── passwords ───────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("password, reason", [
+    ("short1", "at least 8"), ("password123", "too common"), ("aaaaaaaaaa", "too common"),
+])
+def test_weak_passwords_are_refused(client, password, reason):
+    r = client.post("/auth/register", json={"username": f"user_{uuid.uuid4().hex[:10]}", "password": password})
+    assert r.status_code == 422 and reason in r.text
+
+
+def test_the_password_cannot_be_the_username(client, make_user):
+    name = f"Same_{uuid.uuid4().hex[:6]}"
+    r = client.post("/auth/register", json={"username": name, "password": name.lower()})
+    assert r.status_code == 422 and "same as the username" in r.text
+    r = client.post("/admin/users", headers=make_user(role="admin"), json={"username": name, "password": "short"})
+    assert r.status_code == 422                       # admin-created accounts follow the same rules
+
+
+def test_an_unknown_username_costs_a_password_check_too(client, monkeypatch):
+    """Regression: unknown names answered in 15 ms and real ones in 250 ms, which told them apart."""
+    import app.routers.auth as auth_router
+    burned = []
+    monkeypatch.setattr(auth_router, "burn_password_check", lambda plain: burned.append(plain))
+    r = client.post("/auth/token", data={"username": f"ghost_{uuid.uuid4().hex[:8]}", "password": "guess-1234"})
+    assert r.status_code == 401 and burned == ["guess-1234"]
