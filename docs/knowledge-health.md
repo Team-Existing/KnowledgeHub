@@ -10,6 +10,7 @@ Health never comes from age alone. An item is only questioned on evidence:
 | **No longer in its source** | The source changes and no longer contains the item. Accepted items, and items with a decision history, are kept and flagged rather than deleted |
 | **Something it builds on changed** | The decision it amends is reversed or superseded; a decision that mitigates it (a risk) is reversed or superseded; the risk it mitigates happens anyway |
 | **Flagged** | Someone marks it as possibly outdated, with a reason |
+| **Outcome not achieved** | A decision's recorded [outcome](commitments.md) is *not achieved* |
 
 Each item then has one of three states:
 
@@ -19,7 +20,7 @@ Each item then has one of three states:
 | **Needs review** | No signal, but its review date is within 14 days or has passed |
 | **Up to date** | Neither |
 
-Items whose status already says they no longer hold (superseded, reversed, rejected, deprecated, closed) aren't questioned. Items still waiting in the review queue aren't flagged when their source changes, because they will be reviewed anyway.
+Items whose status already says they no longer hold (superseded, reversed, rejected, deprecated, closed, and commitments that are done or dropped) aren't questioned. Items still waiting in the review queue aren't flagged when their source changes, because they will be reviewed anyway.
 
 ## What you do about it
 

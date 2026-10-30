@@ -1,0 +1,59 @@
+<section class="detail-panel" id="tracking">
+  @if (item.type === 'action-item' && item.commitment; as c) {
+    <h2>Commitment</h2>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+      <select [ngModel]="item.status ?? 'open'" (ngModelChange)="setStatus($event)" [disabled]="busy" aria-label="Status">
+        @for (s of statuses; track s) { <option [value]="s">{{ statusLabel[s] }}</option> }
+      </select>
+      @if (c.overdue) { <span class="status-badge is-overdue">Overdue</span> }
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-top:0.75rem">
+      <input [(ngModel)]="owner" placeholder="Owner (a person or team)" maxlength="120" aria-label="Owner" style="flex:1;min-width:180px" />
+      <input type="date" [(ngModel)]="dueDate" aria-label="Due date" />
+      <button [disabled]="busy || (owner === (c.owner ?? '') && dueDate === (c.due_date ?? ''))" (click)="saveCommitment()">Save</button>
+    </div>
+    @if (c.due_text) { <p class="field-help" style="margin-top:0.4rem">The source says it's due “{{ c.due_text }}”. Set a date to track it.</p> }
+    <p class="field-help" style="margin-top:0.4rem">Link it to the decision it carries out below (<em>Carries out the decision …</em>) to see it in that decision's outcome.</p>
+  }
+
+  @if (item.type === 'decision' && item.outcome; as o) {
+    <h2>Outcome</h2>
+    @if (editingExpectation) {
+      <label class="field-help" for="expected">What should this decision achieve?</label>
+      <textarea id="expected" rows="2" [(ngModel)]="expected" maxlength="1000"
+                placeholder="e.g. No lost transactions after the move; p95 latency under 100 ms" style="width:100%"></textarea>
+      <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.4rem;flex-wrap:wrap">
+        <label class="field-help" for="check-by">Check by</label>
+        <input id="check-by" type="date" [(ngModel)]="checkBy" />
+        <button [disabled]="busy" (click)="saveExpectation()">Save</button>
+        @if (o.expected) { <button class="link-btn" (click)="editingExpectation = false">Cancel</button> }
+      </div>
+    } @else {
+      <p><strong>Expected:</strong> {{ o.expected }}
+        @if (o.check_by) { <span class="muted-text"> · check by {{ o.check_by | date:'mediumDate' }}</span> }
+        @if (o.due) { <span class="status-badge is-overdue">Due for a verdict</span> }
+        <button class="link-btn" (click)="editingExpectation = true">Edit</button>
+      </p>
+    }
+
+    @if (o.verdict) {
+      <p style="margin-top:0.75rem">
+        <span class="status-badge" [ngClass]="'verdict-' + o.verdict">{{ verdictLabel[o.verdict] }}</span>
+        @if (o.note) { <span> “{{ o.note }}”</span> }
+        <span class="muted-text"> · {{ o.recorded_by }}, {{ o.recorded_at | date:'mediumDate' }}</span>
+        <button class="link-btn" [disabled]="busy" (click)="recordVerdict(null)">Withdraw</button>
+      </p>
+    } @else if (o.expected) {
+      <h3 style="font-size:0.875rem;margin:1rem 0 0.4rem">Did it work?</h3>
+      <textarea rows="2" [(ngModel)]="verdictNote" maxlength="2000" style="width:100%"
+                placeholder="The evidence: what happened, numbers, incidents…" aria-label="Evidence"></textarea>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.4rem">
+        @for (v of verdicts; track v) {
+          <button [disabled]="busy" (click)="recordVerdict(v)">{{ verdictLabel[v] }}</button>
+        }
+      </div>
+      <p class="field-help" style="margin-top:0.4rem">“Not achieved” flags the decision on the Health page for a second look.</p>
+    }
+  }
+  @if (error) { <p class="error-text">{{ error }}</p> }
+</section>

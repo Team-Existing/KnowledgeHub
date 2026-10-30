@@ -33,10 +33,10 @@ from app.repositories import ItemEventRepository, KnowledgeItemRepository, Linea
 
 Row = Dict[str, Any]
 
-SIGNAL_KINDS = ("source_changed", "removed_from_source", "dependency_changed", "flagged")
+SIGNAL_KINDS = ("source_changed", "removed_from_source", "dependency_changed", "flagged", "outcome_not_achieved")
 REVIEW_SOON_DAYS = 14
 # statuses that already say an item no longer holds
-RETIRED_STATUSES = ["superseded", "reversed", "rejected", "deprecated", "closed"]
+RETIRED_STATUSES = ["superseded", "reversed", "rejected", "deprecated", "closed", "done", "dropped"]
 
 
 def _now() -> str:

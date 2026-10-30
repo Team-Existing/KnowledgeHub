@@ -48,11 +48,11 @@ The schema lives in [`backend/app/schema.py`](../backend/app/schema.py) and is a
 |---|---|---|
 | `Node` | vertex supertype | `id` (unique across all nodes), `user_id` = the owning **space** (see below) |
 | `Artifact` | vertex, extends `Node` | source document; its LLM summary and summary embedding live here |
-| `KnowledgeItem` | vertex, extends `Node` | extracted item; `embedding` for vector search; review state; `status` / `declared_status` for decisions and risks; `health_signals`, `review_due`, `verified_at` / `verified_by` ([knowledge health](knowledge-health.md)) |
+| `KnowledgeItem` | vertex, extends `Node` | extracted item; `embedding` for vector search; review state; `status` / `declared_status` for decisions, risks and commitments; `owner`, `due_date` (commitments) and `expected_outcome`, `outcome_check_by`, `outcome`, `outcome_note` ([commitments and outcomes](commitments.md)); `health_signals`, `review_due`, `verified_at` / `verified_by` ([knowledge health](knowledge-health.md)) |
 | `CONTAINS` | edge | artifact → item |
 | `RELATED_TO` | edge | item → item cross-link, with `score` |
 | `LINK` | edge | any node → node, from OKF import; `type` holds the relation label |
-| `EVOLVES` | edge | item → item, newer → older; `kind` is `supersedes`, `reverses`, `amends`, `realizes`, `mitigates` or `learned_from` |
+| `EVOLVES` | edge | item → item, newer → older; `kind` is `supersedes`, `reverses`, `amends`, `realizes`, `mitigates`, `learned_from` or `implements` |
 | `User` | document | `role` (`admin` / `member`), `username_key` (unique, case-folded), `last_active_at`, `last_login_at`, chosen `llm_model` |
 | `Organization` | document | the tenant: name, creator. Its id (`org_…`) is also its space's id |
 | `OrgMember` | document | user ↔ organization: `role` (`owner`, `admin`, `member`), `status` (`active`, `left`, `removed`), `joined_at`, `left_at` |

@@ -9,8 +9,9 @@ Items are linked newer -> older with EVOLVES edges of one of these kinds:
   realizes      any      -> risk       evidence that the risk actually happened
   mitigates     any      -> risk       something that reduces or removes the risk
   learned_from  lesson   -> any        the lesson came out of that item (incident, decision, ...)
+  implements    action-item -> decision  the commitment carries out the decision (services/tracking.py)
 
-Decisions and risks carry a lifecycle `status`. It is derived, never edited
+Decisions, risks and action items (commitments) carry a lifecycle `status`. It is derived, never edited
 directly: incoming edges win (reverses > supersedes, realizes > mitigates),
 then the user's `declared_status`, then the default (active / open). Every
 change that could move a status calls refresh_statuses(), which stores the new
@@ -38,19 +39,22 @@ LINK_KINDS: Dict[str, tuple[Optional[Set[str]], Optional[Set[str]]]] = {
     "realizes": (None, {"risk"}),
     "mitigates": (None, {"risk"}),
     "learned_from": ({"lesson"}, None),
+    "implements": ({"action-item"}, {"decision"}),
 }
 # kinds that form a decision's evolution chain
 CHAIN_KINDS = {"supersedes", "reverses", "amends"}
 
-DEFAULT_STATUS = {"decision": "active", "risk": "open"}
+DEFAULT_STATUS = {"decision": "active", "risk": "open", "action-item": "open"}
 DECLARABLE_STATUSES = {
     "decision": ["proposed", "active", "deprecated", "rejected", "reversed", "superseded"],
     "risk": ["open", "mitigated", "materialized", "closed"],
+    "action-item": ["open", "in_progress", "done", "dropped"],
 }
 # (incoming edge kind, resulting status), strongest first
 _EDGE_STATUS = {
     "decision": [("reverses", "reversed"), ("supersedes", "superseded")],
     "risk": [("realizes", "materialized"), ("mitigates", "mitigated")],
+    "action-item": [],                      # only ever declared
 }
 
 # cosine similarity a candidate needs before it is suggested as a link
@@ -192,7 +196,7 @@ async def declare_status(session: ArcadeSession, user_id: str, item: Row, status
     """Set (or clear, with None) the user's declared status. Commits."""
     allowed = DECLARABLE_STATUSES.get(item["type"])
     if allowed is None:
-        raise LineageError(f"Only decisions and risks have a status, not a {item['type']}")
+        raise LineageError(f"Only decisions, risks and action items have a status, not a {item['type']}")
     if status is not None and status not in allowed:
         raise LineageError(f"A {item['type']} status must be one of: {', '.join(allowed)}")
     await KnowledgeItemRepository(session).update(user_id, item["id"], {"declared_status": status})
@@ -263,6 +267,9 @@ def _suggested_link(item: Row, cand: Row) -> Optional[Row]:
             return None
         kind = "realizes" if other["type"] == "lesson" else "mitigates"
         return {"kind": kind, "from": other["id"], "to": risk["id"]}
+    if {it, ct} == {"action-item", "decision"}:
+        commitment, decision = (item, cand) if it == "action-item" else (cand, item)
+        return {"kind": "implements", "from": commitment["id"], "to": decision["id"]}
     if it == "lesson":
         return {"kind": "learned_from", "from": item["id"], "to": cand["id"]}
     if ct == "lesson":
@@ -276,7 +283,7 @@ async def suggest_links(session: ArcadeSession, user_id: str, item: Row, limit: 
     time (an older decision this one replaces, a lesson that shows a risk
     happened, ...). Already-linked items are left out.
     """
-    if item["type"] not in ("decision", "risk", "lesson"):
+    if item["type"] not in ("decision", "risk", "lesson", "action-item"):
         return []
     vector = await session.scalar(
         "SELECT embedding FROM KnowledgeItem WHERE id = :id AND user_id = :u", {"id": item["id"], "u": user_id}
@@ -285,14 +292,18 @@ async def suggest_links(session: ArcadeSession, user_id: str, item: Row, limit: 
         return []
     linked = {node for e in await LineageRepository(session).touching(user_id, item["id"])
               for node in (e["from"], e["to"])}
-    wanted = {"decision": {"decision", "lesson"},
+    wanted = {"decision": {"decision", "lesson", "action-item"},
               "risk": {"lesson", "decision", "action-item", "how-to", "best-practice"},
-              "lesson": {"risk", "decision"}}[item["type"]]
+              "lesson": {"risk", "decision"},
+              "action-item": {"decision"}}[item["type"]]
     items = KnowledgeItemRepository(session)
     out: List[Row] = []
     for hit in await GraphStore(session).vector_search(user_id, vector, top_k=30):
+        # a commitment usually comes from the same meeting as its decision; other links span sources
+        same_source_ok = {item["type"], hit.get("kind")} == {"action-item", "decision"}
         if (hit["id"] == item["id"] or hit["id"] in linked or hit.get("kind") not in wanted
-                or hit.get("artifact_id") == item.get("artifact_id") or hit["score"] < SUGGEST_MIN_SCORE):
+                or (hit.get("artifact_id") == item.get("artifact_id") and not same_source_ok)
+                or hit["score"] < SUGGEST_MIN_SCORE):
             continue
         cand = await items.get_owned(user_id, hit["id"])
         link = _suggested_link(item, cand) if cand else None

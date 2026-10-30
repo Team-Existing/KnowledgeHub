@@ -381,9 +381,11 @@ main {
 .tag-row span { background: var(--surface-3); color: var(--text-2); font-weight: 500; }
 
 .status-badge { background: var(--surface-3); color: var(--text-2); text-transform: capitalize; }
-.status-active, .status-mitigated, .status-closed { background: var(--success-soft); color: var(--success-text); }
-.status-proposed, .status-open { background: var(--info-soft); color: var(--info-text); }
-.status-superseded, .status-deprecated { background: var(--surface-3); color: var(--text-3); text-decoration: line-through; }
+.status-active, .status-mitigated, .status-closed, .status-done, .verdict-achieved { background: var(--success-soft); color: var(--success-text); }
+.status-proposed, .status-open, .status-in_progress { background: var(--info-soft); color: var(--info-text); }
+.status-superseded, .status-deprecated, .status-dropped { background: var(--surface-3); color: var(--text-3); text-decoration: line-through; }
+.verdict-partly, .is-overdue { background: var(--warning-soft); color: var(--warning-text); }
+.verdict-not_achieved { background: var(--danger-soft); color: var(--danger-text); }
 .status-reversed, .status-rejected, .status-materialized { background: var(--danger-soft); color: var(--danger-text); }
 .health-potentially_stale, .health-needs_review { background: var(--warning-soft); color: var(--warning-text); }
 .health-ok { background: var(--success-soft); color: var(--success-text); }
