@@ -21,6 +21,7 @@ Where settings go depends on how you run it:
 | `SETUP_TOKEN` | — (**required** in `deploy/`) | Registering the first account, which becomes the server admin, asks for this token. Set it on any server others can reach. Empty = no token needed |
 | `AUTH_RATE_LIMIT` | `true` | Sign-in throttling: 5 failed attempts per account and 30 in total per client address every 15 minutes, and 20 sign-ups per address an hour (429 with `Retry-After`). Shared through Redis in worker mode |
 | `API_DOCS` | `true` (`false` in `deploy/`) | Interactive API docs at `/docs`, `/redoc` and `/openapi.json` |
+| `LOG_LEVEL` | `INFO` | The app's log level. At `INFO` each LLM call logs its model, duration and token counts, and a reply cut off by its token limit is a warning |
 | `RETENTION_INACTIVE_DAYS` | `365` | Accounts and groups unused this long are deleted with their data |
 | `RETENTION_CHECK_HOURS` | `24` | How often the clean-up runs (also once at startup) |
 | `RETENTION_ENABLED` | `true` | `false` turns automatic deletion off; admins still see what's due |

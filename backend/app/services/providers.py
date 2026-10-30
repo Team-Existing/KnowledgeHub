@@ -110,7 +110,13 @@ class OllamaProvider(LLMProvider):
             ) as client:
                 r = await client.post(f"{OLLAMA_BASE}/api/chat", json=payload)
                 r.raise_for_status()
-                return r.json()["message"]["content"].strip()
+                body = r.json()
+            logger.info("LLM %s: %.1f s, %s prompt + %s reply tokens", self.model,
+                        (body.get("total_duration") or 0) / 1e9, body.get("prompt_eval_count"), body.get("eval_count"))
+            if body.get("done_reason") == "length":
+                logger.warning("LLM %s stopped at the %d-token reply limit; the reply is cut short",
+                               self.model, max_tokens)
+            return body["message"]["content"].strip()
         except Exception as exc:
             logger.warning("OllamaProvider.chat() failed: %s", exc)
             return None
@@ -220,7 +226,6 @@ def _resolve_llm(workspace: Optional[Any] = None) -> LLMProvider:
 
 
 def _resolve_embedding(workspace: Optional[Any] = None) -> EmbeddingProvider:
-    logger.info("Embedding provider: local sentence-transformers (%s)", LOCAL_EMBED_MODEL)
     return LocalSentenceTransformerProvider()
 
 

@@ -23,6 +23,12 @@ from app.services import retention
 from app.services.connectors.sync import QueueUnavailable
 from app.services.providers import get_embedding_provider
 
+# Without this the app's own INFO lines (LLM calls, migrations, database setup) were dropped:
+# uvicorn configures only its own loggers.
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper(),
+                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+for _noisy in ("httpx", "httpcore"):   # one line per ArcadeDB statement
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

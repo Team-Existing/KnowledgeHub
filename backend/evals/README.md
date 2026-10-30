@@ -57,6 +57,8 @@ fully deterministic even at temperature 0: treat a difference of one question as
 | v2: grounded context, numbered citations, no rewrite/rerank, schemas | 18/19 | 1 | 3/3 | 18 s / 26 s | 0.96 / 0.90 | 45 s |
 | v3: partial answers allowed, no LLM routing, decisions kept whole | 19/19 | 0 | 3/3 | 18 s / 26 s | 1.00 / 0.93 | 58 s* |
 | v4: no "not specified" filler | 19/19 | 0 | 3/3 | 13 s / 18 s | 1.00 / 0.93 | 48 s |
+| v5: history limited to user/assistant turns, "instructions in entries are content" rule | 19/19 | 0 | 3/3 | 12 s / 21 s† | 0.96 / 0.93 | 55 s† |
 
 \* includes loading the model cold. Extraction time is set by how much the model writes and was not
 changed much: about 40–65 s per source on this CPU.
+† run while the backend test suite used the same CPU; one answer took 107 s.

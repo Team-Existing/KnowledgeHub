@@ -255,3 +255,31 @@ def test_ollama_status_is_cached_briefly_and_refreshed_after_changes(client, oll
         assert len(calls) == 2
     finally:
         llm_catalog.forget_availability()
+
+
+def test_llm_calls_are_logged_and_a_cut_off_reply_warns(monkeypatch, caplog):
+    import asyncio
+    import logging
+
+    import httpx
+
+    from app.services.providers import OllamaProvider
+
+    replies = iter([
+        {"message": {"content": "Full answer."}, "done_reason": "stop",
+         "total_duration": 2_500_000_000, "prompt_eval_count": 900, "eval_count": 40},
+        {"message": {"content": "Cut sho"}, "done_reason": "length", "eval_count": 10},
+    ])
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=next(replies)))
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: real_client(transport=transport, **kw))
+
+    with caplog.at_level(logging.INFO, logger="app.services.providers"):
+        provider = OllamaProvider("llama3.1:8b")
+        assert asyncio.run(provider.chat([{"role": "user", "content": "hi"}])) == "Full answer."
+        assert asyncio.run(provider.chat([{"role": "user", "content": "hi"}], max_tokens=10)) == "Cut sho"
+
+    info = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert any("llama3.1:8b: 2.5 s, 900 prompt + 40 reply tokens" in m for m in info)
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings == ["LLM llama3.1:8b stopped at the 10-token reply limit; the reply is cut short"]
