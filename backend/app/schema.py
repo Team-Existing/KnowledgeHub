@@ -21,6 +21,8 @@ SyncedDocument            one fetched source document -> the artifact it was ing
 Organization              the tenant: its own shared space, members, groups and invite links
 OrgMember                 user <-> organization: role owner | admin | member, status active | left | removed
 OrgInvite                 an invite link to an organization (only the token's hash is stored)
+OrgDomain                 an email domain whose verified SSO users join the organization
+SsoIdentity               a provider account (provider + subject) that signs in as a user
 GroupSpace                a group: a shared space inside an organization (org_id)
 Membership                user <-> group: status invited | active | declined | left | removed
 
@@ -54,6 +56,8 @@ CREATE PROPERTY User.role IF NOT EXISTS STRING
 CREATE PROPERTY User.created_at IF NOT EXISTS STRING
 CREATE PROPERTY User.token_version IF NOT EXISTS INTEGER
 CREATE PROPERTY User.llm_model IF NOT EXISTS STRING
+CREATE PROPERTY User.email IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON User (email) NOTUNIQUE
 CREATE INDEX IF NOT EXISTS ON User (id) UNIQUE
 CREATE INDEX IF NOT EXISTS ON User (username) UNIQUE
 
@@ -183,6 +187,25 @@ CREATE PROPERTY OrgMember.updated_at IF NOT EXISTS STRING
 CREATE INDEX IF NOT EXISTS ON OrgMember (id) UNIQUE
 CREATE INDEX IF NOT EXISTS ON OrgMember (org_id) NOTUNIQUE
 CREATE INDEX IF NOT EXISTS ON OrgMember (user_id) NOTUNIQUE
+
+CREATE DOCUMENT TYPE SsoIdentity IF NOT EXISTS
+CREATE PROPERTY SsoIdentity.id IF NOT EXISTS STRING
+CREATE PROPERTY SsoIdentity.user_id IF NOT EXISTS STRING
+CREATE PROPERTY SsoIdentity.provider IF NOT EXISTS STRING
+CREATE PROPERTY SsoIdentity.subject IF NOT EXISTS STRING
+CREATE PROPERTY SsoIdentity.email IF NOT EXISTS STRING
+CREATE PROPERTY SsoIdentity.created_at IF NOT EXISTS STRING
+CREATE PROPERTY SsoIdentity.last_used_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON SsoIdentity (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON SsoIdentity (user_id) NOTUNIQUE
+
+CREATE DOCUMENT TYPE OrgDomain IF NOT EXISTS
+CREATE PROPERTY OrgDomain.domain IF NOT EXISTS STRING
+CREATE PROPERTY OrgDomain.org_id IF NOT EXISTS STRING
+CREATE PROPERTY OrgDomain.added_by IF NOT EXISTS STRING
+CREATE PROPERTY OrgDomain.added_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON OrgDomain (domain) UNIQUE
+CREATE INDEX IF NOT EXISTS ON OrgDomain (org_id) NOTUNIQUE
 
 CREATE DOCUMENT TYPE OrgInvite IF NOT EXISTS
 CREATE PROPERTY OrgInvite.id IF NOT EXISTS STRING

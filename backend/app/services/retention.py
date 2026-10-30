@@ -147,6 +147,7 @@ async def delete_user(session: ArcadeSession, user_id: str) -> Row:
     await session.execute("DELETE FROM QueryLog WHERE asked_by = :u", {"u": user_id})   # their questions in groups
     await session.execute("DELETE FROM Membership WHERE user_id = :u", {"u": user_id})
     await session.execute("DELETE FROM OrgMember WHERE user_id = :u", {"u": user_id})
+    await session.execute("DELETE FROM SsoIdentity WHERE user_id = :u", {"u": user_id})
     await session.execute("DELETE FROM User WHERE id = :u", {"u": user_id})
     await session.commit()
     return {"handed_over": handed_over, "groups_deleted": groups_deleted, "organizations_deleted": orgs_deleted}

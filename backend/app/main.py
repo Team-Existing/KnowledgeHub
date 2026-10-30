@@ -18,7 +18,7 @@ from app.auth import check_secret_key
 from app.db import close_db, get_client, init_db, migrate_on_startup
 from app.middleware import BodySizeLimitMiddleware
 from app.routers import (admin, auth, connectors, graphrag, groups, health, knowledge, knowledge_health, lineage,
-                         models, organizations)
+                         models, organizations, sso)
 from app.services.file_ingestion import MAX_UPLOAD_BYTES
 from app.services import retention
 from app.services.connectors.sync import QueueUnavailable
@@ -87,6 +87,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(sso.router)
 app.include_router(admin.router)
 app.include_router(groups.router)
 app.include_router(organizations.router)

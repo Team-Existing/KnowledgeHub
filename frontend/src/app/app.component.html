@@ -52,7 +52,7 @@
         <div class="user-chip">
           <span class="avatar">{{ initials() }}</span>
           <span class="user-meta">
-            <span class="user-name">{{ auth.me()?.username }}</span>
+            <a class="user-name" routerLink="/account" title="Your account and sign-in methods">{{ auth.me()?.username }}</a>
             <span class="user-role">{{ auth.me()?.role === 'admin' ? 'Server admin' : 'Member' }}</span>
           </span>
           <button class="icon-btn" (click)="logout()" title="Sign out"><app-icon name="logout" [size]="17" label="Sign out" /></button>

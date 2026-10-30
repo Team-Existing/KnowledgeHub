@@ -67,6 +67,7 @@ class OrganizationRepository:
         for doc in ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog"):
             await self.session.execute(f"DELETE FROM {doc} WHERE user_id = :o", p)
         await self.session.execute("DELETE FROM OrgInvite WHERE org_id = :o", p)
+        await self.session.execute("DELETE FROM OrgDomain WHERE org_id = :o", p)
         await self.session.execute("DELETE FROM OrgMember WHERE org_id = :o", p)
         await self.session.execute("DELETE FROM Organization WHERE id = :o", p)
 
@@ -166,6 +167,41 @@ class OrganizationRepository:
                         await groups.set_membership(gid, owner["user_id"], role=GROUP_ADMIN, status=ACTIVE,
                                                     invited_by=None, created_at=stamp, responded_at=stamp)
         await self.set_member(org_id, user_id, status=status, left_at=stamp)
+
+    # ── email domains (join on SSO sign-in) ─────────────────────────────────
+
+    async def domains(self, org_id: str) -> List[Row]:
+        rows = await self.session.query(
+            "SELECT domain, added_by, added_at FROM OrgDomain WHERE org_id = :o ORDER BY domain", {"o": org_id})
+        names = await self._usernames([r["added_by"] for r in rows])
+        return [{**r, "added_by": names.get(r["added_by"], "?")} for r in rows]
+
+    async def domain_owner(self, domain: str) -> Optional[str]:
+        row = await self.session.query_one("SELECT org_id FROM OrgDomain WHERE domain = :d", {"d": domain})
+        return row["org_id"] if row else None
+
+    async def add_domain(self, org_id: str, domain: str, user_id: str) -> None:
+        await self.session.execute("INSERT INTO OrgDomain CONTENT :doc", {"doc": {
+            "domain": domain, "org_id": org_id, "added_by": user_id, "added_at": now()}})
+
+    async def remove_domain(self, org_id: str, domain: str) -> bool:
+        found = await self.session.query_one(
+            "SELECT domain FROM OrgDomain WHERE domain = :d AND org_id = :o", {"d": domain, "o": org_id})
+        if found:
+            await self.session.execute("DELETE FROM OrgDomain WHERE domain = :d", {"d": domain})
+        return bool(found)
+
+    async def join_by_domain(self, user_id: str, domain: Optional[str]) -> Optional[str]:
+        """
+        Add the user to the organization that claimed their verified email's domain,
+        as a member, unless they've been in it before (someone who left or was
+        removed isn't pulled back in). Returns the organization's id if they joined.
+        """
+        org_id = await self.domain_owner(domain) if domain else None
+        if not org_id or await self.member(org_id, user_id):
+            return None
+        await self.set_member(org_id, user_id, role=MEMBER, status=ACTIVE, joined_at=now(), via_domain=domain)
+        return org_id
 
     # ── invite links ────────────────────────────────────────────────────────
 

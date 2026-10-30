@@ -245,6 +245,28 @@ export interface Me {
   role: Role | string
   permissions: Permission[]
   llm_model: string | null
+  /** verified by a single sign-on provider; null for password-only accounts */
+  email?: string | null
+}
+
+/** GET /auth/sso/providers */
+export interface SsoProvider {
+  id: string
+  name: string
+}
+
+/** GET /auth/sso/identities */
+export interface SsoAccount {
+  email: string | null
+  has_password: boolean
+  identities: { provider: string; name: string; email: string | null; created_at: string; last_used_at: string }[]
+}
+
+/** GET /organizations/{id}/domains */
+export interface OrgDomain {
+  domain: string
+  added_by: string
+  added_at: string
 }
 
 /** GET /admin/users */

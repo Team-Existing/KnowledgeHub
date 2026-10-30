@@ -1,0 +1,48 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h1>Your account</h1>
+      <p>{{ auth.me()?.username }}</p>
+    </div>
+  </section>
+
+  @if (error) { <p class="error-text" style="padding:0 0.25rem">{{ error }}</p> }
+  @if (notice) { <p class="space-banner">{{ notice }}</p> }
+
+  <section class="detail-panel">
+    <h2>Email</h2>
+    @if (account?.email) {
+      <p>{{ account?.email }} <span class="muted-text">· verified by single sign-on</span></p>
+    } @else {
+      <p class="muted-text">No verified email. Connect a sign-in provider below to add yours; it's then used to
+        join your company's organization automatically, if it has claimed your domain.</p>
+    }
+
+    <h2 style="margin-top:1.25rem">Sign-in methods</h2>
+    <div class="lineage-list">
+      <div class="lineage-row">
+        <span class="grow">Password</span>
+        <span class="muted-text">{{ account?.has_password ? 'set' : 'none: this account signs in with single sign-on' }}</span>
+      </div>
+      @for (i of account?.identities ?? []; track i.provider) {
+        <div class="lineage-row">
+          <span class="grow">{{ i.name }} @if (i.email) { <span class="muted-text">· {{ i.email }}</span> }</span>
+          <span class="muted-text">connected {{ i.created_at | date:'mediumDate' }}</span>
+          <button class="link-btn" [disabled]="busy || !canDisconnect()" (click)="disconnect(i.provider, i.name)"
+                  [title]="canDisconnect() ? '' : 'It is your only way to sign in'">Disconnect</button>
+        </div>
+      }
+      @for (p of providers; track p.id) {
+        @if (!connected(p)) {
+          <div class="lineage-row">
+            <span class="grow">{{ p.name }}</span>
+            <button class="primary" [disabled]="busy" (click)="connect(p)">Connect</button>
+          </div>
+        }
+      }
+    </div>
+    @if (!providers.length && !account?.identities?.length) {
+      <p class="muted-text" style="margin-top:0.5rem">This server doesn't offer single sign-on.</p>
+    }
+  </section>
+</div>

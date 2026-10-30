@@ -10,6 +10,12 @@ Roles:
   admin   rename it, create and revoke member invite links, remove members
   member  use the organization's space, create groups in it, leave
 
+Email domains: an owner can claim their own verified email's domain (one that
+an SSO provider vouched for, see services/sso.py). Anyone who then signs in
+with SSO with a verified address at that domain joins as a member. Public mail
+services (gmail.com …) can't be claimed, and each domain belongs to at most
+one organization.
+
 Invite links carry a random token; only its hash is stored, so a link is shown
 once, when it's created. A link expires (1-30 days) and can be limited to a
 number of uses. Someone removed from the organization can't rejoin through a
@@ -29,6 +35,8 @@ from app.repositories.groups import ACTIVE, REMOVED
 from app.repositories.organizations import (
     ADMIN, LEFT, MEMBER, OWNER, OrganizationRepository, now, usable,
 )
+from app.repositories import UserRepository
+from app.services import sso
 from app.services.connectors.sync import is_running
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -46,6 +54,10 @@ class OrgRename(BaseModel):
 
 class RoleChange(BaseModel):
     role: Literal["owner", "admin", "member"]
+
+
+class DomainAdd(BaseModel):
+    domain: str = Field(min_length=3, max_length=253)
 
 
 class InviteCreate(BaseModel):
@@ -221,6 +233,63 @@ async def leave_organization(
         raise HTTPException(status_code=409, detail="You're the only owner: make someone else an owner, "
                                                     "or delete the organization")
     await repo.detach(org_id, current_user.id, LEFT)
+    await session.commit()
+    return Response(status_code=204)
+
+
+# ── email domains ───────────────────────────────────────────────────────────
+
+@router.get("/{org_id}/domains")
+async def list_domains(
+    org_id: str,
+    current_user: User = Depends(get_current_user),
+    session: ArcadeSession = Depends(get_session),
+) -> List[Row]:
+    await _at_least_admin(session, org_id, current_user)
+    return await OrganizationRepository(session).domains(org_id)
+
+
+@router.post("/{org_id}/domains", status_code=201)
+async def add_domain(
+    org_id: str,
+    body: DomainAdd,
+    current_user: User = Depends(get_current_user),
+    session: ArcadeSession = Depends(get_session),
+) -> Row:
+    """Owners only, and only the domain of their own email address as verified by an SSO provider."""
+    await _owner(session, org_id, current_user)
+    domain = body.domain.strip().lower().lstrip("@")
+    user = await UserRepository(session).get(current_user.id)
+    own = sso.email_domain(user.get("email"))
+    if not own:
+        raise HTTPException(status_code=403, detail="Sign in with SSO first: a domain can only be claimed by "
+                                                    "someone whose email address there was verified")
+    if domain != own:
+        raise HTTPException(status_code=403, detail=f"You can only claim your own email's domain ({own})")
+    if domain in sso.PUBLIC_EMAIL_DOMAINS:
+        raise HTTPException(status_code=400, detail=f"{domain} is a public email service: anyone can have an "
+                                                    "address there. Use invite links instead.")
+    repo = OrganizationRepository(session)
+    holder = await repo.domain_owner(domain)
+    if holder:
+        raise HTTPException(status_code=409, detail="This organization already has that domain" if holder == org_id
+                            else "Another organization has already claimed that domain")
+    await repo.add_domain(org_id, domain, current_user.id)
+    await session.commit()
+    return {"domain": domain}
+
+
+@router.delete("/{org_id}/domains/{domain}", status_code=204)
+async def remove_domain(
+    org_id: str,
+    domain: str,
+    current_user: User = Depends(get_current_user),
+    session: ArcadeSession = Depends(get_session),
+) -> Response:
+    """Owners only. People who already joined through it stay."""
+    await _owner(session, org_id, current_user)
+    if not await OrganizationRepository(session).remove_domain(org_id, domain.lower()):
+        raise HTTPException(status_code=404, detail="That domain isn't claimed by this organization")
     await session.commit()
     return Response(status_code=204)
 

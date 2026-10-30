@@ -88,6 +88,23 @@
           }
         }
 
+        @if (canManage) {
+          <h3 style="font-size:0.875rem;margin:1rem 0 0.5rem">Join by email domain</h3>
+          @for (d of domains; track d.domain) {
+            <div class="lineage-row">
+              <span class="grow">&#64;{{ d.domain }} <span class="muted-text">· added by {{ d.added_by }}</span></span>
+              @if (isOwner) { <button class="link-btn" [disabled]="busy" (click)="removeDomain(d)">Remove</button> }
+            </div>
+          }
+          @if (isOwner && myDomain && !domains.length) {
+            <button [disabled]="busy" (click)="addDomain()">Let everyone with a verified &#64;{{ myDomain }} address join</button>
+          }
+          <p class="field-help" style="margin-top:0.4rem">
+            People who sign in with single sign-on and a verified address at the domain join as members.
+            An owner can claim the domain of their own verified email (from signing in with SSO); public mail services can't be claimed.
+          </p>
+        }
+
         <h3 style="font-size:0.875rem;margin:1rem 0 0.5rem">Members ({{ members.length }})</h3>
         <div class="lineage-list">
           @for (m of members; track m.user_id) {

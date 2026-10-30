@@ -31,10 +31,11 @@ describe('LoginComponent model gate', () => {
   let http: HttpTestingController
   const text = () => (fixture.nativeElement as HTMLElement).textContent ?? ''
 
-  async function load(c: ModelCatalog, setupTokenRequired = false) {
-    fixture.detectChanges()                                     // ngOnInit → GET /models/catalog, /auth/setup
+  async function load(c: ModelCatalog, setupTokenRequired = false, sso: { id: string, name: string }[] = []) {
+    fixture.detectChanges()                                     // ngOnInit → GET /models/catalog, /auth/setup, sso
     http.expectOne('/models/catalog').flush(c)
     http.expectOne('/auth/setup').flush({ setup_token_required: setupTokenRequired, registration_open: true })
+    http.expectOne('/auth/sso/providers').flush(sso)
     await fixture.whenStable()
     fixture.detectChanges()
   }
@@ -112,6 +113,14 @@ describe('LoginComponent model gate', () => {
     expect(fixture.componentInstance.stage).toBe('needs-model')
     expect(text()).toContain('No AI model is configured')
     expect(text()).not.toContain("Ollama isn't running")
+  })
+
+  it('offers single sign-on, returning to where the user was going', async () => {
+    ;(fixture.componentInstance as unknown as { returnUrl: string }).returnUrl = '/join/abc'
+    await load(catalog(['mistral:7b']), false, [{ id: 'google', name: 'Google' }])
+    const link = (fixture.nativeElement as HTMLElement).querySelector('a[href*="/auth/sso/"]') as HTMLAnchorElement
+    expect(link.textContent).toContain('Continue with Google')
+    expect(link.getAttribute('href')).toBe('/auth/sso/google/start?next=%2Fjoin%2Fabc')
   })
 
   it('explains when Ollama is not running', async () => {

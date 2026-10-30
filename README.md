@@ -63,6 +63,7 @@ To use a GPU, an Ollama you already run, or to work on the code with live reload
 | [Connectors](docs/connectors.md) | Folders, git ADRs, GitHub, Jira, Linear |
 | [Inactive accounts and groups](docs/retention.md) | Automatic deletion and its safety rails |
 | [Local models](docs/local-models.md) | The supported LLMs and how they're chosen |
+| [Single sign-on](docs/sso.md) | Google, Microsoft or any OpenID Connect provider; joining an organization by email domain |
 | [Hosted models](docs/hosted-models.md) | OpenAI-compatible APIs: configuration and what is sent |
 | [Architecture](docs/architecture.md) | Components, data model, the GraphRAG pipeline |
 | [API](docs/api.md) | Every endpoint |

@@ -4,7 +4,7 @@ import hmac
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
@@ -59,9 +59,12 @@ async def admin_claimed(session: ArcadeSession) -> bool:
     return bool(await session.query_one("SELECT key FROM Meta WHERE key = 'first_admin'"))
 
 
-async def create_user(session: ArcadeSession, username: str, password: str, role: Role | None = None) -> Dict[str, Any]:
+async def create_user(session: ArcadeSession, username: str, password: Optional[str], role: Role | None = None,
+                      extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Create an account. With no explicit role, the very first account ever
+    Create an account. `password` None: an account that signs in with SSO only
+    (routers/sso.py, which never creates the first account); `extra` adds fields
+    such as its verified email. With no explicit role, the very first account ever
     created becomes the admin and every later one a member. "First" is
     decided by inserting the unique Meta key 'first_admin' in the same
     transaction as the user, so concurrent sign-ups can't both become admin.
@@ -76,12 +79,12 @@ async def create_user(session: ArcadeSession, username: str, password: str, role
 
     # bcrypt takes about a quarter of a second of CPU: off the event loop, which
     # every other request on this instance is waiting on
-    hashed = await run_in_threadpool(hash_password, password)
+    hashed = await run_in_threadpool(hash_password, password) if password is not None else None
 
     async def insert(as_role: Role, claim_admin: bool) -> Dict[str, Any]:
         user = {"id": str(uuid.uuid4()), "username": username, "username_key": username_key(username),
                 "hashed_password": hashed,
-                "role": as_role.value, "created_at": datetime.now(timezone.utc).isoformat()}
+                "role": as_role.value, "created_at": datetime.now(timezone.utc).isoformat(), **(extra or {})}
         if claim_admin:
             await session.execute("INSERT INTO Meta CONTENT :doc",
                                   {"doc": {"key": "first_admin", "value": {"user_id": user["id"]}}})
@@ -142,6 +145,7 @@ async def me(current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
         "role": current_user.role,
         "permissions": sorted(p.value for p in Permission if has_permission(current_user, p)),
         "llm_model": current_user.llm_model,
+        "email": current_user.email,
     }
 
 
@@ -174,7 +178,15 @@ async def login(
         await ratelimit.hit(account_key, address_key, window=ratelimit.LOGIN_WINDOW)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     await ratelimit.clear(account_key)
+    return TokenResponse(access_token=await sign_in(session, user))
 
+
+async def sign_in(session: ArcadeSession, user: Dict[str, Any]) -> str:
+    """
+    The checks every sign-in passes (password or SSO), then a token. Raises
+    HTTPException 503 / 412 when no AI model can be used.
+    """
+    users = UserRepository(session)
     # An LLM is required: an installed local model, or an API model.
     reachable, installed = await llm_catalog.availability()
     usable = llm_catalog.usable(installed)
@@ -192,4 +204,4 @@ async def login(
         await users.set_llm_model(user["id"], model)
         await session.commit()
     await activity.touch_user(session.client, user, login=True)
-    return TokenResponse(access_token=create_token(user["id"], user.get("token_version") or 0))
+    return create_token(user["id"], user.get("token_version") or 0)

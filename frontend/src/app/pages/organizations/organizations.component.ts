@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs'
 import { API_BASE, AuthService } from '../../services/auth.service'
 import { SpaceService } from '../../services/space.service'
 import { errorMessage } from '../../services/http-error'
-import { CreatedInvite, Organization, OrgInvite, OrgMember, OrgRole } from '../../models/api'
+import { CreatedInvite, Organization, OrgDomain, OrgInvite, OrgMember, OrgRole } from '../../models/api'
 
 /**
  * Your organizations: create one, and for the selected one see its members,
@@ -22,6 +22,7 @@ export class OrganizationsComponent implements OnInit {
   selected: Organization | null = null
   members: OrgMember[] = []
   invites: OrgInvite[] = []
+  domains: OrgDomain[] = []
   /** The link just created: its token is shown only now */
   created: CreatedInvite | null = null
   copied = false
@@ -74,6 +75,8 @@ export class OrganizationsComponent implements OnInit {
           : Promise.resolve([] as OrgInvite[]),
       ])
       this.members = members; this.invites = invites
+      this.domains = this.canManage
+        ? await firstValueFrom(this.http.get<OrgDomain[]>(`${API_BASE}/organizations/${id}/domains`)) : []
     } catch (e) { this.error = errorMessage(e, 'Could not load the organization') }
   }
 
@@ -134,6 +137,28 @@ export class OrganizationsComponent implements OnInit {
       if (this.created?.id === invite.id) this.created = null
       await this.loadDetails()
     }, 'Could not revoke the link')
+  }
+
+  /** Your verified email's domain: the only one you can claim */
+  get myDomain(): string | null {
+    const email = this.auth.me()?.email
+    return email ? email.split('@')[1] : null
+  }
+
+  async addDomain() {
+    await this.run(async () => {
+      await firstValueFrom(this.http.post(`${API_BASE}/organizations/${this.selected!.id}/domains`, { domain: this.myDomain }))
+      this.notice = `Anyone who signs in with a verified @${this.myDomain} address now joins ${this.selected!.name}.`
+      await this.loadDetails()
+    }, 'Could not add the domain')
+  }
+
+  async removeDomain(d: OrgDomain) {
+    if (!confirm(`Stop adding people with @${d.domain} addresses? Those who already joined stay.`)) return
+    await this.run(async () => {
+      await firstValueFrom(this.http.delete(`${API_BASE}/organizations/${this.selected!.id}/domains/${encodeURIComponent(d.domain)}`))
+      await this.loadDetails()
+    }, 'Could not remove the domain')
   }
 
   async leave() {
