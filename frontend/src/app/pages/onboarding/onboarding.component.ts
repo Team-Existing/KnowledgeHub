@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Router, RouterLink } from '@angular/router'
-import { ModelCatalog, ModelService } from '../../services/model.service'
+import { hostedProviders, ModelCatalog, ModelService } from '../../services/model.service'
 import { AuthService } from '../../services/auth.service'
 import { ModelSetupComponent } from '../../components/model-setup/model-setup.component'
 import { errorMessage } from '../../services/http-error'
@@ -56,8 +56,11 @@ export class OnboardingComponent implements OnInit {
   }
 
   get needsModel(): boolean {
-    return !this.catalog || !this.catalog.ollamaReachable || !this.catalog.anyInstalled
+    return !this.catalog || !this.catalog.anyInstalled
   }
+
+  /** Services hosted models send text to; empty when every model is local */
+  get hosted(): string[] { return this.catalog ? hostedProviders(this.catalog.models) : [] }
 
   /** Steps shown to this user, for "Step n of m". */
   get steps(): Step[] {

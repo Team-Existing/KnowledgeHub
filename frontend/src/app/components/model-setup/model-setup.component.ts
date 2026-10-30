@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core'
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms'
-import { ModelCatalog, ModelService } from '../../services/model.service'
+import { LocalModel, ModelCatalog, ModelService } from '../../services/model.service'
 import { errorMessage } from '../../services/http-error'
 
 /**
@@ -28,6 +28,9 @@ export class ModelSetupComponent implements OnChanges {
   ngOnChanges() {
     if (!this.selected && this.catalog) this.selected = this.catalog.recommended
   }
+
+  /** Only local models are downloaded */
+  get localModels(): LocalModel[] { return this.catalog.models.filter(m => m.local) }
 
   tooBig(minRamGb: number): boolean {
     return this.catalog.ramGb > 0 && this.catalog.ramGb < minRamGb

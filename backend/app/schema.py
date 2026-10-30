@@ -15,7 +15,7 @@ EVOLVES                   KnowledgeItem -> KnowledgeItem, newer -> older (proper
 Documents
 ---------
 User, Playbook, QueryLog, Meta
-ItemEvent                 per-item history (reviewed, edited, linked, status_changed, ...)
+ItemEvent                 per-item history (reviewed, edited, linked, status_changed, health_flagged, ...)
 Connector                 an external source (folder, git ADRs, GitHub, Jira, Linear) + sync state
 SyncedDocument            one fetched source document -> the artifact it was ingested as
 GroupSpace                a group: a shared space; admins create groups and invite users
@@ -97,6 +97,10 @@ CREATE PROPERTY KnowledgeItem.review_status IF NOT EXISTS STRING
 CREATE PROPERTY KnowledgeItem.review_note IF NOT EXISTS STRING
 CREATE PROPERTY KnowledgeItem.status IF NOT EXISTS STRING
 CREATE PROPERTY KnowledgeItem.declared_status IF NOT EXISTS STRING
+CREATE PROPERTY KnowledgeItem.health_signals IF NOT EXISTS LIST
+CREATE PROPERTY KnowledgeItem.review_due IF NOT EXISTS STRING
+CREATE PROPERTY KnowledgeItem.verified_at IF NOT EXISTS STRING
+CREATE PROPERTY KnowledgeItem.verified_by IF NOT EXISTS STRING
 CREATE INDEX IF NOT EXISTS ON KnowledgeItem (artifact_id) NOTUNIQUE
 CREATE INDEX IF NOT EXISTS ON KnowledgeItem (review_status) NOTUNIQUE
 CREATE INDEX IF NOT EXISTS ON KnowledgeItem (title, tags_text, type) FULL_TEXT

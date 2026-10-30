@@ -5,6 +5,8 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 ## [Unreleased]
 
 ### Added
+- **Hosted models** ([docs](docs/hosted-models.md)): a server can offer the models of an OpenAI-compatible API (OpenAI, OpenRouter, Groq, vLLM, LM Studio …) next to the local ones, with `LLM_API_BASE_URL`, `LLM_API_KEY` and `LLM_API_MODELS`. Each user chooses; sign-in, the Models page, the provider badge and the privacy page say where text is sent. `OLLAMA_ENABLED=false` runs without local models. Rate limits are retried, and newer OpenAI parameters and servers without JSON schema support are handled.
+- **Knowledge health** ([docs](docs/knowledge-health.md)): current items are flagged *may be out of date* on evidence, never on age alone: their source changed, they disappeared from it, a decision they amend was reversed or superseded, a risk's mitigation was dropped or the risk happened anyway, or someone flagged them. Optional review dates mark items *needs review*. A **Health** page lists what needs a look; each item's page can confirm it (clearing the signals, with the next review date), flag it or set a review date. GraphRAG marks such items in its context and the model says when it relies on one.
 - One-command local stack: `docker compose up --build` at the repository root runs ArcadeDB, Ollama, the API and the frontend, with secrets generated on first start.
 - Documentation split into [`docs/`](docs/), plus `CONTRIBUTING.md`, `SECURITY.md`, a code of conduct, issue and pull request templates.
 - Continuous integration: backend tests (with ArcadeDB and Redis), frontend tests and build, and the Docker images.
@@ -24,6 +26,7 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 - [`backend/evals/`](backend/evals/): an end-to-end evaluation of extraction and GraphRAG against a real model, with a fixed corpus, answer key and questions.
 
 ### Changed
+- **An edited source no longer deletes what was accepted from it.** When a source changes and no longer contains an item (an ADR's decision was reworded, so its title changed), an accepted item, or one with a decision history, is kept and flagged *no longer in its source* instead of being deleted with its lineage links and history. Unreviewed items are still replaced.
 - **GraphRAG answers are grounded, cited by number, and about 6× faster** (measured with `backend/evals/` on llama3.1:8b, CPU: 15 → 19 of 19 answers correct, 4 → 0 false "not covered" replies, median answer time 78 s → 13 s):
   - The model now sees each item's details (who, why, due, steps), its source's title, and the passage it came from. It used to see titles only, and answered "the context doesn't say who" for owners on record.
   - Context entries are numbered and cited as `[1]`, `[2]`, mapped back to items; small models copied long ids poorly.

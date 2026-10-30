@@ -1,13 +1,14 @@
 """
-Local LLM management. Only the three catalog models (services/llm_catalog.py)
-can be listed, installed, removed or chosen; all are served by Ollama.
+LLM management. Users choose among the three local catalog models (served by
+Ollama, which admins install and remove) and the models of the configured
+OpenAI-compatible API, if any (services/llm_catalog.py).
 
 Public (used by the login screen before anyone is signed in):
-  GET  /models/catalog            which of the three are installed, RAM, recommendation
-  POST /models/bootstrap-install  download the first model — only while none is installed
+  GET  /models/catalog            the models, which are usable, RAM, recommendation
+  POST /models/bootstrap-install  download the first local model — only while no model is usable
 Signed in:
   GET  /models/local, /models/status, /models/system-info
-  POST /models/install, /models/remove, /models/set-default (= switch your active model)
+  POST /models/install, /models/remove (local models), /models/set-default (= switch your active model)
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ from app.rbac import Permission, require
 from app.db import User, get_session
 from app.repositories import UserRepository
 from app.services import llm_catalog
+from app.services import providers
 from app.services.providers import get_embedding_provider
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -49,6 +51,8 @@ def _system_ram_gb() -> int:
 
 
 def _require_catalog_model(model_id: str) -> None:
+    if not providers.OLLAMA_ENABLED:
+        raise HTTPException(status_code=400, detail="Local models are turned off on this server")
     if not llm_catalog.is_catalog_model(model_id):
         raise HTTPException(
             status_code=400,
@@ -87,12 +91,13 @@ def _pull_stream(model_id: str) -> StreamingResponse:
 
 @router.get("/catalog")
 async def model_catalog() -> Dict[str, Any]:
-    """The three supported models and which are installed. Unauthenticated: the login screen needs it."""
+    """The supported models and which are usable. Unauthenticated: the login screen needs it."""
     reachable, installed = await llm_catalog.availability()
     ram_gb = _system_ram_gb()
     return {
+        "ollamaEnabled": providers.OLLAMA_ENABLED,
         "ollamaReachable": reachable,
-        "anyInstalled": bool(installed),
+        "anyInstalled": bool(llm_catalog.usable(installed)),
         "ramGb": ram_gb,
         "recommended": llm_catalog.recommended_for(ram_gb),
         "models": llm_catalog.describe(installed),
@@ -103,11 +108,11 @@ async def model_catalog() -> Dict[str, Any]:
 async def bootstrap_install(body: ModelActionRequest) -> StreamingResponse:
     """
     Download the first model before anyone can sign in. Unauthenticated, so it
-    only works while none of the three is installed; after that, installs go
-    through the signed-in POST /models/install.
+    only works while no model is usable; after that, installs go through the
+    signed-in POST /models/install.
     """
     _require_catalog_model(body.model_id)
-    if await _installed_or_503():
+    if llm_catalog.usable(await _installed_or_503()):
         raise HTTPException(status_code=409, detail="A model is already installed. Sign in to install more.")
     return _pull_stream(body.model_id)
 
@@ -132,9 +137,11 @@ async def list_local_models(current_user: User = Depends(get_current_user)) -> L
 async def model_status(current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
     reachable, installed = await llm_catalog.availability()
     embedding = get_embedding_provider()
+    api = providers.is_api_model(current_user.llm_model)
     return {
-        "llm": {"provider": "local", "model": current_user.llm_model,
-                "installed": current_user.llm_model in installed, "ollamaReachable": reachable},
+        "llm": {"provider": "api" if api else "local", "local": not api,
+                "providerName": providers.LLM_API_NAME if api else "Ollama", "model": current_user.llm_model,
+                "installed": current_user.llm_model in llm_catalog.usable(installed), "ollamaReachable": reachable},
         "embedding": {"provider": "local", "installed": True,
                       "model": embedding.name.split(":", 1)[-1] if ":" in embedding.name else embedding.name},
     }
@@ -160,7 +167,7 @@ async def remove_local_model(
     installed = await _installed_or_503()
     if body.model_id not in installed:
         raise HTTPException(status_code=404, detail=f"{body.model_id} is not installed")
-    remaining = installed - {body.model_id}
+    remaining = llm_catalog.usable(installed - {body.model_id})
     if not remaining:
         raise HTTPException(status_code=409, detail="This is the only installed model. Install another before removing it.")
     try:
@@ -187,8 +194,11 @@ async def set_active_model(
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     """Switch the signed-in user's model. Stored on the account, so it applies to future sessions too."""
-    _require_catalog_model(body.model_id)
-    if body.model_id not in await _installed_or_503():
+    if not llm_catalog.is_supported(body.model_id):
+        choices = [m["id"] for m in llm_catalog.describe(set())]
+        raise HTTPException(status_code=400,
+                            detail=f"Unsupported model '{body.model_id}'. Choose one of: {', '.join(choices)}")
+    if not providers.is_api_model(body.model_id) and body.model_id not in await _installed_or_503():
         raise HTTPException(status_code=400, detail="Download this model before switching to it")
     await UserRepository(session).set_llm_model(current_user.id, body.model_id)
     await session.commit()

@@ -21,6 +21,7 @@ Where settings go depends on how you run it:
 | `SETUP_TOKEN` | — (**required** in `deploy/`) | Registering the first account, which becomes the server admin, asks for this token. Set it on any server others can reach. Empty = no token needed |
 | `AUTH_RATE_LIMIT` | `true` | Sign-in throttling: 5 failed attempts per account and 30 in total per client address every 15 minutes, and 20 sign-ups per address an hour (429 with `Retry-After`). Shared through Redis in worker mode |
 | `API_DOCS` | `true` (`false` in `deploy/`) | Interactive API docs at `/docs`, `/redoc` and `/openapi.json` |
+| `LOG_LEVEL` | `INFO` | The app's log level. At `INFO` each LLM call logs its model, duration and token counts, and a reply cut off by its token limit is a warning |
 | `RETENTION_INACTIVE_DAYS` | `365` | Accounts and groups unused this long are deleted with their data |
 | `RETENTION_CHECK_HOURS` | `24` | How often the clean-up runs (also once at startup) |
 | `RETENTION_ENABLED` | `true` | `false` turns automatic deletion off; admins still see what's due |
@@ -35,7 +36,11 @@ Where settings go depends on how you run it:
 | `OLLAMA_KEEP_ALIVE` | `30m` | How long Ollama keeps the model loaded after a call. Reloading an 8B model takes 30–60 s on a CPU |
 | `OLLAMA_STATUS_CACHE_SECONDS` | `5` | How long the answer to "is Ollama up, which models are installed" is reused (the public model catalog and every sign-in ask it). Installing or removing a model refreshes it. `0` asks every time |
 | `APP_WORKERS` (deploy) / `WEB_CONCURRENCY` | `2` / `1` | Server processes per app instance. More than 1 needs `REDIS_URL` (worker mode): without it the API refuses to start. Each process loads the embedding model, about 500 MB |
-| `LLM_PROVIDER`, `EMBEDDING_PROVIDER` | `ollama`, `local` | Read but not used: those are the only implementations |
+| `LLM_API_BASE_URL`, `LLM_API_KEY`, `LLM_API_MODELS`, `LLM_API_NAME` | — | [Hosted models](hosted-models.md) from an OpenAI-compatible API. Nothing is sent unless the URL and the model list are both set |
+| `LLM_API_TIMEOUT_SECONDS` | `120` | How long to wait for a hosted model's reply |
+| `OLLAMA_ENABLED` | `true` | `false` turns local models off: only hosted models are offered and Ollama is never contacted |
+| `LLM_DEFAULT_MODEL` | `OLLAMA_MODEL` | Model for users who haven't chosen one, e.g. `api/gpt-4.1-mini`. With Ollama off, defaults to the first hosted model |
+| `LLM_PROVIDER`, `EMBEDDING_PROVIDER` | `ollama`, `local` | Read but not used: the model id picks the LLM provider, and embeddings are always local |
 
 **Changing the embedding model.** Vector indexes are sized to the model's dimension.
 - **Different dimension:** on startup the app rebuilds the indexes, clears the stored vectors and logs a warning.

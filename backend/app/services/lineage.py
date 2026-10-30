@@ -15,7 +15,8 @@ directly: incoming edges win (reverses > supersedes, realizes > mitigates),
 then the user's `declared_status`, then the default (active / open). Every
 change that could move a status calls refresh_statuses(), which stores the new
 status and records a status_changed event — so the item history explains
-itself.
+itself. A change can also put items that build on it in doubt; see
+services/health.py.
 """
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 from app.arcadedb import ArcadeSession
 from app.repositories import GraphStore, ItemEventRepository, KnowledgeItemRepository, LineageRepository
 from app.serializers import item_dict
+from app.services import health
 
 Row = Dict[str, Any]
 
@@ -79,11 +81,12 @@ async def refresh_statuses(session: ArcadeSession, user_id: str) -> List[Row]:
     Recompute the status of every decision and risk the user owns; store and
     log the ones that changed. Two reads, writes only for changes. No commit.
     """
+    edges = await LineageRepository(session).list(user_id)
     incoming: Dict[str, Set[str]] = defaultdict(set)
-    for edge in await LineageRepository(session).list(user_id):
+    for edge in edges:
         incoming[edge["to"]].add(edge["kind"])
     rows = await session.query(
-        "SELECT id, type, status, declared_status FROM KnowledgeItem "
+        "SELECT id, type, title, status, declared_status FROM KnowledgeItem "
         "WHERE user_id = :u AND type IN :types", {"u": user_id, "types": list(DEFAULT_STATUS)},
     )
     items = KnowledgeItemRepository(session)
@@ -98,6 +101,9 @@ async def refresh_statuses(session: ArcadeSession, user_id: str) -> List[Row]:
         if old:  # the first status an item gets isn't a change worth logging
             await events.add(user_id, row["id"], "status_changed", {"from": old, "to": new})
         changes.append({"id": row["id"], "from": old, "to": new})
+    if changes:
+        # items that build on one whose status changed may no longer hold
+        await health.dependencies_changed(session, user_id, changes, edges, {r["id"]: r.get("title") for r in rows})
     return changes
 
 

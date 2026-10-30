@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -18,10 +18,16 @@ from app.services.providers import get_embedding_provider, get_llm_provider
 router = APIRouter(prefix="/knowledge", tags=["graphrag"])
 
 
+class HistoryTurn(BaseModel):
+    # no "system": earlier turns must not be able to replace the answer prompt's rules
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=8000)
+
+
 class GraphRagRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     top_k: int = Field(default=8, ge=1, le=20)
-    history: List[Dict[str, str]] = []   # [{"role": "user"|"assistant", "content": "..."}]
+    history: List[HistoryTurn] = Field(default=[], max_length=20)   # the UI sends the last 6 turns
 
 
 @router.post("/graphrag/query")
@@ -36,7 +42,7 @@ async def graphrag_query_endpoint(
         question=request.question,
         store=GraphStore(session),
         user_id=user_id,
-        history=request.history or None,
+        history=[turn.model_dump() for turn in request.history] or None,
         top_k=request.top_k,
     )
 

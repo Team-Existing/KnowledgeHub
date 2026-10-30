@@ -2,17 +2,33 @@
   <div class="privacy-content">
     <a routerLink="/knowledge" class="back-link"><app-icon name="back" [size]="16" /> Back to hub</a>
     <h1>Data Privacy &amp; What Leaves Your Device</h1>
-    <p class="lead">Knowledge Hubs is local-first. There are no cloud AI providers: extraction, embeddings and answers are all computed on the machine running the backend.</p>
+    @if (hosted.length) {
+      <p class="lead">This server offers local models and hosted models on {{ hosted.join(', ') }}. Embeddings are always computed on the server. Which model handles your text depends on the model you choose in <strong>Models</strong>.</p>
+    } @else {
+      <p class="lead">Knowledge Hubs is local-first. There are no cloud AI providers: extraction, embeddings and answers are all computed on the machine running the backend.</p>
+    }
+
+    @if (hosted.length) {
+      <div class="card">
+        <h2>Hosted models</h2>
+        <p>When your chosen model is hosted on {{ hosted.join(', ') }}, this is sent to that service:</p>
+        <ul>
+          <li>the text of sources you add, for extraction and summaries</li>
+          <li>your GraphRAG questions, recent chat turns, and the knowledge items and passages used to answer them</li>
+        </ul>
+        <p>Embeddings, search and storage stay on this server. Choose a local model to keep everything here.</p>
+      </div>
+    }
 
     <div class="card">
-      <h2>Local processing</h2>
+      <h2>{{ hosted.length ? 'Local models' : 'Local processing' }}</h2>
       <p>All AI processing uses <strong>sentence-transformers</strong> for embeddings and <strong>Ollama</strong> for LLM inference, both running locally.</p>
       <ul>
         <li>Embeddings are computed locally — no vectors are sent to an AI service</li>
         <li>GraphRAG queries, extraction, and summarisation all run on-device</li>
         <li>The provider badge shows <strong>Local</strong> on every AI-powered screen</li>
       </ul>
-      <div class="highlight">✓ No content is sent to any AI provider.</div>
+      @if (!hosted.length) { <div class="highlight">✓ No content is sent to any AI provider.</div> }
     </div>
 
     <div class="card">

@@ -385,6 +385,8 @@ main {
 .status-proposed, .status-open { background: var(--info-soft); color: var(--info-text); }
 .status-superseded, .status-deprecated { background: var(--surface-3); color: var(--text-3); text-decoration: line-through; }
 .status-reversed, .status-rejected, .status-materialized { background: var(--danger-soft); color: var(--danger-text); }
+.health-potentially_stale, .health-needs_review { background: var(--warning-soft); color: var(--warning-text); }
+.health-ok { background: var(--success-soft); color: var(--success-text); }
 
 .conf-high { background: var(--success-soft); color: var(--success-text); }
 .conf-mid  { background: var(--warning-soft); color: var(--warning-text); }

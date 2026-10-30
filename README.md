@@ -9,7 +9,7 @@ A **local-first knowledge base** for teams. It turns meeting notes, retros, deci
 
 <sub>Fictional demo data. Each page on its own: [Screenshots](docs/screenshots.md).</sub>
 
-- **Runs on your machine.** FastAPI backend, Angular frontend, **ArcadeDB** as the only data store, and local AI: one of three LLMs run by [Ollama](docs/local-models.md) plus sentence-transformers embeddings. There are no cloud AI providers.
+- **Runs on your machine.** FastAPI backend, Angular frontend, **ArcadeDB** as the only data store, and local AI: one of three LLMs run by [Ollama](docs/local-models.md) plus sentence-transformers embeddings. Servers can also offer [hosted models](docs/hosted-models.md) from any OpenAI-compatible API; each user chooses, and the app shows where text goes.
 - **Personal and group spaces.** Everyone has a private space and can create or join groups that share one. A switcher in the nav picks where you're working.
 - **Decisions have a history.** A decision can supersede, reverse or amend an older one, and risks can be mitigated or actually happen. The app tracks each item's status and shows how it evolved.
 - **Connects only where you point it.** Knowledge can come from folders, git repositories (ADRs), GitHub, Jira and Linear, but only from addresses a user enters, and only when they click **Sync now**.
@@ -23,6 +23,7 @@ A **local-first knowledge base** for teams. It turns meeting notes, retros, deci
 | [**Search**](docs/images/search.png) | Full-text search over items and sources, filtered by type, source and tag |
 | [**Review**](docs/images/review.png) | Accept, edit or reject extracted items before GraphRAG uses them |
 | [**Decisions**](docs/images/decisions.png) | The decision log and risk register, with each item's status and what replaced it |
+| **Health** | What may be out of date, and why: a changed source, a reversed decision it builds on, a flag, a review date |
 | [**Playbooks**](docs/images/playbooks.png) | Repeatable procedures, written as steps or built from how-tos and checklists in the space |
 | [**Sources**](docs/images/sources.png) | Connectors that pull in transcripts, notes, ADRs, pull requests and issues |
 | [**GraphRAG**](docs/images/graphrag.png) | Ask questions; answers cite their sources, flag superseded decisions, and say so when nothing covers the question |
@@ -62,6 +63,7 @@ To use a GPU, an Ollama you already run, or to work on the code with live reload
 | [Connectors](docs/connectors.md) | Folders, git ADRs, GitHub, Jira, Linear |
 | [Inactive accounts and groups](docs/retention.md) | Automatic deletion and its safety rails |
 | [Local models](docs/local-models.md) | The supported LLMs and how they're chosen |
+| [Hosted models](docs/hosted-models.md) | OpenAI-compatible APIs: configuration and what is sent |
 | [Architecture](docs/architecture.md) | Components, data model, the GraphRAG pipeline |
 | [API](docs/api.md) | Every endpoint |
 | [Security notes](docs/security.md) | How accounts, data, credentials and inputs are protected |

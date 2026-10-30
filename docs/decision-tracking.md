@@ -26,3 +26,5 @@ Items are linked newer → older:
 - **Everywhere else:** status badges appear on the Hub, Search, Review and GraphRAG sources. GraphRAG presents the replacement as the current decision.
 
 Where to see it: the **History & lineage** panel on each item's page, and the **Decisions** page.
+
+Whether a current decision may have gone out of date (its source changed, a decision it amends was reversed, someone flagged it) is its **health**: see [Knowledge health](knowledge-health.md).

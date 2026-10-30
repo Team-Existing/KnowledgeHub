@@ -6,7 +6,7 @@
     </div>
 
     @if (stage === 'checking') {
-      <p class="muted-text">Checking for a local AI model…</p>
+      <p class="muted-text">Checking for an AI model…</p>
     } @else if (stage === 'needs-model' && catalog) {
       <app-model-setup [catalog]="catalog" (installed)="onInstalled($event)" (retry)="checkModels()" />
     } @else {
@@ -33,7 +33,11 @@
       <button class="btn-secondary" (click)="toggleMode()">
         {{ mode === 'login' ? 'No account? Register' : 'Have an account? Sign in' }}
       </button>
-      <p class="auth-foot">Runs locally · your knowledge never leaves this server</p>
+      @if (hosted.length) {
+        <p class="auth-foot">Local models keep your knowledge on this server · hosted models send the text they work on to {{ hosted.join(', ') }}</p>
+      } @else {
+        <p class="auth-foot">Runs locally · your knowledge never leaves this server</p>
+      }
     }
   </div>
 </div>

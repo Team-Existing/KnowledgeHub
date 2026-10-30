@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from app.services.health import health_of
+
 Row = Dict[str, Any]
 
 
@@ -41,6 +43,8 @@ def item_dict(i: Row) -> Row:
         # lifecycle of decisions and risks (see services/lineage.py); None for other types
         "status": i.get("status"),
         "declared_status": i.get("declared_status"),
+        # whether it may be out of date while still current (see services/health.py)
+        "health": health_of(i),
     }
 
 

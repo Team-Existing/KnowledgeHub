@@ -12,7 +12,7 @@
 **Connectors**
 - **No scheduled syncs.** By design, a connector only syncs when someone clicks **Sync now**.
 - **A crashed worker's sync waits for its timeout.** A worker killed outright (not stopped) leaves its sync queued until `CELERY_VISIBILITY_TIMEOUT` (default 2 h) passes, then it runs again. A normal stop or redeploy lets the sync finish. In development, restarting the API mid-sync marks it "interrupted"; sync again.
-- **Deleted source files stay.** Removing a file or closing an issue at the source doesn't remove what was already imported.
+- **Deleted source files stay.** Removing a file or closing an issue at the source doesn't remove what was already imported. It isn't flagged on the Health page either: a sync only sees the documents that still exist. An edited file is flagged.
 - **Group connectors share one credential.** Every member of a group can sync a group connector with the token whoever added it saved. Use a token scoped to what the group should see.
 - **Per-sync caps.** GitHub reads at most 10 pages of closed pull requests per sync; each connector has a `max` setting for items per sync.
 
@@ -22,6 +22,7 @@
 - **Tokens live in the browser's `localStorage`.** The Content Security Policy stops injected scripts, which are what could read it, and signing out revokes the token on the server.
 
 **Data**
+- **Health signals don't clear themselves.** If a reversal that flagged an amendment is undone, the amendment stays flagged until someone confirms it.
 - **Deletion is permanent.** Inactivity retention, group deletion and removing a connector's data can't be undone; back up the `arcadedb-data` volume.
 - **Shared copies drop lineage links.** Sharing a source into another space copies its items, statuses and review state, but not links to items outside it.
 - **Single-instance setups connect to ArcadeDB as `root`.** Running from source and the one-command Docker stack use `ARCADEDB_USER=root` for simplicity. The production stack uses a dedicated app user.

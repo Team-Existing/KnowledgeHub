@@ -1,4 +1,13 @@
-@if (!catalog.ollamaReachable) {
+@if (!catalog.ollamaEnabled) {
+  <div class="setup">
+    <h2>No AI model is configured</h2>
+    <p class="muted-text">
+      This server has no AI model yet. Its administrator needs to configure one
+      (<code>LLM_API_BASE_URL</code> and <code>LLM_API_MODELS</code>).
+    </p>
+    <button class="primary" (click)="retry.emit()">Retry</button>
+  </div>
+} @else if (!catalog.ollamaReachable) {
   <div class="setup">
     <h2>Ollama isn't running</h2>
     <p class="muted-text">
@@ -17,7 +26,7 @@
     </p>
 
     <div class="options">
-      @for (m of catalog.models; track m.id) {
+      @for (m of localModels; track m.id) {
         <label class="option" [class.selected]="selected === m.id" [class.disabled]="installing">
           <input type="radio" name="model" [value]="m.id" [(ngModel)]="selected" [disabled]="installing" />
           <span class="option-body">

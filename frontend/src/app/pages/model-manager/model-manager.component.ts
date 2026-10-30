@@ -8,9 +8,9 @@ import { LocalModel, ModelService } from '../../services/model.service'
 import { errorMessage } from '../../services/http-error'
 
 /**
- * The three supported local models: download any of them, and choose which
- * one you use. The choice is saved on your account, so it carries over to
- * future sessions.
+ * The models you can use: the three local ones (admins download and remove
+ * them) and the server's hosted API models, if any. The one you choose is
+ * saved on your account, so it carries over to future sessions.
  */
 @Component({
   selector: 'app-model-manager',
@@ -31,9 +31,12 @@ export class ModelManagerComponent implements OnInit {
 
   async ngOnInit() { await this.service.loadAll() }
 
-  get models(): LocalModel[] { return this.service.localModels() }
+  get models(): LocalModel[] { return this.service.localModels().filter(m => m.local) }
+  get hostedModels(): LocalModel[] { return this.service.localModels().filter(m => !m.local) }
   get installedCount(): number { return this.models.filter(m => m.installed).length }
-  get activeModel(): LocalModel | undefined { return this.models.find(m => m.active) }
+  get activeModel(): LocalModel | undefined { return this.service.localModels().find(m => m.active) }
+  /** The only usable model can't be removed: removing it would leave nothing to use */
+  get lastUsable(): boolean { return this.installedCount + this.hostedModels.length <= 1 }
   get ramGb(): number { return this.service.systemInfo()?.ramGb ?? 0 }
   get recommended(): string | undefined { return this.service.systemInfo()?.recommendedTier }
   get ollamaReachable(): boolean { return this.service.modelStatus()?.llm.ollamaReachable !== false }

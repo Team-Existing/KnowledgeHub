@@ -3,16 +3,16 @@ import { FormsModule } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router'
 import { HttpErrorResponse } from '@angular/common/http'
 import { AuthService } from '../../services/auth.service'
-import { ModelCatalog, ModelService } from '../../services/model.service'
+import { hostedProviders, ModelCatalog, ModelService } from '../../services/model.service'
 import { ModelSetupComponent } from '../../components/model-setup/model-setup.component'
 import { errorMessage } from '../../services/http-error'
 import { IconComponent } from '../../components/icon/icon.component'
 import { PASSWORD_RULES } from '../../services/usernames'
 
 /**
- * Sign-in starts with a model check: one of the three local models must be
- * installed. If none is, the download screen is shown first; if one already
- * is, the user goes straight to the sign-in form.
+ * Sign-in starts with a model check: a model must be usable (an installed
+ * local model, or one of the server's API models). If none is, the download
+ * screen is shown first; otherwise the user goes straight to the sign-in form.
  */
 type Stage = 'checking' | 'needs-model' | 'ready'
 
@@ -55,7 +55,7 @@ export class LoginComponent implements OnInit {
     this.stage = 'checking'
     try {
       this.catalog = await this.models.getCatalog()
-      this.stage = this.catalog.ollamaReachable && this.catalog.anyInstalled ? 'ready' : 'needs-model'
+      this.stage = this.catalog.anyInstalled ? 'ready' : 'needs-model'
     } catch (e) {
       this.catalog = null
       this.error = errorMessage(e, 'Could not reach the Knowledge Hubs server')
@@ -67,6 +67,9 @@ export class LoginComponent implements OnInit {
     this.justInstalled = this.catalog?.models.find(m => m.id === modelId)?.name ?? modelId
     this.stage = 'ready'
   }
+
+  /** Services hosted models send text to; empty when every model is local */
+  get hosted(): string[] { return this.catalog ? hostedProviders(this.catalog.models) : [] }
 
   toggleMode() { this.mode = this.mode === 'login' ? 'register' : 'login'; this.error = '' }
 

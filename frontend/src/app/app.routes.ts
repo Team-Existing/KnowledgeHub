@@ -36,6 +36,7 @@ export const routes: Routes = [
   { path: 'review', loadComponent: () => import('./pages/review/review.component').then(m => m.ReviewComponent), canActivate: [authGuard] },
   { path: 'search', loadComponent: () => import('./pages/search/search.component').then(m => m.SearchComponent), canActivate: [authGuard] },
   { path: 'decisions', loadComponent: () => import('./pages/decisions/decisions.component').then(m => m.DecisionsComponent), canActivate: [authGuard] },
+  { path: 'knowledge-health', loadComponent: () => import('./pages/health/health.component').then(m => m.HealthComponent), canActivate: [authGuard] },
   { path: 'connectors', loadComponent: () => import('./pages/connectors/connectors.component').then(m => m.ConnectorsComponent), canActivate: [authGuard] },
   { path: 'graphrag', loadComponent: () => import('./pages/graphrag/graphrag.component').then(m => m.GraphragComponent), canActivate: [authGuard] },
   { path: 'settings/models', loadComponent: () => import('./pages/model-manager/model-manager.component').then(m => m.ModelManagerComponent), canActivate: [authGuard] },

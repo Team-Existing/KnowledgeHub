@@ -1,0 +1,64 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h1>Knowledge health</h1>
+      <p>Current decisions, risks and practices that may no longer hold: their source changed, something they build on changed, someone flagged them, or their review date is near.</p>
+    </div>
+  </section>
+
+  <section class="filters" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+    <button [class.primary]="!filter" (click)="filter = ''">All ({{ total }})</button>
+    <button [class.primary]="filter === 'potentially_stale'" (click)="filter = 'potentially_stale'">
+      {{ label.potentially_stale }} ({{ counts.potentially_stale }})
+    </button>
+    <button [class.primary]="filter === 'needs_review'" (click)="filter = 'needs_review'">
+      {{ label.needs_review }} ({{ counts.needs_review }}{{ counts.overdue ? ', ' + counts.overdue + ' overdue' : '' }})
+    </button>
+  </section>
+
+  @if (error) { <p class="error-text" style="padding:0 0.25rem">{{ error }}</p> }
+
+  @if (!loading && !error && total === 0) {
+    <section class="empty-state">
+      <h2>Nothing needs a look</h2>
+      <p>Items show up here when their source changes, a decision they build on is reversed or superseded, someone flags them, or their review date comes up. Age alone never puts anything here.</p>
+    </section>
+  }
+
+  <div class="review-list">
+    @for (item of visible; track item.id) {
+      <div class="review-card">
+        <div class="card-topline">
+          <span class="status-badge" [ngClass]="'health-' + item.health.state">{{ label[item.health.state] }}</span>
+          <span class="engine-badge">{{ item.type }}</span>
+          @if (item.status) { <span class="status-badge" [ngClass]="'status-' + item.status">{{ item.status }}</span> }
+          @if (item.health.review_due) {
+            <span class="muted-text" [class.error-text]="item.health.overdue">
+              review {{ item.health.overdue ? 'was due' : 'by' }} {{ item.health.review_due | date:'mediumDate' }}
+            </span>
+          }
+        </div>
+        <h2 style="margin:0.6rem 0 0.25rem;font-size:1rem">
+          <a [routerLink]="['/knowledge', item.id]" class="rel-name-link" style="font-size:1rem">{{ item.title }}</a>
+        </h2>
+        @if (item.health.signals.length) {
+          <ul style="margin:0.25rem 0 0.5rem 1.1rem;padding:0">
+            @for (s of item.health.signals; track $index) {
+              <li class="muted-text">{{ describe(s) }} · {{ s.at | date:'mediumDate' }}</li>
+            }
+          </ul>
+        }
+        <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+          <button [disabled]="busyId === item.id" (click)="stillValid(item)">Still valid</button>
+          <a class="detail-link" [routerLink]="['/knowledge', item.id]" fragment="health">Review it →</a>
+        </div>
+      </div>
+    }
+  </div>
+
+  @if (items.length < total) {
+    <div style="text-align:center;margin:1rem 0">
+      <button [disabled]="loading" (click)="load(true)">Load more ({{ total - items.length }} left)</button>
+    </div>
+  }
+</div>

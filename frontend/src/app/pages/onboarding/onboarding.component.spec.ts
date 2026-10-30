@@ -5,9 +5,10 @@ import { provideRouter } from '@angular/router'
 import { OnboardingComponent } from './onboarding.component'
 
 const CATALOG = {
-  ollamaReachable: true, anyInstalled: true, ramGb: 16, recommended: 'llama3.1:8b',
+  ollamaEnabled: true, ollamaReachable: true, anyInstalled: true, ramGb: 16, recommended: 'llama3.1:8b',
   models: [{ id: 'llama3.1:8b', name: 'Llama 3.1 8B', size: '4.7 GB', ramRequired: '8 GB+', minRamGb: 8,
-             description: '', provider: 'ollama' as const, installed: true, active: false }],
+             description: '', provider: 'ollama' as const, providerName: 'Ollama', local: true,
+             installed: true, active: false }],
 }
 
 describe('OnboardingComponent first account', () => {

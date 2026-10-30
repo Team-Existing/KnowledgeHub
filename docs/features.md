@@ -6,6 +6,7 @@
 | **Search** | Full-text search over items and sources, filtered by type, source and tag |
 | **Review** | Accept, edit or reject extracted items. Everything starts `pending`; rejected items are never used by GraphRAG |
 | **Decisions** | The decision log and risk register, with each item's status and what replaced it |
+| **Health** | What may be out of date: items whose source changed, that build on a reversed decision, that someone flagged, or whose review date is near. Confirm them, flag them or set review dates ([Knowledge health](knowledge-health.md)) |
 | **Playbooks** | Repeatable procedures (a release, onboarding), written as steps or built from how-tos and checklists already in the space |
 | **Sources** | Connectors that pull in transcripts, notes, ADRs, pull requests and issues |
 | **Groups** | Create groups, invite people, answer invitations |

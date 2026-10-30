@@ -154,8 +154,10 @@
         }
       </aside>
     </div>
+    <!-- Whether it may be out of date: signals, confirming, flagging, review date -->
+    <app-item-health [item]="item" (changed)="load(); lineagePanel.load()"></app-item-health>
     <!-- Status, decision chain, lineage links and event history -->
-    <app-item-lineage [item]="item" [items]="candidates" (changed)="load()"></app-item-lineage>
+    <app-item-lineage #lineagePanel [item]="item" [items]="candidates" (changed)="load()"></app-item-lineage>
     <!-- Relationships: resolved name + link instead of raw ID -->
     <section id="rels" class="detail-panel">
       <h3>Relationships</h3>
