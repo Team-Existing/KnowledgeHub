@@ -10,7 +10,10 @@ CONTAINS                  Artifact -> KnowledgeItem
 RELATED_TO                KnowledgeItem -> KnowledgeItem (cross-links, with score)
 LINK                      any Node -> Node, from OKF import (property `type` = relation label)
 EVOLVES                   KnowledgeItem -> KnowledgeItem, newer -> older (property `kind`:
-                          supersedes | reverses | amends | realizes | mitigates | learned_from)
+                          supersedes | reverses | amends | realizes | mitigates | learned_from | implements)
+System                    a service, database, team … (not a Node: kept out of the knowledge graph)
+AFFECTS                   KnowledgeItem -> System: the item concerns that system
+DEPENDS_ON                System -> System: the first depends on the second
 
 Documents
 ---------
@@ -132,6 +135,31 @@ CREATE EDGE TYPE LINK IF NOT EXISTS
 CREATE PROPERTY LINK.user_id IF NOT EXISTS STRING
 CREATE PROPERTY LINK.type IF NOT EXISTS STRING
 CREATE INDEX IF NOT EXISTS ON LINK (user_id) NOTUNIQUE
+CREATE VERTEX TYPE System IF NOT EXISTS
+CREATE PROPERTY System.id IF NOT EXISTS STRING
+CREATE PROPERTY System.user_id IF NOT EXISTS STRING
+CREATE PROPERTY System.name IF NOT EXISTS STRING
+CREATE PROPERTY System.kind IF NOT EXISTS STRING
+CREATE PROPERTY System.description IF NOT EXISTS STRING
+CREATE PROPERTY System.aliases IF NOT EXISTS LIST OF STRING
+CREATE PROPERTY System.owner IF NOT EXISTS STRING
+CREATE PROPERTY System.created_at IF NOT EXISTS STRING
+CREATE PROPERTY System.created_by IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON System (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON System (user_id) NOTUNIQUE
+
+CREATE EDGE TYPE AFFECTS IF NOT EXISTS
+CREATE PROPERTY AFFECTS.user_id IF NOT EXISTS STRING
+CREATE PROPERTY AFFECTS.origin IF NOT EXISTS STRING
+CREATE PROPERTY AFFECTS.created_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON AFFECTS (user_id) NOTUNIQUE
+
+CREATE EDGE TYPE DEPENDS_ON IF NOT EXISTS
+CREATE PROPERTY DEPENDS_ON.user_id IF NOT EXISTS STRING
+CREATE PROPERTY DEPENDS_ON.note IF NOT EXISTS STRING
+CREATE PROPERTY DEPENDS_ON.created_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON DEPENDS_ON (user_id) NOTUNIQUE
+
 CREATE EDGE TYPE EVOLVES IF NOT EXISTS
 CREATE PROPERTY EVOLVES.user_id IF NOT EXISTS STRING
 CREATE PROPERTY EVOLVES.kind IF NOT EXISTS STRING

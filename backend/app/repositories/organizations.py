@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from app.arcadedb import ArcadeSession
+from app.repositories.systems import delete_space_systems
 from app.repositories.groups import ACTIVE, GROUP_ADMIN, REMOVED, GroupRepository
 
 Row = Dict[str, Any]
@@ -64,6 +65,7 @@ class OrganizationRepository:
             await groups.delete_everything(gid)
         p = {"o": org_id}
         await self.session.execute("DELETE VERTEX FROM Node WHERE user_id = :o", p)   # edges go with them
+        await delete_space_systems(self.session, org_id)
         for doc in ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog"):
             await self.session.execute(f"DELETE FROM {doc} WHERE user_id = :o", p)
         await self.session.execute("DELETE FROM OrgInvite WHERE org_id = :o", p)

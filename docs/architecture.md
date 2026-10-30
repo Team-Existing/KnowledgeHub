@@ -57,6 +57,9 @@ The schema lives in [`backend/app/schema.py`](../backend/app/schema.py) and is a
 | `Organization` | document | the tenant: name, creator. Its id (`org_…`) is also its space's id |
 | `OrgMember` | document | user ↔ organization: `role` (`owner`, `admin`, `member`), `status` (`active`, `left`, `removed`), `joined_at`, `left_at` |
 | `OrgInvite` | document | an invite link: `token_hash` (the token itself is never stored), `role`, `expires_at`, `max_uses`, `uses`, `revoked` |
+| `System` | vertex (not a `Node`) | a service, database, team …: `name`, `kind`, `aliases`, `owner` ([impact analysis](impact-analysis.md)) |
+| `AFFECTS` | edge | knowledge item → system it concerns |
+| `DEPENDS_ON` | edge | system → system it depends on |
 | `OrgDomain` | document | an email domain an organization claimed: verified SSO users there join it |
 | `SsoIdentity` | document | a sign-in provider account (`provider` + `subject`) connected to a user; `User.email` holds the provider-verified address |
 | `GroupSpace` | document | a group: name, creator, `org_id`, `last_active_at` |

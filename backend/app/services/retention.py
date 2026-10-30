@@ -45,6 +45,7 @@ from app.activity import deletes_on, inactive_days, last_activity, now
 from app.arcadedb import ArcadeClient, ArcadeSession
 from app.rbac import Role
 from app.repositories.groups import GROUP_ADMIN, GroupRepository
+from app.repositories.systems import delete_space_systems
 from app.repositories.organizations import OWNER, OrganizationRepository
 
 logger = logging.getLogger(__name__)
@@ -109,6 +110,7 @@ async def _space_is_syncing(session: ArcadeSession, space_id: str) -> bool:
 async def delete_space_data(session: ArcadeSession, space_id: str) -> None:
     p = {"s": space_id}
     await session.execute("DELETE VERTEX FROM Node WHERE user_id = :s", p)   # edges go with their vertices
+    await delete_space_systems(session, space_id)
     for doc in _SPACE_DOCUMENTS:
         await session.execute(f"DELETE FROM {doc} WHERE user_id = :s", p)
 

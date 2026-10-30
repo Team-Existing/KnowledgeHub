@@ -8,6 +8,7 @@ import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
 import { Artifact, CrossLink, ItemContext, ItemsResponse, KnowledgeItem, Relationship } from '../../models/api'
 import { ItemLineageComponent } from '../../components/item-lineage/item-lineage.component'
+import { ItemSystemsComponent } from '../../components/item-systems/item-systems.component'
 import { ItemTrackingComponent } from '../../components/item-tracking/item-tracking.component'
 import { ItemHealthComponent } from '../../components/item-health/item-health.component'
 import { SpaceService } from '../../services/space.service'
@@ -18,7 +19,7 @@ type RelatedItem = { item: KnowledgeItem; score: number }
 
 @Component({
   selector: 'app-knowledge-detail',
-  imports: [CommonModule, FormsModule, RouterLink, ItemLineageComponent, ItemHealthComponent, ItemTrackingComponent, IconComponent],
+  imports: [CommonModule, FormsModule, RouterLink, ItemLineageComponent, ItemHealthComponent, ItemTrackingComponent, ItemSystemsComponent, IconComponent],
   templateUrl: './knowledge-detail.component.html',
   styleUrl: './knowledge-detail.component.css'
 })

@@ -1,0 +1,35 @@
+<section class="detail-panel">
+  <h2>Systems</h2>
+  @if (data) {
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center">
+      @for (s of data.linked; track s.id) {
+        <span class="pill">{{ s.name }}
+          <button class="link-btn" [disabled]="busy" (click)="unlink(s)" [attr.aria-label]="'Unlink ' + s.name">✕</button>
+        </span>
+      }
+      @if (!data.linked.length) { <span class="muted-text">Not linked to any system.</span> }
+    </div>
+    @for (s of data.suggested; track s.id) {
+      <p class="field-help" style="margin-top:0.5rem">
+        It mentions <strong>{{ s.name }}</strong>.
+        <button class="link-btn" [disabled]="busy" (click)="link(s.id)">Link it</button>
+      </p>
+    }
+    @if (addable.length) {
+      <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
+        <select [(ngModel)]="adding" aria-label="System to link">
+          <option value="">Link to a system…</option>
+          @for (s of addable; track s.id) { <option [value]="s.id">{{ s.name }}</option> }
+        </select>
+        <button [disabled]="busy || !adding" (click)="link(adding)">Link</button>
+      </div>
+    } @else if (!all.length) {
+      <p class="field-help" style="margin-top:0.4rem">Add your services, databases and teams on the <a routerLink="/systems">Systems</a> page
+        to see what a change would affect.</p>
+    }
+    @if (item.type === 'decision') {
+      <p style="margin-top:0.75rem"><a [routerLink]="['/impact']" [queryParams]="{ decision: item.id }">What would changing this decision affect? →</a></p>
+    }
+  }
+  @if (error) { <p class="error-text">{{ error }}</p> }
+</section>

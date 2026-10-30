@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.arcadedb import ArcadeSession
+from app.repositories.systems import delete_space_systems
 from app import activity
 
 Row = Dict[str, Any]
@@ -45,6 +46,7 @@ class GroupRepository:
         """The group, its memberships, and everything stored in its space."""
         p = {"g": group_id}
         await self.session.execute("DELETE VERTEX FROM Node WHERE user_id = :g", p)   # edges go with them
+        await delete_space_systems(self.session, group_id)
         for doc in ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog"):
             await self.session.execute(f"DELETE FROM {doc} WHERE user_id = :g", p)
         await self.session.execute("DELETE FROM Membership WHERE group_id = :g", p)
