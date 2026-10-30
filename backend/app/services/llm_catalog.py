@@ -1,9 +1,10 @@
 """
-The three local LLMs the app supports, all served by Ollama.
+The LLMs users can choose: the three local models served by Ollama, and the
+models of the OpenAI-compatible API if one is configured (providers.LLM_API_*).
 
-Users pick one of these. At least one must be installed before anyone can
-log in; each user's choice is stored on their account and used for every
-LLM call they make (see providers.use_model).
+At least one must be usable before anyone can log in: an installed local model
+or any API model. Each user's choice is stored on their account and used for
+every LLM call they make (see providers.use_model).
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Set, Tuple
 
 import httpx
 
+from app.services import providers
 from app.services.providers import OLLAMA_BASE, OLLAMA_MODEL
 
 logger = logging.getLogger(__name__)
@@ -43,7 +45,18 @@ CATALOG_IDS: List[str] = [m.id for m in CATALOG]
 
 
 def is_catalog_model(model_id: Optional[str]) -> bool:
+    """One of the three local models (whether or not Ollama is enabled)."""
     return model_id in CATALOG_IDS
+
+
+def is_supported(model_id: Optional[str]) -> bool:
+    """A model a user may choose: a local one while Ollama is enabled, or an API model."""
+    return (providers.OLLAMA_ENABLED and is_catalog_model(model_id)) or providers.is_api_model(model_id)
+
+
+def usable(installed: Set[str]) -> Set[str]:
+    """The models that can be used now: the installed local ones and every API model."""
+    return set(installed) | set(providers.api_model_ids())
 
 
 class OllamaUnavailable(Exception):
@@ -70,8 +83,10 @@ _status: Optional[Tuple[float, bool, Set[str]]] = None    # (expires at, reachab
 
 
 async def availability() -> Tuple[bool, Set[str]]:
-    """(ollama_reachable, installed catalog models) — never raises."""
+    """(ollama_reachable, installed catalog models) — never raises. (False, ∅) when Ollama is disabled."""
     global _status
+    if not providers.OLLAMA_ENABLED:
+        return False, set()
     if _status and _status[0] > time.monotonic():
         return _status[1], set(_status[2])
     try:
@@ -89,21 +104,30 @@ def forget_availability() -> None:
     _status = None
 
 
-def pick_default(installed: Set[str], preferred: Optional[str] = None) -> Optional[str]:
-    """The model to use: the preferred one if installed, else OLLAMA_MODEL, else catalog order."""
-    for candidate in (preferred, OLLAMA_MODEL, *CATALOG_IDS):
-        if candidate in installed:
+def pick_default(usable_models: Set[str], preferred: Optional[str] = None) -> Optional[str]:
+    """The model to use: the preferred one if usable, else the server default, else catalog then API order."""
+    for candidate in (preferred, providers.default_model(), OLLAMA_MODEL, *CATALOG_IDS, *providers.api_model_ids()):
+        if candidate in usable_models:
             return candidate
     return None
 
 
 def describe(installed: Set[str], active: Optional[str] = None) -> List[Dict[str, Any]]:
-    return [
+    local = [
         {**{k: v for k, v in asdict(m).items() if k not in ("ram_required", "min_ram_gb")},
          "ramRequired": m.ram_required, "minRamGb": m.min_ram_gb,
-         "provider": "ollama", "installed": m.id in installed, "active": m.id == active}
+         "provider": "ollama", "providerName": "Ollama", "local": True,
+         "installed": m.id in installed, "active": m.id == active}
         for m in CATALOG
+    ] if providers.OLLAMA_ENABLED else []
+    api = [
+        {"id": model_id, "name": model_id[len(providers.API_PREFIX):], "size": "", "ramRequired": "", "minRamGb": 0,
+         "description": f"Runs on {providers.LLM_API_NAME}: the text it works on is sent there.",
+         "provider": "api", "providerName": providers.LLM_API_NAME, "local": False,
+         "installed": True, "active": model_id == active}
+        for model_id in providers.api_model_ids()
     ]
+    return local + api
 
 
 def recommended_for(ram_gb: int) -> str:

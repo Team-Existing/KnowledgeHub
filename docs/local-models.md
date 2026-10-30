@@ -1,6 +1,6 @@
 # Local models
 
-Knowledge Hubs supports exactly three LLMs, all downloaded and run locally by Ollama:
+Knowledge Hubs supports exactly three local LLMs, all downloaded and run by Ollama. A server can also offer [hosted models](hosted-models.md) from an OpenAI-compatible API; with those configured, a hosted model is enough to sign in, and `OLLAMA_ENABLED=false` turns local models off.
 
 | Model | Ollama tag | Download | RAM |
 |---|---|---|---|

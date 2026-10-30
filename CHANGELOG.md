@@ -5,6 +5,7 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 ## [Unreleased]
 
 ### Added
+- **Hosted models** ([docs](docs/hosted-models.md)): a server can offer the models of an OpenAI-compatible API (OpenAI, OpenRouter, Groq, vLLM, LM Studio …) next to the local ones, with `LLM_API_BASE_URL`, `LLM_API_KEY` and `LLM_API_MODELS`. Each user chooses; sign-in, the Models page, the provider badge and the privacy page say where text is sent. `OLLAMA_ENABLED=false` runs without local models. Rate limits are retried, and newer OpenAI parameters and servers without JSON schema support are handled.
 - **Knowledge health** ([docs](docs/knowledge-health.md)): current items are flagged *may be out of date* on evidence, never on age alone: their source changed, they disappeared from it, a decision they amend was reversed or superseded, a risk's mitigation was dropped or the risk happened anyway, or someone flagged them. Optional review dates mark items *needs review*. A **Health** page lists what needs a look; each item's page can confirm it (clearing the signals, with the next review date), flag it or set a review date. GraphRAG marks such items in its context and the model says when it relies on one.
 - One-command local stack: `docker compose up --build` at the repository root runs ArcadeDB, Ollama, the API and the frontend, with secrets generated on first start.
 - Documentation split into [`docs/`](docs/), plus `CONTRIBUTING.md`, `SECURITY.md`, a code of conduct, issue and pull request templates.

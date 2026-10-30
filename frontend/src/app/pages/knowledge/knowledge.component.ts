@@ -6,6 +6,7 @@ import { HttpClient, HttpParams } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
+import { ModelService } from '../../services/model.service'
 import { Artifact, CrossLinkResult, GraphEdge, GraphResponse, IngestResult, KnowledgeResponse } from '../../models/api'
 
 type IngestMode = 'text' | 'file' | 'url' | 'transcript'
@@ -99,7 +100,7 @@ export class KnowledgeComponent implements OnInit {
     finally { this.okfBusy = false }
   }
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, public modelService: ModelService) {}
 
   ngOnInit() { this.loadKnowledge() }
 

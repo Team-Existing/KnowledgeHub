@@ -62,7 +62,8 @@
     }
     @if (loading) {
       <div class="typing-indicator" aria-live="polite" aria-atomic="true">
-        {{ pipelineStage }} <span class="latency-hint">Generating locally — no data leaves this device</span>
+        {{ pipelineStage }}
+        @if (modelService.isLocal()) { <span class="latency-hint">Generating locally — no data leaves this server</span> }
       </div>
     }
     <div #bottomEl></div>

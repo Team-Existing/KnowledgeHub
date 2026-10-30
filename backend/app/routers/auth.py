@@ -19,7 +19,7 @@ from app.rbac import DEFAULT_ROLE, Permission, Role, has_permission
 from app.repositories import UserRepository
 from app.usernames import check_new_username, username_key
 from app import activity, ratelimit
-from app.services import llm_catalog
+from app.services import llm_catalog, providers
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -175,17 +175,19 @@ async def login(
         raise HTTPException(status_code=401, detail="Invalid credentials")
     await ratelimit.clear(account_key)
 
-    # A local LLM is required: one of the three catalog models must be installed.
+    # An LLM is required: an installed local model, or an API model.
     reachable, installed = await llm_catalog.availability()
-    if not reachable:
-        raise HTTPException(status_code=503, detail="Ollama is not running. Start Ollama, then sign in again.")
-    if not installed:
+    usable = llm_catalog.usable(installed)
+    if not usable:
+        if providers.OLLAMA_ENABLED and not reachable:
+            raise HTTPException(status_code=503, detail="Ollama is not running. Start Ollama, then sign in again.")
         raise HTTPException(
             status_code=412,
-            detail="No local model is installed. Download one of the supported models to sign in.",
+            detail="No AI model is available. Download one of the supported models to sign in."
+            if providers.OLLAMA_ENABLED else "No AI model is configured on this server. Ask its administrator.",
         )
-    # keep the user's choice if it's still installed, otherwise switch them to one that is
-    model = llm_catalog.pick_default(installed, user.get("llm_model"))
+    # keep the user's choice if it's still usable, otherwise switch them to one that is
+    model = llm_catalog.pick_default(usable, user.get("llm_model"))
     if model != user.get("llm_model"):
         await users.set_llm_model(user["id"], model)
         await session.commit()

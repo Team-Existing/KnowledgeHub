@@ -1,8 +1,9 @@
 <div class="model-manager">
   <h1>Model Manager</h1>
   <p class="muted-text">
-    Knowledge Hubs supports three local models, all run by Ollama on this computer.
-    The one you choose is used for extraction and GraphRAG answers, and stays selected for your future sessions.
+    @if (models.length) { Local models run on this server through Ollama: nothing leaves it. }
+    @if (hostedModels.length) { Hosted models send the text they work on (sources being extracted, questions and the knowledge used to answer them) to {{ hostedModels[0].providerName }}. }
+    The model you choose is used for extraction and GraphRAG answers, and stays selected for your future sessions.
   </p>
 
   @if (successMsg) {
@@ -21,6 +22,7 @@
           <p class="info-stat__label">Your model</p>
           <p class="info-stat__value" [class.info-stat__value--muted]="!activeModel">
             {{ activeModel?.name || 'None' }}
+            @if (activeModel && !activeModel.local) { <span class="model-meta">· {{ activeModel.providerName }}</span> }
           </p>
         </div>
         <span [class]="'info-pill info-pill--' + (activeModel ? 'ready' : 'none')">{{ activeModel ? 'Active' : 'Inactive' }}</span>
@@ -41,13 +43,45 @@
       </div>
     </div>
 
-    @if (!ollamaReachable) {
+    @if (models.length && !ollamaReachable) {
       <div class="warning-banner">
         Ollama is not running. Start it (or run <code>ollama serve</code>) to download or use models.
       </div>
     }
 
+    @if (hostedModels.length) {
+      <section class="models-section">
+        <h2>Hosted on {{ hostedModels[0].providerName }}</h2>
+        <div class="models-grid">
+          @for (model of hostedModels; track model.id) {
+            <div class="model-card is-installed">
+              <div class="model-card-top">
+                <div>
+                  <h2>{{ model.name }}</h2>
+                  <p class="model-meta">{{ model.providerName }}</p>
+                </div>
+                <div class="badge-group">
+                  @if (model.active) { <span class="badge-default">In use</span> }
+                  <span class="install-badge install-badge--not-installed">Text is sent to {{ model.providerName }}</span>
+                </div>
+              </div>
+              @if (!model.active) {
+                <div class="model-actions">
+                  <button class="btn-primary" [disabled]="!!busyId" (click)="use(model)">Use this model</button>
+                </div>
+              }
+              @if (errorId === model.id) {
+                <p class="error-text">{{ errorMsg }}</p>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    }
+
+    @if (models.length) {
     <section class="models-section">
+      @if (hostedModels.length) { <h2>Local</h2> }
       <div class="models-grid">
         @for (model of models; track model.id) {
           <div class="model-card" [class.is-installed]="model.installed" [class.ram-warn]="tooBig(model)">
@@ -89,8 +123,8 @@
                   <button class="btn-primary" [disabled]="!!busyId" (click)="use(model)">Use this model</button>
                 }
                 @if (auth.can('manage_models')) {
-                  <button class="btn-danger" [disabled]="!!busyId || installedCount === 1" (click)="remove(model)"
-                          [title]="installedCount === 1 ? 'At least one model must stay downloaded' : ''">
+                  <button class="btn-danger" [disabled]="!!busyId || lastUsable" (click)="remove(model)"
+                          [title]="lastUsable ? 'At least one model must stay available' : ''">
                     {{ busyId === model.id ? 'Working…' : 'Remove' }}
                   </button>
                 }
@@ -111,10 +145,11 @@
           </div>
         }
       </div>
-      @if (installedCount === 1) {
+      @if (lastUsable && installedCount === 1) {
         <p class="muted-text keep-note">At least one model must stay downloaded, so the only downloaded model can't be removed.</p>
       }
     </section>
+    }
 
     <section class="ingest-panel">
       <h2>Embeddings</h2>

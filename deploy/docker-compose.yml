@@ -40,6 +40,13 @@ x-backend: &backend
     RETENTION_CHECK_HOURS: ${RETENTION_CHECK_HOURS:-24}
     OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+    OLLAMA_ENABLED: ${OLLAMA_ENABLED:-true}
+    # hosted models (docs/hosted-models.md): nothing is sent unless URL and models are set
+    LLM_API_BASE_URL: ${LLM_API_BASE_URL:-}
+    LLM_API_KEY: ${LLM_API_KEY:-}
+    LLM_API_MODELS: ${LLM_API_MODELS:-}
+    LLM_API_NAME: ${LLM_API_NAME:-}
+    LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-}
     MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-20}
     CELERY_VISIBILITY_TIMEOUT: ${CELERY_VISIBILITY_TIMEOUT:-7200}
 

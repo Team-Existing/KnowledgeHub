@@ -5,9 +5,14 @@
         <h1>Welcome to Knowledge Hubs</h1>
         <p class="step-number">Step 1 of {{ steps.length }}</p>
         <div class="welcome-message">
-          <p>Knowledge Hubs runs fully on your machine.</p>
-          <p><strong>No API key needed.</strong></p>
-          <p>Your data stays private. All AI processing happens locally.</p>
+          @if (hosted.length) {
+            <p>Knowledge Hubs keeps your organization's decisions, risks and lessons, and answers questions about them.</p>
+            <p>You choose the AI model: local models keep everything on this server; hosted models send the text they work on to {{ hosted.join(', ') }}.</p>
+          } @else {
+            <p>Knowledge Hubs runs fully on your machine.</p>
+            <p><strong>No API key needed.</strong></p>
+            <p>Your data stays private. All AI processing happens locally.</p>
+          }
         </div>
         <button class="btn-primary" [disabled]="checking" (click)="start()">
           {{ checking ? 'Checking this computer…' : 'Get Started' }}

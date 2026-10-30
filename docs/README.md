@@ -9,6 +9,7 @@
 - [Knowledge health](knowledge-health.md): what may be out of date, and why
 - [Connectors](connectors.md)
 - [Local models](local-models.md)
+- [Hosted models](hosted-models.md)
 - [Inactive accounts and groups](retention.md)
 
 **Running it**

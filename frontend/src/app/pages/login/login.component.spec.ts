@@ -5,17 +5,24 @@ import { provideRouter } from '@angular/router'
 import { LoginComponent } from './login.component'
 import { ModelCatalog, ModelService } from '../../services/model.service'
 
-function catalog(installed: string[], reachable = true): ModelCatalog {
-  const ids = ['llama3.1:8b', 'mistral:7b', 'gpt-oss:20b']
+function catalog(installed: string[], reachable = true, hosted: string[] = [], ollamaEnabled = true): ModelCatalog {
+  const ids = ollamaEnabled ? ['llama3.1:8b', 'mistral:7b', 'gpt-oss:20b'] : []
   return {
-    ollamaReachable: reachable,
-    anyInstalled: reachable && installed.length > 0,
+    ollamaEnabled,
+    ollamaReachable: ollamaEnabled && reachable,
+    anyInstalled: (reachable && installed.length > 0) || hosted.length > 0,
     ramGb: 16,
     recommended: 'llama3.1:8b',
-    models: ids.map(id => ({
-      id, name: id, size: '4 GB', ramRequired: '8 GB+', minRamGb: 8, description: '',
-      provider: 'ollama' as const, installed: installed.includes(id), active: false,
-    })),
+    models: [
+      ...ids.map(id => ({
+        id, name: id, size: '4 GB', ramRequired: '8 GB+', minRamGb: 8, description: '',
+        provider: 'ollama' as const, providerName: 'Ollama', local: true, installed: installed.includes(id), active: false,
+      })),
+      ...hosted.map(name => ({
+        id: `api/${name}`, name, size: '', ramRequired: '', minRamGb: 0, description: '',
+        provider: 'api' as const, providerName: 'Test Cloud', local: false, installed: true, active: false,
+      })),
+    ],
   }
 }
 
@@ -86,6 +93,25 @@ describe('LoginComponent model gate', () => {
     http.expectOne('/auth/me').flush({ id: '1', username: 'ana', role: 'admin', permissions: [], llm_model: null })
     await done
     localStorage.removeItem('kh_token')
+  })
+
+  it('signs in with a hosted model while Ollama is down, and says where text goes', async () => {
+    await load(catalog([], false, ['small-model']))
+    expect(fixture.componentInstance.stage).toBe('ready')
+    expect(text()).toContain('hosted models send the text they work on to Test Cloud')
+    expect(text()).not.toContain('your knowledge never leaves this server')
+  })
+
+  it('says only local models are in use when there are no hosted ones', async () => {
+    await load(catalog(['mistral:7b']))
+    expect(text()).toContain('your knowledge never leaves this server')
+  })
+
+  it('asks for an administrator when the server has no model at all', async () => {
+    await load(catalog([], false, [], false))
+    expect(fixture.componentInstance.stage).toBe('needs-model')
+    expect(text()).toContain('No AI model is configured')
+    expect(text()).not.toContain("Ollama isn't running")
   })
 
   it('explains when Ollama is not running', async () => {

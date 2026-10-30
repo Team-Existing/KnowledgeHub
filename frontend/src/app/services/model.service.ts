@@ -3,7 +3,10 @@ import { HttpClient } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
 import { AuthService, API_BASE } from './auth.service'
 
-/** One of the three supported local LLMs (all served by Ollama). */
+/**
+ * A model users can choose: one of the three local models (served by Ollama),
+ * or a model of the server's OpenAI-compatible API (id "api/<name>").
+ */
 export interface LocalModel {
   id: string
   name: string
@@ -11,14 +14,21 @@ export interface LocalModel {
   ramRequired: string
   minRamGb: number
   description: string
-  provider: 'ollama'
+  provider: 'ollama' | 'api'
+  /** "Ollama", or the API's name, e.g. "OpenAI" */
+  providerName: string
+  /** false: the text it works on is sent to providerName */
+  local: boolean
   installed: boolean
   active: boolean
 }
 
 /** GET /models/catalog — public, used before sign-in. */
 export interface ModelCatalog {
+  /** false: this server has no local models, only API ones */
+  ollamaEnabled: boolean
   ollamaReachable: boolean
+  /** any model usable: an installed local one, or an API model */
   anyInstalled: boolean
   ramGb: number
   recommended: string
@@ -27,7 +37,9 @@ export interface ModelCatalog {
 
 export interface ModelStatus {
   llm: {
-    provider: 'local'
+    provider: 'local' | 'api'
+    local?: boolean
+    providerName?: string
     model?: string | null
     installed?: boolean
     ollamaReachable?: boolean
@@ -52,6 +64,16 @@ export interface InstallProgress {
   percent: number
 }
 
+/** "api/gpt-4.1-mini" → "gpt-4.1-mini"; local tags are unchanged */
+export function modelName(id: string | null | undefined): string {
+  return (id ?? '').replace(/^api\//, '')
+}
+
+/** Names of the services that hosted models send text to, e.g. ["OpenAI"] */
+export function hostedProviders(models: LocalModel[]): string[] {
+  return [...new Set(models.filter(m => !m.local).map(m => m.providerName))]
+}
+
 @Injectable({ providedIn: 'root' })
 export class ModelService {
   private _modelStatus = signal<ModelStatus | null>(null)
@@ -66,7 +88,10 @@ export class ModelService {
   readonly initialized = this._initialized.asReadonly()
   readonly installProgress = this._installProgress.asReadonly()
 
-  readonly currentLlmProvider = computed(() => this._modelStatus() ? 'local' : 'not-configured')
+  readonly currentLlmProvider = computed(() => this._modelStatus()?.llm.provider ?? 'not-configured')
+
+  /** Whether the signed-in user's model runs locally (true until the status is known) */
+  readonly isLocal = computed(() => this._modelStatus()?.llm.local !== false)
 
   readonly currentLlmModel = computed(() => this._modelStatus()?.llm.model || 'Not configured')
 
@@ -74,7 +99,8 @@ export class ModelService {
 
   readonly statusBadgeText = computed(() => {
     const llm = this._modelStatus()?.llm
-    return llm?.installed ? `Local · ${llm.model}` : 'No model active'
+    if (!llm?.installed) return 'No model active'
+    return llm.local === false ? `${llm.providerName} · ${modelName(llm.model)}` : `Local · ${llm.model}`
   })
 
   constructor(private http: HttpClient, private auth: AuthService) {}

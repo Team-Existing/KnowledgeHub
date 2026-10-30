@@ -63,6 +63,13 @@ services:
       ARCADEDB_PASSWORD: ${ARCADEDB_PASSWORD:-knowledge-hubs-local}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+      OLLAMA_ENABLED: ${OLLAMA_ENABLED:-true}
+      # hosted models (docs/hosted-models.md): nothing is sent unless URL and models are set
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_MODELS: ${LLM_API_MODELS:-}
+      LLM_API_NAME: ${LLM_API_NAME:-}
+      LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-}
       # empty = generated on first start and kept in the backend-secrets volume
       SECRET_KEY: ${SECRET_KEY:-}
       CREDENTIALS_KEY: ${CREDENTIALS_KEY:-}

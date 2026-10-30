@@ -107,7 +107,11 @@
       @if (txSummary) {
         <div class="summary-box"><strong>AI Summary:</strong> {{ txSummary }}</div>
       }
-      <p class="provider-hint">ⓘ Transcript mode uses your local model — no data leaves this device</p>
+      @if (modelService.isLocal()) {
+        <p class="provider-hint">ⓘ Transcript mode uses your local model — no data leaves this server</p>
+      } @else {
+        <p class="provider-hint">ⓘ Transcript mode uses {{ modelService.statusBadgeText() }}: the text is sent to {{ modelService.modelStatus()?.llm?.providerName }}</p>
+      }
       <div class="panel-actions">
         @if (error) {
           <span class="error-text">{{ error }}</span>

@@ -491,7 +491,7 @@ def _format_fallback_answer(question: str, nodes: List[Dict[str, Any]]) -> str:
     """An answer without the LLM: the retrieved items, grouped by type."""
     groups = [("how-to", "How-to steps"), ("best-practice", "Best practices"), ("lesson", "Lessons learned"),
               ("decision", "Decisions"), ("risk", "Risks"), ("action-item", "Action items")]
-    parts = [f"The local model didn't answer, so here is what the knowledge base holds on **{question}**:\n"]
+    parts = [f"The model didn't answer, so here is what the knowledge base holds on **{question}**:\n"]
     for kind, heading in groups:
         entries = [n for n in nodes if (n.get("kind") or n.get("type")) == kind][:5]
         if entries:
