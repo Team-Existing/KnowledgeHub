@@ -13,6 +13,7 @@ export function describeSignal(s: HealthSignal): string {
     case 'removed_from_source': return `Its source “${s.source_title ?? 'the source'}” changed and no longer contains it`
     case 'dependency_changed': return `${s.reason ?? 'An item it builds on changed'}${s.item_title ? `: “${s.item_title}”` : ''}`
     case 'flagged': return `Flagged${s.actor ? ` by ${s.actor}` : ''}: “${s.note ?? ''}”`
+    case 'outcome_not_achieved': return `Its outcome was recorded as not achieved${s.note ? `: “${s.note}”` : ''}`
     default: return s.kind
   }
 }

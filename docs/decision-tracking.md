@@ -17,6 +17,7 @@ Items are linked newer → older:
 | realizes | any → risk | the risk happened: `materialized` |
 | mitigates | any → risk | `mitigated` |
 | learned from | lesson → any | the lesson came out of that item |
+| carries out (`implements`) | action item → decision | the commitment carries out the decision ([commitments](commitments.md)) |
 
 - **Links set the status.** Delete the link (or the newer item) and the older one goes back automatically.
 - **You can also declare a status by hand,** e.g. a decision dropped without a replacement, or a risk that's closed. A link still takes priority over a declared status.

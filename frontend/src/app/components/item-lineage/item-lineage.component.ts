@@ -7,8 +7,9 @@ import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
 import { describeSignal } from '../../services/health'
+import { VERDICT_LABEL } from '../../services/tracking'
 import {
-  HealthSignal, ItemEvent, KnowledgeItem, LineageLink, LineageResponse, LinkKind, LinkKindsResponse, LinkSuggestion,
+  HealthSignal, ItemEvent, Verdict, KnowledgeItem, LineageLink, LineageResponse, LinkKind, LinkKindsResponse, LinkSuggestion,
 } from '../../models/api'
 
 type Direction = 'out' | 'in'
@@ -22,6 +23,7 @@ const PHRASES: Record<LinkKind, { out: string; in: string }> = {
   realizes: { out: 'Shows this risk happened:', in: 'Happened — shown by' },
   mitigates: { out: 'Mitigates', in: 'Mitigated by' },
   learned_from: { out: 'Learned from', in: 'Taught the lesson' },
+  implements: { out: 'Carries out the decision', in: 'Carried out by' },
 }
 
 @Component({
@@ -171,6 +173,9 @@ export class ItemLineageComponent implements OnChanges {
       case 'unlinked': return `Removed ${d['kind']} link`
       case 'health_flagged': return `May be out of date: ${describeSignal(d as HealthSignal)}`
       case 'verified': return `Confirmed it still holds${d['note'] ? ` (“${d['note']}”)` : ''}${d['review_due'] ? `; next review ${d['review_due']}` : ''}`
+      case 'commitment_updated': return `Commitment: ${Object.entries(d).map(([k, v]) => `${k === 'due_date' ? 'due' : k} ${v ?? 'cleared'}`).join(', ')}`
+      case 'outcome_expected': return d['expected'] ? `Expected outcome: “${d['expected']}”${d['check_by'] ? `; check by ${d['check_by']}` : ''}` : 'Expected outcome cleared'
+      case 'outcome_recorded': return d['verdict'] ? `Outcome: ${VERDICT_LABEL[d['verdict'] as Verdict]}${d['note'] ? ` (“${d['note']}”)` : ''}` : 'Outcome withdrawn'
       case 'review_date_set': return d['review_due'] ? `Review date set to ${d['review_due']}` : 'Review date cleared'
       default: return e.kind
     }

@@ -6,6 +6,7 @@
 - [Screenshots](screenshots.md): every page of the app
 - [Accounts, roles and spaces](accounts-and-spaces.md)
 - [Decision tracking](decision-tracking.md)
+- [Commitments and outcomes](commitments.md): what decisions set in motion, and whether they worked
 - [Knowledge health](knowledge-health.md): what may be out of date, and why
 - [Connectors](connectors.md)
 - [Local models](local-models.md)

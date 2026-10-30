@@ -6,10 +6,11 @@
 export type ReviewStatus = 'pending' | 'accepted' | 'rejected'
 export type ExtractionEngine = 'regex' | 'local_llm' | 'cloud_llm' | 'structured'
 
-/** Lifecycle of decisions and risks (null for other item types); see backend services/lineage.py */
+/** Lifecycle of decisions, risks and commitments (null for other item types); see backend services/lineage.py */
 export type DecisionStatus = 'proposed' | 'active' | 'superseded' | 'reversed' | 'deprecated' | 'rejected'
 export type RiskStatus = 'open' | 'mitigated' | 'materialized' | 'closed'
-export type ItemStatus = DecisionStatus | RiskStatus
+export type CommitmentStatus = 'open' | 'in_progress' | 'done' | 'dropped'
+export type ItemStatus = DecisionStatus | RiskStatus | CommitmentStatus
 
 /** Extracted item details; see backend item_schema.normalize_item_details. */
 export interface ItemDetails {
@@ -40,11 +41,61 @@ export interface KnowledgeItem {
   status: ItemStatus | null
   declared_status: ItemStatus | null
   health: ItemHealth
+  /** action items: see backend services/tracking.py */
+  commitment?: CommitmentInfo
+  /** decisions */
+  outcome?: OutcomeInfo
+}
+
+export interface CommitmentInfo {
+  owner: string | null
+  due_date: string | null
+  /** a due date in words ("end of sprint") when it isn't a date */
+  due_text: string | null
+  overdue: boolean
+}
+
+export type Verdict = 'achieved' | 'partly' | 'not_achieved'
+
+export interface OutcomeInfo {
+  expected: string | null
+  check_by: string | null
+  /** check_by has come and there's no verdict yet */
+  due: boolean
+  verdict: Verdict | null
+  note: string | null
+  recorded_at: string | null
+  recorded_by: string | null
+}
+
+/** GET /knowledge/commitments */
+export interface CommitmentEntry extends KnowledgeItem, CommitmentInfo {
+  status: CommitmentStatus
+  decision: { id: string; title: string; status: string | null } | null
+}
+export interface CommitmentsResponse {
+  items: CommitmentEntry[]
+  total: number
+  counts: Record<CommitmentStatus | 'overdue', number>
+}
+
+/** GET /knowledge/outcomes */
+export interface OutcomeEntry extends KnowledgeItem {
+  outcome: OutcomeInfo
+  commitments: { total: number; done: number; overdue: number }
+  lessons: { id: string; title: string; status: string | null }[]
+  mitigates: { id: string; title: string; status: string | null }[]
+}
+export interface OutcomesResponse {
+  awaiting: OutcomeEntry[]
+  recorded: OutcomeEntry[]
+  counts: Record<Verdict | 'awaiting' | 'due', number>
 }
 
 /** Whether a current item may be out of date; see backend services/health.py */
 export type HealthState = 'ok' | 'needs_review' | 'potentially_stale'
 export type HealthSignalKind = 'source_changed' | 'removed_from_source' | 'dependency_changed' | 'flagged'
+  | 'outcome_not_achieved'
 export interface HealthSignal {
   kind: HealthSignalKind
   at: string
@@ -416,7 +467,7 @@ export interface SetupStatus {
 
 /* ── Decision lineage ─────────────────────────────────────────────────────── */
 
-export type LinkKind = 'supersedes' | 'reverses' | 'amends' | 'realizes' | 'mitigates' | 'learned_from'
+export type LinkKind = 'supersedes' | 'reverses' | 'amends' | 'realizes' | 'mitigates' | 'learned_from' | 'implements'
 
 /** Edge newer -> older: `from` <kind> `to` */
 export interface LineageEdge {

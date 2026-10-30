@@ -155,6 +155,9 @@
       </aside>
     </div>
     <!-- Whether it may be out of date: signals, confirming, flagging, review date -->
+    @if (item.type === 'action-item' || item.type === 'decision') {
+      <app-item-tracking [item]="item" (changed)="load(); lineagePanel.load()"></app-item-tracking>
+    }
     <app-item-health [item]="item" (changed)="load(); lineagePanel.load()"></app-item-health>
     <!-- Status, decision chain, lineage links and event history -->
     <app-item-lineage #lineagePanel [item]="item" [items]="candidates" (changed)="load()"></app-item-lineage>

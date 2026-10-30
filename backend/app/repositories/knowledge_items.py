@@ -10,7 +10,8 @@ Row = Dict[str, Any]
 # everything except the embedding vector
 _FIELDS = ("id, user_id, artifact_id, title, type, author, date, tags, details, extraction_engine, "
            "review_status, review_note, embedding_provider, status, declared_status, "
-           "health_signals, review_due, verified_at, verified_by")
+           "health_signals, review_due, verified_at, verified_by, "
+           "owner, due_date, expected_outcome, outcome_check_by, outcome, outcome_note, outcome_at, outcome_by")
 
 
 class KnowledgeItemRepository:

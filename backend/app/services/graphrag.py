@@ -28,7 +28,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from app.services import embeddings as emb
-from app.services import llm_client
+from app.services import llm_client, tracking
 
 if TYPE_CHECKING:
     from app.repositories.graph import GraphStore
@@ -447,7 +447,8 @@ async def _hydrate(store: "GraphStore", user_id: str, nodes: List[Dict[str, Any]
         item = full.get(n.get("id"))
         if not item:
             continue
-        n["details"] = item.get("details") or {}
+        # who owns a commitment and whether a decision worked: services/tracking.py
+        n["details"] = {**(item.get("details") or {}), **tracking.context_details(item)}
         if item.get("health_signals"):
             n["health"] = "potentially_stale"
         aid = item.get("artifact_id")

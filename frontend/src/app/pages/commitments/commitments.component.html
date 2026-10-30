@@ -1,0 +1,98 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h1>Commitments</h1>
+      <p>What decisions set in motion, who owns it and when it's due, and whether the decisions worked.</p>
+    </div>
+  </section>
+
+  <div class="filter-chips" role="tablist" style="display:flex;gap:0.5rem;margin-bottom:1rem">
+    <button role="tab" [class.primary]="tab === 'commitments'" [attr.aria-selected]="tab === 'commitments'"
+            (click)="tab = 'commitments'">Commitments</button>
+    <button role="tab" [class.primary]="tab === 'outcomes'" [attr.aria-selected]="tab === 'outcomes'" (click)="tab = 'outcomes'">
+      Outcomes @if (outcomes?.counts?.due) { <span class="nav-badge">{{ outcomes?.counts?.due }}</span> }
+    </button>
+  </div>
+
+  @if (error) { <p class="error-text">{{ error }}</p> }
+
+  @if (tab === 'commitments') {
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem">
+      @for (f of filters; track f.key) {
+        <button [class.primary]="show === f.key" (click)="filter(f.key)">{{ f.label }} ({{ count(f.key) }})</button>
+      }
+    </div>
+    @if (loading) { <p class="muted-text">Loading…</p> }
+    @else if (!data?.items?.length) {
+      <p class="muted-text">
+        @if (show === 'overdue') { Nothing overdue. }
+        @else { No commitments here yet. Action items extracted from meetings and transcripts appear here. }
+      </p>
+    } @else {
+      <div class="lineage-list">
+        @for (c of data!.items; track c.id) {
+          <div class="lineage-row" style="flex-wrap:wrap">
+            <a class="grow" [routerLink]="['/knowledge', c.id]">{{ c.title }}</a>
+            @if (c.overdue) { <span class="status-badge is-overdue">Overdue</span> }
+            <span class="muted-text">{{ c.owner || 'no owner' }}</span>
+            <span class="muted-text">
+              @if (c.due_date) { due {{ c.due_date | date:'mediumDate' }} } @else if (c.due_text) { due “{{ c.due_text }}” } @else { no due date }
+            </span>
+            <select [value]="c.status" (change)="setStatus(c, $any($event.target).value)" [disabled]="busy"
+                    [attr.aria-label]="'Status of ' + c.title">
+              @for (s of statuses; track s) { <option [value]="s">{{ statusLabel[s] }}</option> }
+            </select>
+            @if (c.decision) {
+              <span class="muted-text" style="flex-basis:100%;font-size:0.8rem">
+                carries out <a [routerLink]="['/knowledge', c.decision.id]">{{ c.decision.title }}</a>
+              </span>
+            }
+          </div>
+        }
+      </div>
+    }
+  }
+
+  @if (tab === 'outcomes' && outcomes) {
+    <p class="muted-text">
+      {{ outcomes.counts.achieved }} achieved · {{ outcomes.counts.partly }} partly · {{ outcomes.counts.not_achieved }} not achieved ·
+      {{ outcomes.counts.awaiting }} waiting for a verdict
+    </p>
+    @if (!outcomes.awaiting.length && !outcomes.recorded.length) {
+      <p class="muted-text">No decision has an expected outcome yet. On a decision's page, say what it should achieve and when to check.</p>
+    }
+    @if (outcomes.awaiting.length) {
+      <h2 style="font-size:1rem;margin:1rem 0 0.5rem">Waiting for a verdict</h2>
+      <div class="lineage-list">
+        @for (d of outcomes.awaiting; track d.id) {
+          <div class="lineage-row" style="flex-wrap:wrap">
+            <a class="grow" [routerLink]="['/knowledge', d.id]" fragment="tracking">{{ d.title }}</a>
+            @if (d.outcome.due) { <span class="status-badge is-overdue">Due</span> }
+            @if (d.outcome.check_by) { <span class="muted-text">check by {{ d.outcome.check_by | date:'mediumDate' }}</span> }
+            <span class="muted-text" style="flex-basis:100%;font-size:0.8rem">
+              Expected: {{ d.outcome.expected }}
+              @if (d.commitments.total) { · commitments {{ d.commitments.done }}/{{ d.commitments.total }} done
+                @if (d.commitments.overdue) { ({{ d.commitments.overdue }} overdue) } }
+              @if (d.lessons.length) { · {{ d.lessons.length }} lesson{{ d.lessons.length === 1 ? '' : 's' }} learned }
+            </span>
+          </div>
+        }
+      </div>
+    }
+    @if (outcomes.recorded.length) {
+      <h2 style="font-size:1rem;margin:1rem 0 0.5rem">Recorded</h2>
+      <div class="lineage-list">
+        @for (d of outcomes.recorded; track d.id) {
+          <div class="lineage-row" style="flex-wrap:wrap">
+            <a class="grow" [routerLink]="['/knowledge', d.id]">{{ d.title }}</a>
+            <span class="status-badge" [ngClass]="'verdict-' + d.outcome.verdict">{{ verdictLabel[d.outcome.verdict!] }}</span>
+            <span class="muted-text">{{ d.outcome.recorded_at | date:'mediumDate' }}</span>
+            <span class="muted-text" style="flex-basis:100%;font-size:0.8rem">
+              Expected: {{ d.outcome.expected || '—' }}@if (d.outcome.note) { · “{{ d.outcome.note }}” }
+            </span>
+          </div>
+        }
+      </div>
+    }
+  }
+</div>
