@@ -70,6 +70,14 @@ services:
       LLM_API_MODELS: ${LLM_API_MODELS:-}
       LLM_API_NAME: ${LLM_API_NAME:-}
       LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-}
+      # single sign-on (docs/sso.md)
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      SSO_PROVIDERS: ${SSO_PROVIDERS:-}
+      SSO_GOOGLE_CLIENT_ID: ${SSO_GOOGLE_CLIENT_ID:-}
+      SSO_GOOGLE_CLIENT_SECRET: ${SSO_GOOGLE_CLIENT_SECRET:-}
+      SSO_MICROSOFT_CLIENT_ID: ${SSO_MICROSOFT_CLIENT_ID:-}
+      SSO_MICROSOFT_CLIENT_SECRET: ${SSO_MICROSOFT_CLIENT_SECRET:-}
+      SSO_MICROSOFT_ISSUER: ${SSO_MICROSOFT_ISSUER:-}
       # empty = generated on first start and kept in the backend-secrets volume
       SECRET_KEY: ${SECRET_KEY:-}
       CREDENTIALS_KEY: ${CREDENTIALS_KEY:-}

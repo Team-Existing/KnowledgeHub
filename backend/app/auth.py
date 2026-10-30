@@ -91,7 +91,9 @@ def burn_password_check(plain: str) -> None:
     verify_password(plain, _DUMMY_HASH)
 
 
-def verify_password(plain: str, hashed: str) -> bool:
+def verify_password(plain: str, hashed: Optional[str]) -> bool:
+    if not hashed:          # an account that only signs in with SSO has no password
+        return False
     try:
         return bcrypt.checkpw(_bcrypt_input(plain), hashed.encode("ascii"))
     except (ValueError, TypeError, UnicodeEncodeError):   # malformed or missing hash
@@ -137,4 +139,4 @@ async def get_current_user(
     # every LLM call made while handling this request uses the user's chosen model
     use_model(user.get("llm_model"))
     return User(id=user["id"], username=user["username"], role=user.get("role") or "member",
-                llm_model=user.get("llm_model"))
+                llm_model=user.get("llm_model"), email=user.get("email"))

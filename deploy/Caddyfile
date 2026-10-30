@@ -39,7 +39,8 @@
 	@page {
 		method GET
 		header Accept *text/html*
-		not path /docs* /openapi.json
+		# sign-in redirects (browser navigations) go to the API: services/sso.py
+		not path /docs* /openapi.json /auth/sso/*
 	}
 	handle @page {
 		root * /srv

@@ -41,6 +41,8 @@ export const routes: Routes = [
   { path: 'graphrag', loadComponent: () => import('./pages/graphrag/graphrag.component').then(m => m.GraphragComponent), canActivate: [authGuard] },
   { path: 'settings/models', loadComponent: () => import('./pages/model-manager/model-manager.component').then(m => m.ModelManagerComponent), canActivate: [authGuard] },
   { path: 'playbooks', loadComponent: () => import('./pages/playbooks/playbooks.component').then(m => m.PlaybooksComponent), canActivate: [authGuard] },
+  { path: 'sso/complete', loadComponent: () => import('./pages/sso-complete/sso-complete.component').then(m => m.SsoCompleteComponent) },
+  { path: 'account', loadComponent: () => import('./pages/account/account.component').then(m => m.AccountComponent), canActivate: [authGuard] },
   { path: 'organizations', loadComponent: () => import('./pages/organizations/organizations.component').then(m => m.OrganizationsComponent), canActivate: [authGuard] },
   { path: 'join/:token', loadComponent: () => import('./pages/join/join.component').then(m => m.JoinComponent), canActivate: [authGuard] },
   { path: 'groups', loadComponent: () => import('./pages/groups/groups.component').then(m => m.GroupsComponent), canActivate: [authGuard] },

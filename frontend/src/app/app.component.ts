@@ -36,7 +36,7 @@ export class AppComponent implements OnDestroy {
   readonly sourceCodeUrl = SOURCE_CODE_URL
 
   /** Sign-in and onboarding are full-screen pages without the app shell. */
-  readonly bare = computed(() => !this.auth.isLoggedIn() || /^\/(login|onboarding)(\/|\?|$)/.test(this.url()))
+  readonly bare = computed(() => !this.auth.isLoggedIn() || /^\/(login|onboarding|sso)(\/|\?|#|$)/.test(this.url()))
 
   readonly sections: { label: string; items: NavItem[] }[] = [
     { label: 'Knowledge', items: [

@@ -10,6 +10,7 @@
 - [Connectors](connectors.md)
 - [Local models](local-models.md)
 - [Hosted models](hosted-models.md)
+- [Single sign-on](sso.md)
 - [Inactive accounts and groups](retention.md)
 
 **Running it**

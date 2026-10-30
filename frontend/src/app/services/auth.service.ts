@@ -1,7 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core'
 import { HttpClient, HttpParams } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
-import { Me, Permission, SetupStatus, TokenResponse } from '../models/api'
+import { Me, Permission, SetupStatus, SsoProvider, TokenResponse } from '../models/api'
 
 export const API_BASE = ''
 
@@ -27,6 +27,24 @@ export class AuthService {
     localStorage.setItem('kh_token', data.access_token)
     this._token.set(data.access_token)
     await this.loadMe()
+  }
+
+  /** A token from single sign-on (the /sso/complete page) */
+  async useToken(token: string): Promise<void> {
+    localStorage.setItem('kh_token', token)
+    this._token.set(token)
+    await this.loadMe()
+  }
+
+  /** The sign-in methods this server offers besides passwords (public) */
+  ssoProviders(): Promise<SsoProvider[]> {
+    return firstValueFrom(this.http.get<SsoProvider[]>(`${API_BASE}/auth/sso/providers`))
+  }
+
+  /** Where the browser goes to sign in with a provider; it comes back to `next` */
+  ssoStartUrl(providerId: string, next: string | null): string {
+    const query = next ? `?next=${encodeURIComponent(next)}` : ''
+    return `${API_BASE}/auth/sso/${encodeURIComponent(providerId)}/start${query}`
   }
 
   async loadMe(): Promise<void> {

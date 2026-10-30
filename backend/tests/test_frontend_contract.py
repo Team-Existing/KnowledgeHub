@@ -23,6 +23,8 @@ FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "src" / "app"
 NOT_FOR_THE_UI: Set[Tuple[str, str]] = {
     # one item by id, for API clients; the item page loads it with its context (/context)
     ("GET", "/knowledge/items/{item_id}"),
+    # the sign-in provider sends the browser here; the app only starts the flow (/auth/sso/{id}/start)
+    ("GET", "/auth/sso/{provider_id}/callback"),
 }
 
 _HTTP_CALL = re.compile(

@@ -9,6 +9,7 @@ import { errorMessage } from '../../services/http-error'
 import { IconComponent } from '../../components/icon/icon.component'
 import { PASSWORD_RULES } from '../../services/usernames'
 import { safeReturnUrl } from '../../services/auth.guard'
+import { SsoProvider } from '../../models/api'
 
 /**
  * Sign-in starts with a model check: a model must be usable (an installed
@@ -36,6 +37,8 @@ export class LoginComponent implements OnInit {
   readonly sessionExpired: boolean
   /** Where to go after signing in (an invite link, for example) */
   readonly returnUrl: string | null
+  /** Single sign-on providers this server offers */
+  ssoProviders: SsoProvider[] = []
 
   constructor(
     private auth: AuthService,
@@ -45,6 +48,8 @@ export class LoginComponent implements OnInit {
   ) {
     this.sessionExpired = route.snapshot.queryParamMap.has('expired')
     this.returnUrl = safeReturnUrl(route.snapshot.queryParamMap.get('returnUrl'))
+    // a single sign-on that didn't complete comes back here with the reason
+    this.error = route.snapshot.queryParamMap.get('sso_error') ?? ''
   }
 
   ngOnInit() {
@@ -53,6 +58,7 @@ export class LoginComponent implements OnInit {
       this.needsSetupToken = s.setup_token_required
       if (s.setup_token_required) this.mode = 'register'
     }).catch(() => { /* older server, or unreachable: checkModels reports that */ })
+    this.auth.ssoProviders().then(p => this.ssoProviders = p).catch(() => { /* no single sign-on */ })
   }
 
   async checkModels() {
@@ -74,6 +80,8 @@ export class LoginComponent implements OnInit {
 
   /** Services hosted models send text to; empty when every model is local */
   get hosted(): string[] { return this.catalog ? hostedProviders(this.catalog.models) : [] }
+
+  ssoUrl(p: SsoProvider): string { return this.auth.ssoStartUrl(p.id, this.returnUrl) }
 
   toggleMode() { this.mode = this.mode === 'login' ? 'register' : 'login'; this.error = '' }
 

@@ -4,6 +4,8 @@
 const target = 'http://localhost:8000'
 
 const bypass = (req) => {
+  // single sign-on redirects are browser navigations the backend must answer
+  if (req.url.startsWith('/auth/sso/')) return undefined
   if (req.method === 'GET' && (req.headers.accept || '').includes('text/html')) {
     return '/index.html'
   }

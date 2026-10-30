@@ -31,6 +31,14 @@
       <button class="btn-primary" [disabled]="loading || !username || !password || (mode === 'register' && needsSetupToken && !setupToken)" (click)="submit()">
         {{ loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account' }}
       </button>
+      @if (ssoProviders.length) {
+        <div class="sso-options" style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.75rem">
+          <p class="muted-text" style="text-align:center;margin:0">or</p>
+          @for (p of ssoProviders; track p.id) {
+            <a class="btn-secondary" style="text-align:center" [href]="ssoUrl(p)">Continue with {{ p.name }}</a>
+          }
+        </div>
+      }
       <button class="btn-secondary" (click)="toggleMode()">
         {{ mode === 'login' ? 'No account? Register' : 'Have an account? Sign in' }}
       </button>

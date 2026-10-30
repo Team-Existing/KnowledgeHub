@@ -9,7 +9,7 @@
 | **Organization admin** | Promoted by an owner, or joined through an admin invite link | Rename the organization, create and revoke member invite links, remove members |
 | **Group admin** | Whoever creates a group | Invite the organization's members to the group, remove them, rename or delete the group |
 
-Set `ALLOW_REGISTRATION=false` to make server admins create every account. Usernames are unique ignoring case (`Alice` and `alice` are the same name). New names use letters, digits, `.`, `_` and `-`, and are 3 to 60 characters long.
+People can also sign in with Google, Microsoft or another OpenID Connect provider, and organizations can admit everyone at their email domain: see [Single sign-on](sso.md). Set `ALLOW_REGISTRATION=false` to make server admins create every account. Usernames are unique ignoring case (`Alice` and `alice` are the same name). New names use letters, digits, `.`, `_` and `-`, and are 3 to 60 characters long.
 
 ## Spaces
 

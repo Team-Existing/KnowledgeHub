@@ -57,6 +57,8 @@ The schema lives in [`backend/app/schema.py`](../backend/app/schema.py) and is a
 | `Organization` | document | the tenant: name, creator. Its id (`org_…`) is also its space's id |
 | `OrgMember` | document | user ↔ organization: `role` (`owner`, `admin`, `member`), `status` (`active`, `left`, `removed`), `joined_at`, `left_at` |
 | `OrgInvite` | document | an invite link: `token_hash` (the token itself is never stored), `role`, `expires_at`, `max_uses`, `uses`, `revoked` |
+| `OrgDomain` | document | an email domain an organization claimed: verified SSO users there join it |
+| `SsoIdentity` | document | a sign-in provider account (`provider` + `subject`) connected to a user; `User.email` holds the provider-verified address |
 | `GroupSpace` | document | a group: name, creator, `org_id`, `last_active_at` |
 | `Membership` | document | user ↔ group: `role` (`admin` for the creator, `member` otherwise) and `status` (`invited`, `active`, `declined`, `left`, `removed`) |
 | `ItemEvent` | document | an item's history: reviewed, edited, linked, unlinked, status changes, health signals, confirmations, review dates, with `actor` |
