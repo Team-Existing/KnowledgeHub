@@ -9,7 +9,8 @@ Row = Dict[str, Any]
 
 # everything except the embedding vector
 _FIELDS = ("id, user_id, artifact_id, title, type, author, date, tags, details, extraction_engine, "
-           "review_status, review_note, embedding_provider, status, declared_status")
+           "review_status, review_note, embedding_provider, status, declared_status, "
+           "health_signals, review_due, verified_at, verified_by")
 
 
 class KnowledgeItemRepository:
@@ -133,16 +134,26 @@ class KnowledgeItemRepository:
             {"fields": fields, "id": item_id, "u": user_id},
         )
 
+    async def ids_missing_from(self, user_id: str, artifact_id: str, items: List[Row]) -> List[str]:
+        """The artifact's stored items that `items` no longer contains."""
+        rows = await self.session.query(
+            "SELECT id FROM KnowledgeItem WHERE artifact_id = :a AND user_id = :u AND id NOT IN :keep",
+            {"a": artifact_id, "u": user_id, "keep": [i["id"] for i in items] or [""]},
+        )
+        return [r["id"] for r in rows]
+
     async def sync_for_artifact(
         self, user_id: str, artifact_id: str, items: List[Row], extraction_engine: str,
+        retain: Optional[List[str]] = None,
     ) -> None:
         """
-        Make the artifact's stored items match `items`: drop stale ones, upsert
-        the rest. An item's own "extraction_engine" overrides the default.
+        Make the artifact's stored items match `items`: drop stale ones (except
+        the ids in `retain`), upsert the rest. An item's own "extraction_engine"
+        overrides the default.
         """
         await self.session.execute(
             "DELETE VERTEX FROM KnowledgeItem WHERE artifact_id = :a AND user_id = :u AND id NOT IN :keep",
-            {"a": artifact_id, "u": user_id, "keep": [i["id"] for i in items] or [""]},
+            {"a": artifact_id, "u": user_id, "keep": [i["id"] for i in items] + list(retain or []) or [""]},
         )
         for item in items:
             await self.upsert(user_id, item, extraction_engine=item.get("extraction_engine", extraction_engine))

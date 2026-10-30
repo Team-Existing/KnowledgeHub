@@ -14,6 +14,7 @@ All endpoints except `/auth/register`, `/auth/setup`, `/auth/token`, `GET /healt
 | Review | `GET /knowledge/review?limit=&offset=` (oldest first, default 50; `X-Total-Count` header), `PATCH /knowledge/review/{id}` |
 | Search | `GET /knowledge/search?q=&type=&source_type=&tag=&limit=` (default 50; artifacts come with a `snippet` and a `first_item_id`, not their text) |
 | Links | `POST /knowledge/link`, `GET /knowledge/links` |
+| Health | `GET /knowledge/health?limit=&offset=` (current items that may be out of date or are due for review, most urgent first; `counts`, `total`, `X-Total-Count`), `POST /knowledge/items/{id}/health/flag` (`note`, required), `POST /knowledge/items/{id}/health/verify` (`note`, `review_due`: clears the signals and sets the next review date, or none), `PUT /knowledge/items/{id}/review-date` (`review_due` or `null`). Every item carries `health`: `state`, `signals`, `review_due`, `overdue`, `verified_at`, `verified_by` |
 | Lineage | `GET /knowledge/lineage/kinds`, `GET/POST /knowledge/items/{id}/lineage`, `DELETE /knowledge/items/{id}/lineage/{other}`, `GET …/lineage/suggestions`, `PUT /knowledge/items/{id}/status`, `GET /knowledge/register?type=&limit=&offset=` (newest first, default 300; `total`, and `related` for chain items outside the page) |
 | Playbooks | `GET /knowledge/playbooks`, `POST /knowledge/playbooks` (same title replaces), `DELETE /knowledge/playbooks/{id}` |
 | OKF | `GET /knowledge/okf/export`, `POST /knowledge/okf/import` |

@@ -20,7 +20,7 @@ from app.repositories import (
     RelationshipRepository,
 )
 from app.serializers import item_dict
-from app.services import lineage
+from app.services import health, lineage
 from app.services.graphrag import embed, embed_items
 from app.services.item_schema import normalize_item_details
 from app.services.llm_extraction import _summarise_text, extract_from_document, extract_from_transcript
@@ -144,10 +144,16 @@ async def persist_artifact(
     """
     Upsert the artifact, sync its items, ensure CONTAINS edges — one transaction,
     run again on a write conflict (only these writes: the extraction isn't repeated).
-    Returns the edges.
+    When the artifact already existed with other content, its items' health is
+    updated (see services/health.py). Returns the edges.
     """
     async def write() -> List[Dict[str, Any]]:
-        await ArtifactRepository(session).upsert(
+        artifacts, item_repo = ArtifactRepository(session), KnowledgeItemRepository(session)
+        before = await artifacts.get_owned(user_id, artifact["id"])
+        changed = bool(before) and before.get("content") != artifact["content"]
+        missing = await item_repo.ids_missing_from(user_id, artifact["id"], items)
+        retained = await health.worth_keeping(session, user_id, missing)
+        await artifacts.upsert(
             user_id,
             artifact["id"],
             title=artifact["title"],
@@ -160,12 +166,12 @@ async def persist_artifact(
             metadata=metadata,
             extraction_engine=extraction_engine,
         )
-        await KnowledgeItemRepository(session).sync_for_artifact(
-            user_id, artifact["id"], items, extraction_engine
-        )
+        await item_repo.sync_for_artifact(user_id, artifact["id"], items, extraction_engine, retain=retained)
         relationships = await RelationshipRepository(session).ensure_contains(
             user_id, artifact["id"], [i["id"] for i in items]
         )
+        if changed:
+            await health.source_changed(session, user_id, artifact, [i["id"] for i in items], retained)
         # new decisions/risks get their first status; removed items may have freed others
         await lineage.refresh_statuses(session, user_id)
         return relationships

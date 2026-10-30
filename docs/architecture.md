@@ -47,7 +47,7 @@ The schema lives in [`backend/app/schema.py`](../backend/app/schema.py) and is a
 |---|---|---|
 | `Node` | vertex supertype | `id` (unique across all nodes), `user_id` = the owning **space** (see below) |
 | `Artifact` | vertex, extends `Node` | source document; its LLM summary and summary embedding live here |
-| `KnowledgeItem` | vertex, extends `Node` | extracted item; `embedding` for vector search; review state; `status` / `declared_status` for decisions and risks |
+| `KnowledgeItem` | vertex, extends `Node` | extracted item; `embedding` for vector search; review state; `status` / `declared_status` for decisions and risks; `health_signals`, `review_due`, `verified_at` / `verified_by` ([knowledge health](knowledge-health.md)) |
 | `CONTAINS` | edge | artifact → item |
 | `RELATED_TO` | edge | item → item cross-link, with `score` |
 | `LINK` | edge | any node → node, from OKF import; `type` holds the relation label |
@@ -55,7 +55,7 @@ The schema lives in [`backend/app/schema.py`](../backend/app/schema.py) and is a
 | `User` | document | `role` (`admin` / `member`), `username_key` (unique, case-folded), `last_active_at`, `last_login_at`, chosen `llm_model` |
 | `GroupSpace` | document | a group: name, creator, `last_active_at` |
 | `Membership` | document | user ↔ group: `role` (`admin` for the creator, `member` otherwise) and `status` (`invited`, `active`, `declined`, `left`, `removed`) |
-| `ItemEvent` | document | an item's history: reviewed, edited, linked, unlinked, status changes, with `actor` |
+| `ItemEvent` | document | an item's history: reviewed, edited, linked, unlinked, status changes, health signals, confirmations, review dates, with `actor` |
 | `Connector` | document | a source's settings (credentials encrypted) and its last sync result |
 | `SyncedDocument` | document | one document a connector fetched → the artifact it became, with a content hash |
 | `Playbook`, `QueryLog` | documents | playbooks; one log entry per GraphRAG question |

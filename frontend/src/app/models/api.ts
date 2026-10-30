@@ -39,6 +39,37 @@ export interface KnowledgeItem {
   review_note: string
   status: ItemStatus | null
   declared_status: ItemStatus | null
+  health: ItemHealth
+}
+
+/** Whether a current item may be out of date; see backend services/health.py */
+export type HealthState = 'ok' | 'needs_review' | 'potentially_stale'
+export type HealthSignalKind = 'source_changed' | 'removed_from_source' | 'dependency_changed' | 'flagged'
+export interface HealthSignal {
+  kind: HealthSignalKind
+  at: string
+  note?: string               // flagged: the reason given
+  actor?: string | null       // flagged: who
+  reason?: string             // dependency_changed: what happened, in words
+  item_id?: string            // dependency_changed: the item that changed
+  item_title?: string
+  source_id?: string          // source_changed / removed_from_source
+  source_title?: string
+}
+export interface ItemHealth {
+  state: HealthState
+  signals: HealthSignal[]
+  review_due: string | null   // YYYY-MM-DD
+  overdue: boolean
+  verified_at: string | null
+  verified_by: string | null
+}
+
+/** GET /knowledge/health */
+export interface KnowledgeHealthResponse {
+  items: KnowledgeItem[]
+  total: number
+  counts: { potentially_stale: number; needs_review: number; overdue: number }
 }
 
 export interface Artifact {
@@ -169,6 +200,7 @@ export interface Citation {
   title: string
   type: string
   status?: ItemStatus       // e.g. "superseded" when the cited decision was replaced
+  health?: HealthState      // "potentially_stale" when the cited item may be out of date
   /** matched to the answer's wording because the model wrote no [id] for it */
   inferred?: boolean
 }

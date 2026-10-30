@@ -23,6 +23,7 @@ A **local-first knowledge base** for teams. It turns meeting notes, retros, deci
 | [**Search**](docs/images/search.png) | Full-text search over items and sources, filtered by type, source and tag |
 | [**Review**](docs/images/review.png) | Accept, edit or reject extracted items before GraphRAG uses them |
 | [**Decisions**](docs/images/decisions.png) | The decision log and risk register, with each item's status and what replaced it |
+| **Health** | What may be out of date, and why: a changed source, a reversed decision it builds on, a flag, a review date |
 | [**Playbooks**](docs/images/playbooks.png) | Repeatable procedures, written as steps or built from how-tos and checklists in the space |
 | [**Sources**](docs/images/sources.png) | Connectors that pull in transcripts, notes, ADRs, pull requests and issues |
 | [**GraphRAG**](docs/images/graphrag.png) | Ask questions; answers cite their sources, flag superseded decisions, and say so when nothing covers the question |

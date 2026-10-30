@@ -1,0 +1,63 @@
+<section id="health" class="detail-panel">
+  <h3>Is this still true?</h3>
+
+  @if (error) { <p class="error-text">{{ error }}</p> }
+
+  @if (retired) {
+    <p class="muted-text">This item is {{ item.status }}, so it isn't checked for being out of date.</p>
+  } @else {
+    <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem">
+      <span class="status-badge" [ngClass]="'health-' + item.health.state">{{ label[item.health.state] }}</span>
+      @if (item.health.review_due) {
+        <span class="muted-text" [class.error-text]="item.health.overdue">
+          Review {{ item.health.overdue ? 'was due' : 'by' }} {{ item.health.review_due | date:'mediumDate' }}
+        </span>
+      }
+      @if (item.health.verified_at) {
+        <span class="muted-text">Confirmed {{ item.health.verified_at | date:'mediumDate' }}{{ item.health.verified_by ? ' by ' + item.health.verified_by : '' }}</span>
+      }
+    </div>
+
+    @if (item.health.signals.length) {
+      <ul style="margin:0 0 0.75rem 1.1rem;padding:0">
+        @for (s of item.health.signals; track $index) {
+          <li style="margin-bottom:0.25rem">
+            {{ describe(s) }}
+            @if (s.item_id) { <a [routerLink]="['/knowledge', s.item_id]" class="rel-name-link">open</a> }
+            <span class="muted-text"> · {{ s.at | date:'mediumDate' }}</span>
+          </li>
+        }
+      </ul>
+    }
+
+    @switch (mode) {
+      @case ('verify') {
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+          <input [(ngModel)]="note" placeholder="What did you check? (optional)" style="flex:1;min-width:180px" aria-label="Note" />
+          <label class="muted-text" style="display:flex;align-items:center;gap:0.35rem">
+            Next review <input type="date" [(ngModel)]="reviewDue" style="width:auto" aria-label="Next review date" />
+          </label>
+          <button class="primary" [disabled]="busy" (click)="verify()">Confirm</button>
+          <button [disabled]="busy" (click)="mode = ''">Cancel</button>
+        </div>
+      }
+      @case ('flag') {
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+          <input [(ngModel)]="note" placeholder="Why may it be out of date?" style="flex:1;min-width:180px" aria-label="Reason" />
+          <button class="warning" [disabled]="busy" (click)="flag()">Flag</button>
+          <button [disabled]="busy" (click)="mode = ''">Cancel</button>
+        </div>
+      }
+      @default {
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+          <button [disabled]="busy" (click)="open('verify')">{{ item.health.state === 'ok' ? 'Confirm it still holds' : 'Still valid' }}</button>
+          <button class="warning" [disabled]="busy" (click)="open('flag')">Flag as possibly outdated</button>
+          <label class="muted-text" style="display:flex;align-items:center;gap:0.35rem;margin-left:auto">
+            Review by <input type="date" [(ngModel)]="reviewDue" style="width:auto" aria-label="Review by date" />
+          </label>
+          <button [disabled]="busy || reviewDue === (item.health.review_due ?? '')" (click)="saveReviewDate()">Save date</button>
+        </div>
+      }
+    }
+  }
+</section>

@@ -6,8 +6,9 @@ import { HttpClient } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
+import { describeSignal } from '../../services/health'
 import {
-  ItemEvent, KnowledgeItem, LineageLink, LineageResponse, LinkKind, LinkKindsResponse, LinkSuggestion,
+  HealthSignal, ItemEvent, KnowledgeItem, LineageLink, LineageResponse, LinkKind, LinkKindsResponse, LinkSuggestion,
 } from '../../models/api'
 
 type Direction = 'out' | 'in'
@@ -168,6 +169,9 @@ export class ItemLineageComponent implements OnChanges {
         return `${p ? p[d['direction'] as Direction] : d['kind']} “${d['title'] ?? d['item_id']}”`
       }
       case 'unlinked': return `Removed ${d['kind']} link`
+      case 'health_flagged': return `May be out of date: ${describeSignal(d as HealthSignal)}`
+      case 'verified': return `Confirmed it still holds${d['note'] ? ` (“${d['note']}”)` : ''}${d['review_due'] ? `; next review ${d['review_due']}` : ''}`
+      case 'review_date_set': return d['review_due'] ? `Review date set to ${d['review_due']}` : 'Review date cleared'
       default: return e.kind
     }
   }

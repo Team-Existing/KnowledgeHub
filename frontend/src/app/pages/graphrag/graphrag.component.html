@@ -43,6 +43,9 @@
                     @if (cite.status === 'superseded' || cite.status === 'reversed') {
                       <span class="status-badge" [ngClass]="'status-' + cite.status" title="This decision was replaced; see the item for what replaced it">{{ cite.status }}</span>
                     }
+                    @if (cite.health === 'potentially_stale') {
+                      <span class="status-badge health-potentially_stale" title="This item may be out of date; its page says why">may be out of date</span>
+                    }
                     <span class="citation-title">{{ cite.title }}</span>
                     @if (cite.inferred) {
                       <span class="muted-text" style="font-size:0.75rem"
