@@ -30,11 +30,11 @@
 	@csp not path /docs* /redoc*
 	header @csp Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 
-	# Some API prefixes are also app routes (/knowledge, /connectors, /groups,
+	# Some API prefixes are also app routes (/knowledge, /connectors, /groups, /organizations,
 	# /admin/users): a browser page load (GET accepting HTML) gets the app.
 	# Vary: Accept keeps the browser from answering the app's own API request
 	# for such a path with the page it cached on a reload, and vice versa.
-	@shared path /knowledge* /connectors* /groups* /admin*
+	@shared path /knowledge* /connectors* /groups* /organizations* /admin*
 	header @shared Vary Accept
 	@page {
 		method GET
@@ -47,7 +47,7 @@
 		file_server
 	}
 
-	@api path /auth* /admin* /spaces* /groups* /invitations* /knowledge* /connectors* /models* /health* /docs* /openapi.json
+	@api path /auth* /admin* /spaces* /groups* /organizations* /invitations* /knowledge* /connectors* /models* /health* /docs* /openapi.json
 	handle @api {
 		reverse_proxy {$APP_UPSTREAMS} {
 			lb_policy round_robin

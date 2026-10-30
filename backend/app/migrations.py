@@ -23,6 +23,13 @@ Security migrations, run on every startup after the schema (each is idempotent).
    CREDENTIALS_KEY, are (re-)encrypted with the current key. Without a key
    nothing can be done: plaintext secrets are left unused (syncs refuse them)
    and an error is logged.
+
+4. Organizations. Groups now live inside an organization, and group admins
+   can only invite its members. Before, every account on the server could
+   find and invite every other, so on upgrade all existing accounts join one
+   organization (server admins as owners, everyone else as members) and every
+   existing group moves into it. A server with no accounts yet gets nothing.
+   Recorded in Meta so it runs once.
 """
 from __future__ import annotations
 
@@ -31,6 +38,8 @@ import logging
 from app import crypto
 from app.arcadedb import ArcadeClient, ArcadeSession
 from app.rbac import Role
+from app.repositories.groups import ACTIVE
+from app.repositories.organizations import MEMBER, ORG_PREFIX, OWNER, OrganizationRepository
 from app import activity
 from app.usernames import username_key
 from app.services.connectors import REGISTRY
@@ -164,6 +173,34 @@ async def migrate_credentials(session: ArcadeSession) -> int:
     return changed
 
 
+DEFAULT_ORG_NAME = "Our organization"
+
+
+async def migrate_organizations(session: ArcadeSession) -> int:
+    """Returns how many accounts joined the organization created for the upgrade."""
+    if await session.query_one("SELECT key FROM Meta WHERE key = 'organizations_v1'"):
+        return 0
+    users = await session.query("SELECT id, role, created_at FROM User ORDER BY created_at, @rid")
+    joined = 0
+    if users:
+        owners = [u for u in users if u.get("role") == Role.ADMIN.value] or users[:1]
+        org_id = ORG_PREFIX + "default"
+        repo = OrganizationRepository(session)
+        if not await repo.get(org_id):
+            await repo.create(DEFAULT_ORG_NAME, owners[0]["id"], org_id=org_id)
+        owner_ids = {u["id"] for u in owners}
+        for u in users:
+            await repo.set_member(org_id, u["id"], role=OWNER if u["id"] in owner_ids else MEMBER,
+                                  status=ACTIVE, joined_at=u.get("created_at") or activity.now().isoformat())
+        joined = len(users)
+        await session.execute("UPDATE GroupSpace SET org_id = :o WHERE org_id IS NULL", {"o": org_id})
+        logger.info("Organizations: %d existing accounts and every existing group moved into '%s'; "
+                    "owners can rename it on the Organizations page", joined, DEFAULT_ORG_NAME)
+    await session.execute("INSERT INTO Meta CONTENT :doc", {"doc": {"key": "organizations_v1", "value": {"done": True}}})
+    await session.commit()
+    return joined
+
+
 async def run(client: ArcadeClient) -> None:
     session = ArcadeSession(client)
     try:
@@ -172,5 +209,6 @@ async def run(client: ArcadeClient) -> None:
         await migrate_roles(session)
         await migrate_connector_addresses(session)
         await migrate_credentials(session)
+        await migrate_organizations(session)
     finally:
         await session.close()

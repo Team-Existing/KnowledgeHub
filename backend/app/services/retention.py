@@ -20,6 +20,10 @@ What a deletion removes
   asked in groups, and the account. What they added to groups stays in the
   group (it belongs to the group). Groups they were admin of pass to the
   longest-standing remaining member, or are deleted if no member is left.
+  In an organization where they were the only owner, the longest-standing
+  admin (else member) becomes owner; an organization with nobody else in it
+  is deleted with its groups and data. Organizations themselves are never
+  deleted for inactivity.
 - Group: the group, its memberships, and everything in its space.
 
 Safety
@@ -41,6 +45,7 @@ from app.activity import deletes_on, inactive_days, last_activity, now
 from app.arcadedb import ArcadeClient, ArcadeSession
 from app.rbac import Role
 from app.repositories.groups import GROUP_ADMIN, GroupRepository
+from app.repositories.organizations import OWNER, OrganizationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -127,12 +132,24 @@ async def delete_user(session: ArcadeSession, user_id: str) -> Row:
             group = await groups.get(gid)
             await groups.delete_everything(gid)
             groups_deleted.append(group["name"] if group else gid)
+    orgs = OrganizationRepository(session)
+    orgs_deleted = []
+    for org in await orgs.orgs_of(user_id):
+        if org["role"] == OWNER and await orgs.count(org["id"], OWNER) <= 1:
+            heir = await orgs.successor(org["id"], user_id)
+            if heir:
+                await orgs.set_member(org["id"], heir, role=OWNER)
+                handed_over.append({"org_id": org["id"], "new_owner": heir})
+            else:
+                await orgs.delete_everything(org["id"])
+                orgs_deleted.append(org["name"])
     await delete_space_data(session, user_id)
     await session.execute("DELETE FROM QueryLog WHERE asked_by = :u", {"u": user_id})   # their questions in groups
     await session.execute("DELETE FROM Membership WHERE user_id = :u", {"u": user_id})
+    await session.execute("DELETE FROM OrgMember WHERE user_id = :u", {"u": user_id})
     await session.execute("DELETE FROM User WHERE id = :u", {"u": user_id})
     await session.commit()
-    return {"handed_over": handed_over, "groups_deleted": groups_deleted}
+    return {"handed_over": handed_over, "groups_deleted": groups_deleted, "organizations_deleted": orgs_deleted}
 
 
 async def run(session: ArcadeSession, at: Optional[datetime] = None) -> Row:

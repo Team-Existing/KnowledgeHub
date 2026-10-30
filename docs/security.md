@@ -14,7 +14,7 @@ How Knowledge Hubs protects accounts and data. To report a vulnerability, see [S
   - *Upgrading:* existing accounts that differ only in case keep working with their exact name and are listed in a startup warning.
 
 **Data isolation**
-- **Spaces.** Every query is scoped to the active space, and the backend checks membership before using a group's space. Artifact and item ids are hashes that include the space id, so the same document in two spaces gives separate nodes, and edges are only ever created between nodes of the same space. The test suite checks all of this.
+- **Spaces.** Every query is scoped to the active space, and the backend checks membership before using an organization's or a group's space (a group's also needs membership of its organization). Group admins can only find and invite members of the group's organization, so nobody can list the server's accounts. Organization invite links are random 256-bit tokens; only their SHA-256 hash is stored, and they expire. Artifact and item ids are hashes that include the space id, so the same document in two spaces gives separate nodes, and edges are only ever created between nodes of the same space. The test suite checks all of this.
 - **Query safety.** All values are passed to ArcadeDB as bound parameters. Full-text queries are rebuilt from word characters only, so user input can't inject Lucene operators.
 - **Rendering.** GraphRAG answers are HTML-escaped before citation badges are inserted.
 

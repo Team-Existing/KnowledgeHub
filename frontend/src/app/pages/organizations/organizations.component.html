@@ -1,0 +1,129 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h1>Organizations</h1>
+      <p>An organization is your team's home: a space everyone in it shares, and the groups inside it.
+        People join with an invite link.</p>
+    </div>
+  </section>
+
+  @if (error) { <p class="error-text" style="padding:0 0.25rem">{{ error }}</p> }
+  @if (notice) { <p class="space-banner">{{ notice }}</p> }
+
+  <section class="ingest-panel">
+    <h2 style="font-size:1rem;margin-bottom:0.75rem">Create an organization</h2>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <input [(ngModel)]="newName" placeholder="Organization name, e.g. Acme" style="flex:1;min-width:220px" maxlength="80"
+             aria-label="New organization name" />
+      <button class="primary" [disabled]="busy || !newName.trim()" (click)="create()">Create</button>
+    </div>
+    <p class="field-help" style="margin-top:0.4rem">You'll be its owner. To join an existing one, ask its owner or an admin for an invite link.</p>
+  </section>
+
+  <div class="detail-grid">
+    <section class="detail-panel">
+      <h2>Your organizations</h2>
+      @if (orgs.length === 0) { <p class="muted-text">You're not in any organization yet.</p> }
+      <div class="lineage-list">
+        @for (o of orgs; track o.id) {
+          <div class="lineage-row" [style.border-color]="selected?.id === o.id ? '#667eea' : ''">
+            <a class="grow" href="" (click)="$event.preventDefault(); select(o)">{{ o.name }}</a>
+            <span class="engine-badge">{{ o.role }}</span>
+            <span class="muted-text">{{ o.member_count }} member{{ o.member_count === 1 ? '' : 's' }}</span>
+            <button [disabled]="spaces.activeId() === o.id" (click)="open(o)">
+              {{ spaces.activeId() === o.id ? 'Current space' : 'Open' }}</button>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="detail-panel">
+      @if (!selected) {
+        <h2>Members</h2>
+        <p class="muted-text">Select an organization to see its members.</p>
+      } @else {
+        <h2>{{ selected.name }}</h2>
+
+        @if (canManage) {
+          <h3 style="font-size:0.875rem;margin:0.25rem 0 0.5rem">Invite people</h3>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+            @if (isOwner) {
+              <select [(ngModel)]="inviteRole" aria-label="Role for people who join">
+                <option value="member">as members</option>
+                <option value="admin">as admins</option>
+              </select>
+            }
+            <select [(ngModel)]="inviteDays" aria-label="Link valid for">
+              <option [ngValue]="1">valid 1 day</option>
+              <option [ngValue]="7">valid 7 days</option>
+              <option [ngValue]="30">valid 30 days</option>
+            </select>
+            <input type="number" min="1" max="1000" [(ngModel)]="inviteMaxUses" placeholder="any number of people"
+                   aria-label="Most people who can use the link" style="width:12rem" />
+            <button class="primary" [disabled]="busy" (click)="createInvite()">Create invite link</button>
+          </div>
+          @if (created) {
+            <div class="space-banner" style="margin-top:0.5rem;display:block">
+              <p style="margin:0 0 0.4rem">Send this link to the people you want to invite. It's shown only now: copy it before you leave the page.</p>
+              <div style="display:flex;gap:0.5rem">
+                <input [value]="joinUrl" readonly style="flex:1" aria-label="Invite link" (focus)="$any($event.target).select()" />
+                <button (click)="copyLink()">{{ copied ? 'Copied' : 'Copy' }}</button>
+              </div>
+            </div>
+          }
+          @if (invites.length) {
+            <h3 style="font-size:0.875rem;margin:1rem 0 0.5rem">Invite links</h3>
+            <div class="lineage-list">
+              @for (i of invites; track i.id) {
+                <div class="lineage-row">
+                  <span class="grow">
+                    {{ i.role === 'admin' ? 'Admins' : 'Members' }} · by {{ i.created_by }} ·
+                    used {{ i.uses }}{{ i.max_uses ? ' of ' + i.max_uses : '' }}
+                    <span class="muted-text"> · {{ i.usable ? 'expires ' + (i.expires_at | date:'mediumDate') : 'no longer usable' }}</span>
+                  </span>
+                  <button class="link-btn" title="Revoke link" [disabled]="busy" (click)="revoke(i)">Revoke</button>
+                </div>
+              }
+            </div>
+          }
+        }
+
+        <h3 style="font-size:0.875rem;margin:1rem 0 0.5rem">Members ({{ members.length }})</h3>
+        <div class="lineage-list">
+          @for (m of members; track m.user_id) {
+            <div class="lineage-row">
+              <span class="grow">{{ m.username }}@if (m.user_id === auth.me()?.id) { <span class="muted-text"> (you)</span> }</span>
+              @if (isOwner) {
+                <select [ngModel]="m.role" (ngModelChange)="setRole(m, $event)" [disabled]="busy"
+                        [attr.aria-label]="'Role of ' + m.username">
+                  @for (r of roles; track r) { <option [value]="r">{{ r }}</option> }
+                </select>
+              } @else {
+                <span class="engine-badge">{{ m.role }}</span>
+              }
+              @if (canRemove(m)) {
+                <button class="link-btn" title="Remove from the organization" [disabled]="busy" (click)="remove(m)">✕</button>
+              }
+            </div>
+          }
+        </div>
+        <p class="field-help" style="margin-top:0.4rem">
+          Owners manage everything, including roles. Admins invite and remove members.
+          Everyone shares the organization's space and can create groups in it.
+        </p>
+
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1.25rem;align-items:center">
+          @if (canManage) {
+            <input [(ngModel)]="renameTo" style="flex:1;min-width:160px" maxlength="80" aria-label="Organization name" />
+            <button [disabled]="busy || !renameTo.trim() || renameTo === selected.name" (click)="rename()">Rename</button>
+          }
+          <button class="danger" [disabled]="busy || (isOwner && ownerCount <= 1)" (click)="leave()"
+                  [title]="isOwner && ownerCount <= 1 ? 'You are the only owner: make someone else an owner first' : ''">Leave</button>
+          @if (isOwner) {
+            <button class="danger" [disabled]="busy" (click)="deleteOrg()">Delete organization</button>
+          }
+        </div>
+      }
+    </section>
+  </div>
+</div>

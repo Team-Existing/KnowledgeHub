@@ -52,6 +52,7 @@ export class AppComponent implements OnDestroy {
     ] },
     { label: 'Collaborate', items: [
       { path: '/connectors', label: 'Sources', icon: 'sources' },
+      { path: '/organizations', label: 'Organizations', icon: 'organization' },
       { path: '/groups', label: 'Groups', icon: 'groups', badge: () => this.spaces.invitations().length },
     ] },
     { label: 'Settings', items: [
@@ -119,6 +120,10 @@ export class AppComponent implements OnDestroy {
   }
 
   onSpaceChange(id: string) { this.spaces.switchTo(id) }
+
+  spaceIcon(kind: string | undefined): string {
+    return kind === 'group' ? 'groups' : kind === 'organization' ? 'organization' : 'user'
+  }
 
   async logout() {
     await this.auth.signOut()

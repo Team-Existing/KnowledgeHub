@@ -1,11 +1,11 @@
-"""Groups and spaces: any user creates a group and is its admin; invited members share everything in it."""
+"""Groups and spaces: any organization member creates a group in it and is its admin; invited members share it."""
 from __future__ import annotations
 
 from typing import Dict
 
 import pytest
 
-from tests.helpers import ingest_text
+from tests.helpers import create_group as new_group, create_org, ingest_text
 
 
 def in_space(headers: Dict[str, str], space_id: str) -> Dict[str, str]:
@@ -16,10 +16,14 @@ def me(client, headers) -> Dict:
     return client.get("/auth/me", headers=headers).json()
 
 
-def create_group(client, headers, name="Platform team") -> Dict:
-    r = client.post("/groups", headers=headers, json={"name": name})
-    assert r.status_code == 201, r.text
-    return r.json()
+@pytest.fixture
+def org(client, alice, bob, carol_headers) -> str:
+    """alice owns the organization; bob and carol are members."""
+    return create_org(client, alice, bob, carol_headers)
+
+
+def create_group(client, headers, org_id, name="Platform team") -> Dict:
+    return new_group(client, headers, org_id, name)
 
 
 def invite(client, admin, group_id, user_headers) -> None:
@@ -33,28 +37,31 @@ def join(client, admin, group_id, user_headers) -> None:
 
 
 @pytest.fixture
-def team(client, alice, bob):
+def team(client, alice, bob, org):
     """alice creates a group (so she is its admin) and bob joins it."""
-    group = create_group(client, alice)
+    group = create_group(client, alice, org)
     join(client, alice, group["id"], bob)
     return group
 
 
 # ── creating groups and spaces ──────────────────────────────────────────────
 
-def test_any_user_can_create_a_group_and_becomes_its_admin(client, alice):
+def test_any_user_can_create_a_group_and_becomes_its_admin(client, alice, org):
     assert me(client, alice)["role"] == "member"          # a normal account, not a server admin
-    group = create_group(client, alice)
+    group = create_group(client, alice, org)
     assert group["role"] == "admin" and group["member_count"] == 1
     spaces = client.get("/spaces", headers=alice).json()
     assert spaces[0] == {"id": me(client, alice)["id"], "kind": "personal", "name": "My space", "role": "owner"}
-    assert {"id": group["id"], "kind": "group", "name": "Platform team", "role": "admin", "member_count": 1} in spaces
+    assert spaces[1:] == [
+        {"id": org, "kind": "organization", "name": "Acme", "role": "owner", "member_count": 3},
+        {"id": group["id"], "kind": "group", "name": "Platform team", "role": "admin", "member_count": 1,
+         "org_id": org, "org_name": "Acme"}]
 
 
 # ── inviting ────────────────────────────────────────────────────────────────
 
-def test_admin_searches_and_invites_and_the_user_accepts(client, alice, bob):
-    group = create_group(client, alice)
+def test_admin_searches_and_invites_and_the_user_accepts(client, alice, bob, org):
+    group = create_group(client, alice, org)
     bob_name = me(client, bob)["username"]
     found = client.get(f"/groups/{group['id']}/candidates", headers=alice, params={"q": bob_name[-6:]}).json()
     assert [u["username"] for u in found] == [bob_name] and found[0]["status"] is None
@@ -89,8 +96,8 @@ def test_only_the_group_admin_manages_membership(client, alice, bob, carol_heade
     assert client.get(f"/groups/{gid}/members", headers=carol_headers).status_code == 404
 
 
-def test_decline_reinvite_duplicate_and_unknown_user(client, alice, bob):
-    gid = create_group(client, alice)["id"]
+def test_decline_reinvite_duplicate_and_unknown_user(client, alice, bob, org):
+    gid = create_group(client, alice, org)["id"]
     invite(client, alice, gid, bob)
     r = client.post(f"/groups/{gid}/invitations", headers=alice, json={"user_id": me(client, bob)["id"]})
     assert r.status_code == 409

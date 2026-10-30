@@ -32,7 +32,8 @@ class GroupRepository:
 
     async def get(self, group_id: str) -> Optional[Row]:
         return await self.session.query_one(
-            "SELECT id, name, created_by, created_at, last_active_at FROM GroupSpace WHERE id = :id", {"id": group_id})
+            "SELECT id, name, org_id, created_by, created_at, last_active_at FROM GroupSpace WHERE id = :id",
+            {"id": group_id})
 
     async def add(self, group: Row) -> None:
         await self.session.execute("INSERT INTO GroupSpace CONTENT :doc", {"doc": group})
@@ -83,18 +84,13 @@ class GroupRepository:
                 continue
             count = await self.session.scalar(
                 "SELECT count(*) AS n FROM Membership WHERE group_id = :g AND status = 'active'", {"g": group["id"]}, 0)
-            out.append({"id": group["id"], "name": group["name"], "role": r["role"], "status": r["status"],
+            out.append({"id": group["id"], "name": group["name"], "org_id": group.get("org_id"),
+                        "role": r["role"], "status": r["status"],
                         "member_count": count, "created_at": group["created_at"],
                         "last_active_at": (activity.last_activity(group) or activity.now()).isoformat(),
                         "deletes_on": activity.deletes_on(group),
                         "invited_by": users.get(r.get("invited_by") or ""), "invited_at": r["created_at"]})
         return out
-
-    async def search_users(self, text: str, exclude_user_id: str, limit: int = 20) -> List[Row]:
-        return await self.session.query(
-            "SELECT id, username FROM User WHERE username.toLowerCase() LIKE :q AND id <> :me "
-            "ORDER BY username LIMIT :k",
-            {"q": f"%{text.lower()}%", "me": exclude_user_id, "k": limit})
 
     async def _usernames(self, ids: List[str]) -> Dict[str, str]:
         ids = sorted({i for i in ids if i})

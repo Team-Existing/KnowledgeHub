@@ -25,6 +25,7 @@
             Enter the <code>SETUP_TOKEN</code> from the server's configuration.</p>
         }
       </div>
+      @if (returnUrl?.startsWith('/join/')) { <p class="muted-text">Sign in, or create an account, to accept your invitation.</p> }
       @if (sessionExpired && !error) { <p class="error-text">Your session expired. Please sign in again.</p> }
       @if (error) { <p class="error-text">{{ error }}</p> }
       <button class="btn-primary" [disabled]="loading || !username || !password || (mode === 'register' && needsSetupToken && !setupToken)" (click)="submit()">

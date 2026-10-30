@@ -8,6 +8,7 @@
 | Group | any member working in the group's space | the group, its memberships, and everything in its space |
 
 - **What a deleted user added to a group stays in the group.** If they were a group's admin, the longest-standing remaining member becomes admin. A group with no other members goes with them.
+- **Organizations are never deleted for inactivity.** If a deleted user was an organization's only owner, its longest-standing admin (else member) becomes owner. An organization with nobody else in it is deleted with its groups and everything in them.
 - **Safety rails:**
   - The last server admin is never deleted.
   - Spaces in the middle of a connector sync are skipped until the next run.
