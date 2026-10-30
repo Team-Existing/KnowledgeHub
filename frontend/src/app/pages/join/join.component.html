@@ -1,0 +1,29 @@
+<div class="knowledge-shell">
+  <section class="detail-panel" style="max-width:32rem;margin:2rem auto">
+    @if (loading) {
+      <p class="muted-text">Checking the invitation…</p>
+    } @else if (preview) {
+      <h1 style="font-size:1.25rem">Join {{ preview.org_name }}</h1>
+      <p class="muted-text">
+        {{ preview.member_count }} member{{ preview.member_count === 1 ? '' : 's' }} ·
+        you'll join as {{ preview.role === 'admin' ? 'an admin' : 'a member' }}
+      </p>
+      <p>You'll share the organization's space with everyone in it, and can be invited to its groups.
+        Your own space stays private.</p>
+      @if (error) { <p class="error-text">{{ error }}</p> }
+      @if (preview.already_member) {
+        <p class="muted-text">You're already a member.</p>
+        <button class="primary" (click)="open(preview.org_id)">Open {{ preview.org_name }}</button>
+      } @else {
+        <div style="display:flex;gap:0.5rem">
+          <button class="primary" [disabled]="busy" (click)="join()">{{ busy ? 'Joining…' : 'Join ' + preview.org_name }}</button>
+          <a class="btn-secondary" routerLink="/knowledge" style="align-self:center">Not now</a>
+        </div>
+      }
+    } @else {
+      <h1 style="font-size:1.25rem">Invitation not found</h1>
+      <p class="error-text">{{ error }}</p>
+      <p class="muted-text">Ask whoever sent it for a new link.</p>
+    }
+  </section>
+</div>

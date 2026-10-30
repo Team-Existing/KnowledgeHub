@@ -18,12 +18,16 @@ User, Playbook, QueryLog, Meta
 ItemEvent                 per-item history (reviewed, edited, linked, status_changed, health_flagged, ...)
 Connector                 an external source (folder, git ADRs, GitHub, Jira, Linear) + sync state
 SyncedDocument            one fetched source document -> the artifact it was ingested as
-GroupSpace                a group: a shared space; admins create groups and invite users
+Organization              the tenant: its own shared space, members, groups and invite links
+OrgMember                 user <-> organization: role owner | admin | member, status active | left | removed
+OrgInvite                 an invite link to an organization (only the token's hash is stored)
+GroupSpace                a group: a shared space inside an organization (org_id)
 Membership                user <-> group: status invited | active | declined | left | removed
 
 Spaces: the `user_id` on every vertex, edge and per-space document is the id
 of the *space* that owns it — a user's personal space (whose id is the user's
-id, so data from before groups existed is already personal) or a group.
+id, so data from before groups existed is already personal), an organization
+or a group.
 
 Every vertex and edge carries user_id; every query filters on it.
 tags_text / tags_lc are derived from tags on write: full-text indexes can't
@@ -155,7 +159,45 @@ CREATE PROPERTY GroupSpace.name IF NOT EXISTS STRING
 CREATE PROPERTY GroupSpace.created_by IF NOT EXISTS STRING
 CREATE PROPERTY GroupSpace.created_at IF NOT EXISTS STRING
 CREATE PROPERTY GroupSpace.last_active_at IF NOT EXISTS STRING
+CREATE PROPERTY GroupSpace.org_id IF NOT EXISTS STRING
 CREATE INDEX IF NOT EXISTS ON GroupSpace (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON GroupSpace (org_id) NOTUNIQUE
+
+CREATE DOCUMENT TYPE Organization IF NOT EXISTS
+CREATE PROPERTY Organization.id IF NOT EXISTS STRING
+CREATE PROPERTY Organization.name IF NOT EXISTS STRING
+CREATE PROPERTY Organization.created_by IF NOT EXISTS STRING
+CREATE PROPERTY Organization.created_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON Organization (id) UNIQUE
+
+CREATE DOCUMENT TYPE OrgMember IF NOT EXISTS
+CREATE PROPERTY OrgMember.id IF NOT EXISTS STRING
+CREATE PROPERTY OrgMember.org_id IF NOT EXISTS STRING
+CREATE PROPERTY OrgMember.user_id IF NOT EXISTS STRING
+CREATE PROPERTY OrgMember.role IF NOT EXISTS STRING
+CREATE PROPERTY OrgMember.status IF NOT EXISTS STRING
+CREATE PROPERTY OrgMember.joined_at IF NOT EXISTS STRING
+CREATE PROPERTY OrgMember.left_at IF NOT EXISTS STRING
+CREATE PROPERTY OrgMember.invite_id IF NOT EXISTS STRING
+CREATE PROPERTY OrgMember.updated_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON OrgMember (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON OrgMember (org_id) NOTUNIQUE
+CREATE INDEX IF NOT EXISTS ON OrgMember (user_id) NOTUNIQUE
+
+CREATE DOCUMENT TYPE OrgInvite IF NOT EXISTS
+CREATE PROPERTY OrgInvite.id IF NOT EXISTS STRING
+CREATE PROPERTY OrgInvite.org_id IF NOT EXISTS STRING
+CREATE PROPERTY OrgInvite.token_hash IF NOT EXISTS STRING
+CREATE PROPERTY OrgInvite.role IF NOT EXISTS STRING
+CREATE PROPERTY OrgInvite.created_by IF NOT EXISTS STRING
+CREATE PROPERTY OrgInvite.created_at IF NOT EXISTS STRING
+CREATE PROPERTY OrgInvite.expires_at IF NOT EXISTS STRING
+CREATE PROPERTY OrgInvite.max_uses IF NOT EXISTS INTEGER
+CREATE PROPERTY OrgInvite.uses IF NOT EXISTS INTEGER
+CREATE PROPERTY OrgInvite.revoked IF NOT EXISTS BOOLEAN
+CREATE INDEX IF NOT EXISTS ON OrgInvite (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON OrgInvite (token_hash) UNIQUE
+CREATE INDEX IF NOT EXISTS ON OrgInvite (org_id) NOTUNIQUE
 
 CREATE DOCUMENT TYPE Membership IF NOT EXISTS
 CREATE PROPERTY Membership.id IF NOT EXISTS STRING

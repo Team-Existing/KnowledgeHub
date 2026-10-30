@@ -1,11 +1,12 @@
 """
-Groups: shared spaces.
+Groups: shared spaces inside an organization.
 
-Every account is a normal user. Anyone can create a group and becomes its
-admin. A group's admin searches for users and invites them; an invited user
-accepts or declines. Active members share everything in the group's space.
-Each user also keeps a personal space; GET /spaces lists the ones they can
-switch to (sent back as the X-Space header).
+Any member of an organization can create a group in it and becomes its admin.
+A group's admin searches the organization's members and invites them; an
+invited user accepts or declines. Active members share everything in the
+group's space. GET /spaces lists the spaces a user can switch to (sent back
+as the X-Space header): their personal space, each organization's, and their
+groups.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from app.repositories import UserRepository
 from app.repositories.groups import (
     ACTIVE, DECLINED, GROUP_ADMIN, GROUP_MEMBER, INVITED, LEFT, REMOVED, GroupRepository,
 )
+from app.repositories.organizations import OrganizationRepository
 from app.services.connectors.sync import is_running
 from app.spaces import PERSONAL_SPACE_NAME
 
@@ -33,6 +35,7 @@ Row = Dict[str, Any]
 
 class GroupCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
+    org_id: str = Field(min_length=1, max_length=40)
 
 
 class GroupRename(BaseModel):
@@ -68,12 +71,17 @@ async def list_spaces(
     current_user: User = Depends(get_current_user),
     session: ArcadeSession = Depends(get_session),
 ) -> List[Row]:
-    """The personal space first, then every group the user is an active member of."""
+    """The personal space first, then each organization followed by the user's groups in it."""
+    orgs = await OrganizationRepository(session).orgs_of(current_user.id)
     groups = await GroupRepository(session).groups_of(current_user.id, ACTIVE)
-    return [{"id": current_user.id, "kind": "personal", "name": PERSONAL_SPACE_NAME, "role": "owner"}] + [
-        {"id": g["id"], "kind": "group", "name": g["name"], "role": g["role"], "member_count": g["member_count"]}
-        for g in groups
-    ]
+    spaces: List[Row] = [{"id": current_user.id, "kind": "personal", "name": PERSONAL_SPACE_NAME, "role": "owner"}]
+    for org in orgs:
+        spaces.append({"id": org["id"], "kind": "organization", "name": org["name"], "role": org["role"],
+                       "member_count": org["member_count"]})
+        spaces.extend({"id": g["id"], "kind": "group", "name": g["name"], "role": g["role"],
+                       "member_count": g["member_count"], "org_id": org["id"], "org_name": org["name"]}
+                      for g in groups if g.get("org_id") == org["id"])
+    return spaces
 
 
 # ── groups ──────────────────────────────────────────────────────────────────
@@ -84,8 +92,10 @@ async def create_group(
     current_user: User = Depends(get_current_user),
     session: ArcadeSession = Depends(get_session),
 ) -> Row:
-    """Any user can create a group; the creator is its admin."""
-    group = {"id": f"grp_{uuid.uuid4().hex[:16]}", "name": body.name.strip(),
+    """Any member of the organization can create a group in it; the creator is its admin."""
+    if not await OrganizationRepository(session).active_member(body.org_id, current_user.id):
+        raise HTTPException(status_code=404, detail="Organization not found")
+    group = {"id": f"grp_{uuid.uuid4().hex[:16]}", "name": body.name.strip(), "org_id": body.org_id,
              "created_by": current_user.id, "created_at": _now()}
     repo = GroupRepository(session)
     await repo.add(group)
@@ -154,11 +164,14 @@ async def search_users(
     current_user: User = Depends(get_current_user),
     session: ArcadeSession = Depends(get_session),
 ) -> List[Row]:
-    """Admin only: find users by name to invite, with their current status in this group."""
+    """Admin only: find members of the group's organization to invite, with their status in this group."""
     await _admin_of(session, group_id, current_user)
     repo = GroupRepository(session)
+    group = await repo.get(group_id)
+    if not group or not group.get("org_id"):
+        return []
     out = []
-    for u in await repo.search_users(q.strip(), exclude_user_id=current_user.id):
+    for u in await OrganizationRepository(session).search_members(group["org_id"], q.strip(), current_user.id):
         m = await repo.membership(group_id, u["id"])
         out.append({"id": u["id"], "username": u["username"], "status": m["status"] if m else None})
     return out
@@ -172,10 +185,12 @@ async def invite(
     session: ArcadeSession = Depends(get_session),
 ) -> Row:
     await _admin_of(session, group_id, current_user)
-    invitee = await UserRepository(session).get(body.user_id)
-    if not invitee:
-        raise HTTPException(status_code=404, detail="User not found")
     repo = GroupRepository(session)
+    group = await repo.get(group_id)
+    invitee = await UserRepository(session).get(body.user_id)
+    # only members of the group's organization can be invited; others look the same as unknown ids
+    if not invitee or not group or not group.get("org_id")             or not await OrganizationRepository(session).active_member(group["org_id"], invitee["id"]):
+        raise HTTPException(status_code=404, detail="No member of this organization has that id")
     existing = await repo.membership(group_id, invitee["id"])
     if existing and existing["status"] == ACTIVE:
         raise HTTPException(status_code=409, detail=f"{invitee['username']} is already a member")

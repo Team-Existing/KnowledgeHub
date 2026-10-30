@@ -13,10 +13,16 @@
 
       @if (spaces.spaces().length) {
         <div class="space-picker">
-          <app-icon [name]="spaces.active()?.kind === 'group' ? 'groups' : 'user'" [size]="16" />
+          <app-icon [name]="spaceIcon(spaces.active()?.kind)" [size]="16" />
           <select class="space-switcher" [value]="spaces.active()?.id" (change)="onSpaceChange($any($event.target).value)"
                   aria-label="Active space" title="Everything you see and add belongs to this space">
-            @for (s of spaces.spaces(); track s.id) { <option [value]="s.id">{{ s.name }}</option> }
+            @for (s of spaces.personal(); track s.id) { <option [value]="s.id">{{ s.name }}</option> }
+            @for (o of spaces.organizations(); track o.org.id) {
+              <optgroup [label]="o.org.name">
+                <option [value]="o.org.id">{{ o.org.name }} (everyone)</option>
+                @for (g of o.groups; track g.id) { <option [value]="g.id">{{ g.name }}</option> }
+              </optgroup>
+            }
           </select>
         </div>
       }
@@ -69,7 +75,9 @@
       <main>
         @if (healthProblem()) { <div class="health-banner" role="alert"><app-icon name="alert" /> {{ healthProblem() }}</div> }
         @if (spaces.active()?.kind === 'group') {
-          <div class="space-banner"><app-icon name="groups" [size]="16" /> <span>You're working in <strong>{{ spaces.active()?.name }}</strong>. Everything here is shared with its members.</span></div>
+          <div class="space-banner"><app-icon name="groups" [size]="16" /> <span>You're working in <strong>{{ spaces.active()?.name }}</strong> ({{ spaces.active()?.org_name }}). Everything here is shared with its members.</span></div>
+        } @else if (spaces.active()?.kind === 'organization') {
+          <div class="space-banner"><app-icon name="organization" [size]="16" /> <span>You're working in <strong>{{ spaces.active()?.name }}</strong>. Everything here is shared with everyone in the organization.</span></div>
         }
         <router-outlet />
       </main>

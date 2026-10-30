@@ -41,6 +41,8 @@ export const routes: Routes = [
   { path: 'graphrag', loadComponent: () => import('./pages/graphrag/graphrag.component').then(m => m.GraphragComponent), canActivate: [authGuard] },
   { path: 'settings/models', loadComponent: () => import('./pages/model-manager/model-manager.component').then(m => m.ModelManagerComponent), canActivate: [authGuard] },
   { path: 'playbooks', loadComponent: () => import('./pages/playbooks/playbooks.component').then(m => m.PlaybooksComponent), canActivate: [authGuard] },
+  { path: 'organizations', loadComponent: () => import('./pages/organizations/organizations.component').then(m => m.OrganizationsComponent), canActivate: [authGuard] },
+  { path: 'join/:token', loadComponent: () => import('./pages/join/join.component').then(m => m.JoinComponent), canActivate: [authGuard] },
   { path: 'groups', loadComponent: () => import('./pages/groups/groups.component').then(m => m.GroupsComponent), canActivate: [authGuard] },
   { path: 'admin/users', loadComponent: () => import('./pages/admin-users/admin-users.component').then(m => m.AdminUsersComponent), canActivate: [adminGuard] },
   // an empty stop SpaceService.switchTo passes through, so the page you're on is rebuilt for the new space

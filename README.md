@@ -10,7 +10,7 @@ A **local-first knowledge base** for teams. It turns meeting notes, retros, deci
 <sub>Fictional demo data. Each page on its own: [Screenshots](docs/screenshots.md).</sub>
 
 - **Runs on your machine.** FastAPI backend, Angular frontend, **ArcadeDB** as the only data store, and local AI: one of three LLMs run by [Ollama](docs/local-models.md) plus sentence-transformers embeddings. Servers can also offer [hosted models](docs/hosted-models.md) from any OpenAI-compatible API; each user chooses, and the app shows where text goes.
-- **Personal and group spaces.** Everyone has a private space and can create or join groups that share one. A switcher in the nav picks where you're working.
+- **Organizations, groups and personal spaces.** Teams work in an organization: a shared space, groups inside it, owner/admin/member roles and invite links. Everyone also has a private space. A switcher in the nav picks where you're working.
 - **Decisions have a history.** A decision can supersede, reverse or amend an older one, and risks can be mitigated or actually happen. The app tracks each item's status and shows how it evolved.
 - **Connects only where you point it.** Knowledge can come from folders, git repositories (ADRs), GitHub, Jira and Linear, but only from addresses a user enters, and only when they click **Sync now**.
 - **Answers you can check.** GraphRAG answers from the items it retrieves, the details recorded on them and the passages of the sources they came from, cites them by number, and says plainly when the knowledge base doesn't cover a question. A [built-in evaluation](backend/evals/) measures answers, citations and extraction against a real model.
@@ -58,7 +58,7 @@ To use a GPU, an Ollama you already run, or to work on the code with live reload
 | [Screenshots](docs/screenshots.md) | Every page of the app |
 | [Production deployment](docs/deployment.md) | The multi-instance stack in `deploy/`: TLS, load balancing, worker, ArcadeDB cluster, operations |
 | [Configuration](docs/configuration.md) | Every environment variable |
-| [Accounts, roles and spaces](docs/accounts-and-spaces.md) | Server admins, groups, personal and shared spaces |
+| [Accounts, organizations and spaces](docs/accounts-and-spaces.md) | Server admins, organizations, groups, personal and shared spaces |
 | [Decision tracking](docs/decision-tracking.md) | Statuses, lineage links and history |
 | [Connectors](docs/connectors.md) | Folders, git ADRs, GitHub, Jira, Linear |
 | [Inactive accounts and groups](docs/retention.md) | Automatic deletion and its safety rails |

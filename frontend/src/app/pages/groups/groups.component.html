@@ -2,7 +2,7 @@
   <section class="toolbar">
     <div>
       <h1>Groups</h1>
-      <p>Share knowledge with a group. You also keep your own space, which only you can see.</p>
+      <p>Share knowledge with a group of people in your organization. You also keep your own space, which only you can see.</p>
     </div>
   </section>
 
@@ -29,11 +29,21 @@
   <!-- Create -->
   <section class="ingest-panel">
     <h2 style="font-size:1rem;margin-bottom:0.75rem">Create a group</h2>
-    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-      <input [(ngModel)]="newName" placeholder="Group name, e.g. Platform team" style="flex:1;min-width:220px" maxlength="80" />
-      <button class="primary" [disabled]="busy || !newName.trim()" (click)="create()">Create</button>
-    </div>
-    <p class="field-help" style="margin-top:0.4rem">You'll be the group's admin: you invite people and manage membership.</p>
+    @if (spaces.organizations().length === 0) {
+      <p class="muted-text">Groups live inside an organization. <a routerLink="/organizations">Create or join one</a> first.</p>
+    } @else {
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <input [(ngModel)]="newName" placeholder="Group name, e.g. Platform team" style="flex:1;min-width:220px" maxlength="80"
+               aria-label="New group name" />
+        @if (spaces.organizations().length > 1) {
+          <select [(ngModel)]="newOrg" aria-label="Organization">
+            @for (o of spaces.organizations(); track o.org.id) { <option [value]="o.org.id">in {{ o.org.name }}</option> }
+          </select>
+        }
+        <button class="primary" [disabled]="busy || !newName.trim() || !newOrg" (click)="create()">Create</button>
+      </div>
+      <p class="field-help" style="margin-top:0.4rem">You'll be the group's admin: you invite people from the organization and manage membership.</p>
+    }
   </section>
 
   <div class="detail-grid">
@@ -45,6 +55,7 @@
         @for (g of groups; track g.id) {
           <div class="lineage-row" [style.border-color]="selected?.id === g.id ? '#667eea' : ''">
             <a class="grow" href="" (click)="$event.preventDefault(); select(g)">{{ g.name }}</a>
+            @if (orgName(g.org_id)) { <span class="muted-text">{{ orgName(g.org_id) }}</span> }
             <span class="engine-badge">{{ g.role }}</span>
             <span class="muted-text">{{ g.member_count }} member{{ g.member_count === 1 ? '' : 's' }}</span>
             @if (g.deletes_on) {
@@ -69,7 +80,7 @@
 
         @if (isAdmin) {
           <h3 style="font-size:0.875rem;margin:0.25rem 0 0.5rem">Invite people</h3>
-          <input [(ngModel)]="query" (ngModelChange)="onQuery($event)" placeholder="Search users by name"
+          <input [(ngModel)]="query" (ngModelChange)="onQuery($event)" placeholder="Search the organization's members by name"
                  autocomplete="off" style="width:100%" />
           @if (candidates.length) {
             <div class="lineage-list" style="margin-top:0.5rem">
@@ -83,7 +94,7 @@
               }
             </div>
           } @else if (query.trim()) {
-            <p class="muted-text" style="margin-top:0.4rem;font-size:0.8rem">No matching users.</p>
+            <p class="muted-text" style="margin-top:0.4rem;font-size:0.8rem">No matching members. People join the organization with an invite link first.</p>
           }
         }
 

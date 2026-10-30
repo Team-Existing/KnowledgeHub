@@ -8,7 +8,7 @@ import { Invitation, SpaceInfo } from '../models/api'
 const STORAGE_KEY = 'kh_space'
 
 /**
- * The active space (personal or a group). authInterceptor sends its id as the
+ * The active space (personal, an organization's, or a group's). authInterceptor sends its id as the
  * X-Space header on every API call, so every page shows that space's data.
  */
 @Injectable({ providedIn: 'root' })
@@ -23,6 +23,13 @@ export class SpaceService {
   readonly activeId = this._activeId.asReadonly()
   readonly active = computed(() =>
     this._spaces().find(s => s.id === this._activeId()) ?? this._spaces().find(s => s.kind === 'personal') ?? null)
+
+  /** The personal space, for the switcher */
+  readonly personal = computed(() => this._spaces().filter(s => s.kind === 'personal'))
+  /** Each organization's space followed by the user's groups in it, for the switcher */
+  readonly organizations = computed(() => this._spaces().filter(s => s.kind === 'organization').map(org => ({
+    org, groups: this._spaces().filter(s => s.kind === 'group' && s.org_id === org.id),
+  })))
 
   constructor(private http: HttpClient, private router: Router) {}
 
@@ -50,7 +57,7 @@ export class SpaceService {
     await this.router.navigateByUrl(url)
   }
 
-  /** Called when the server says we're no longer in the active group. */
+  /** Called when the server says we're no longer in the active organization or group. */
   async fallBackToPersonal(): Promise<void> {
     this.setActive(null)
     await this.load()

@@ -1,5 +1,5 @@
 // Dev-server proxy to the FastAPI backend.
-// Some API prefixes (/knowledge, /connectors, /admin, /groups) are also Angular routes, so a browser
+// Some API prefixes (/knowledge, /connectors, /admin, /groups, /organizations) are also Angular routes, so a browser
 // page load (Accept: text/html) must fall through to the SPA instead of the backend.
 const target = 'http://localhost:8000'
 
@@ -17,6 +17,7 @@ module.exports = {
   '/admin': entry,
   '/spaces': entry,
   '/groups': entry,
+  '/organizations': entry,
   '/invitations': entry,
   '/knowledge': entry,
   '/connectors': entry,

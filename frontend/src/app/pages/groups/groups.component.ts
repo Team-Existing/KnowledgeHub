@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core'
 import { CommonModule } from '@angular/common'
+import { RouterLink } from '@angular/router'
 import { FormsModule } from '@angular/forms'
 import { HttpClient } from '@angular/common/http'
 import { Subject, debounceTime, firstValueFrom } from 'rxjs'
@@ -10,7 +11,7 @@ import { Candidate, Group, GroupMember } from '../../models/api'
 
 @Component({
   selector: 'app-groups',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './groups.component.html'
 })
 export class GroupsComponent implements OnInit {
@@ -20,6 +21,8 @@ export class GroupsComponent implements OnInit {
   candidates: Candidate[] = []
   query = ''
   newName = ''
+  /** The organization a new group is created in */
+  newOrg = ''
   renameTo = ''
   error = ''; notice = ''; busy = false
 
@@ -31,6 +34,13 @@ export class GroupsComponent implements OnInit {
 
   async ngOnInit() {
     await Promise.all([this.loadGroups(), this.spaces.load()])
+    // default to the organization you're working in, else your first
+    const active = this.spaces.active()
+    this.newOrg = active?.kind === 'organization' ? active.id : active?.org_id ?? this.spaces.organizations()[0]?.org.id ?? ''
+  }
+
+  orgName(id: string | null): string {
+    return this.spaces.organizations().find(o => o.org.id === id)?.org.name ?? ''
   }
 
   get isAdmin(): boolean { return this.selected?.role === 'admin' }
@@ -59,7 +69,7 @@ export class GroupsComponent implements OnInit {
 
   async create() {
     await this.run(async () => {
-      const g = await firstValueFrom(this.http.post<Group>(`${API_BASE}/groups`, { name: this.newName }))
+      const g = await firstValueFrom(this.http.post<Group>(`${API_BASE}/groups`, { name: this.newName, org_id: this.newOrg }))
       this.newName = ''
       this.notice = `Created “${g.name}”. You're its admin — search for people below to invite them.`
       await Promise.all([this.loadGroups(), this.spaces.load()])

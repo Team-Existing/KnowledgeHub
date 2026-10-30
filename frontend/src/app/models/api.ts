@@ -280,16 +280,71 @@ export interface RetentionStatus {
 /** GET /spaces — personal first, then the groups you're an active member of */
 export interface SpaceInfo {
   id: string
-  kind: 'personal' | 'group'
+  kind: 'personal' | 'organization' | 'group'
   name: string
   role: 'owner' | 'admin' | 'member' | string
   member_count?: number
+  /** groups: the organization they belong to */
+  org_id?: string
+  org_name?: string
+}
+
+export type OrgRole = 'owner' | 'admin' | 'member'
+
+/** GET /organizations */
+export interface Organization {
+  id: string
+  name: string
+  role: OrgRole
+  member_count: number
+  created_at: string
+}
+
+/** GET /organizations/{id}/members */
+export interface OrgMember {
+  user_id: string
+  username: string
+  role: OrgRole
+  joined_at: string
+}
+
+/** GET /organizations/{id}/invites (the token is only in the response that creates a link) */
+export interface OrgInvite {
+  id: string
+  role: 'admin' | 'member'
+  created_by: string
+  created_at: string
+  expires_at: string
+  max_uses: number | null
+  uses: number
+  usable: boolean
+}
+
+/** POST /organizations/{id}/invites */
+export interface CreatedInvite {
+  id: string
+  token: string
+  role: 'admin' | 'member'
+  created_at: string
+  expires_at: string
+  max_uses: number | null
+  uses: number
+}
+
+/** GET /organizations/join/{token} */
+export interface InvitePreview {
+  org_id: string
+  org_name: string
+  role: 'admin' | 'member'
+  member_count: number
+  already_member: boolean
 }
 
 /** GET /groups */
 export interface Group {
   id: string
   name: string
+  org_id: string | null
   role: 'admin' | 'member' | string
   status: string
   member_count: number

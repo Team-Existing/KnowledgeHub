@@ -34,7 +34,8 @@
 │  EVOLVES (decision lineage) · LINK (OKF import)              │
 │  Vector indexes: KnowledgeItem.embedding, Artifact.summary   │
 │  Full-text indexes                                           │
-│  Documents: User · GroupSpace · Membership · Connector ·     │
+│  Documents: User · Organization · OrgMember · OrgInvite ·    │
+│  GroupSpace · Membership · Connector ·                       │
 │  SyncedDocument · ItemEvent · Playbook · QueryLog · Meta     │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -53,7 +54,10 @@ The schema lives in [`backend/app/schema.py`](../backend/app/schema.py) and is a
 | `LINK` | edge | any node → node, from OKF import; `type` holds the relation label |
 | `EVOLVES` | edge | item → item, newer → older; `kind` is `supersedes`, `reverses`, `amends`, `realizes`, `mitigates` or `learned_from` |
 | `User` | document | `role` (`admin` / `member`), `username_key` (unique, case-folded), `last_active_at`, `last_login_at`, chosen `llm_model` |
-| `GroupSpace` | document | a group: name, creator, `last_active_at` |
+| `Organization` | document | the tenant: name, creator. Its id (`org_…`) is also its space's id |
+| `OrgMember` | document | user ↔ organization: `role` (`owner`, `admin`, `member`), `status` (`active`, `left`, `removed`), `joined_at`, `left_at` |
+| `OrgInvite` | document | an invite link: `token_hash` (the token itself is never stored), `role`, `expires_at`, `max_uses`, `uses`, `revoked` |
+| `GroupSpace` | document | a group: name, creator, `org_id`, `last_active_at` |
 | `Membership` | document | user ↔ group: `role` (`admin` for the creator, `member` otherwise) and `status` (`invited`, `active`, `declined`, `left`, `removed`) |
 | `ItemEvent` | document | an item's history: reviewed, edited, linked, unlinked, status changes, health signals, confirmations, review dates, with `actor` |
 | `Connector` | document | a source's settings (credentials encrypted) and its last sync result |
@@ -61,7 +65,7 @@ The schema lives in [`backend/app/schema.py`](../backend/app/schema.py) and is a
 | `Playbook`, `QueryLog` | documents | playbooks; one log entry per GraphRAG question |
 | `Meta` | document | the embedding model and dimension, the first admin, migration markers, the last retention run |
 
-**`user_id` means "owning space".** On every vertex, edge and per-space document, `user_id` is the id of the space the data belongs to: a user's personal space (whose id *is* the user id) or a group. Data created before groups existed is therefore already in its owner's personal space, with no migration.
+**`user_id` means "owning space".** On every vertex, edge and per-space document, `user_id` is the id of the space the data belongs to: a user's personal space (whose id *is* the user id), an organization or a group. Data created before groups existed is therefore already in its owner's personal space, with no migration.
 
 **Writes are transactional.** Each request gets a session: the first write opens an ArcadeDB transaction, `commit()` ends it, and anything uncommitted is rolled back when the request finishes. For example, an ingest's artifact, items and edges are saved together or not at all.
 

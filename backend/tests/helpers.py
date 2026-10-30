@@ -62,3 +62,21 @@ def minimal_docx(*paragraphs: str) -> bytes:
     buf = io.BytesIO()
     document.save(buf)
     return buf.getvalue()
+
+
+def create_org(client, owner, *members, name: str = "Acme") -> str:
+    """An organization owned by `owner`; `members` join through an invite link. Returns its id."""
+    r = client.post("/organizations", headers=owner, json={"name": name})
+    assert r.status_code == 201, r.text
+    org_id = r.json()["id"]
+    if members:
+        token = client.post(f"/organizations/{org_id}/invites", headers=owner, json={}).json()["token"]
+        for headers in members:
+            assert client.post(f"/organizations/join/{token}", headers=headers).status_code == 200
+    return org_id
+
+
+def create_group(client, headers, org_id: str, name: str = "Platform team") -> Dict[str, Any]:
+    r = client.post("/groups", headers=headers, json={"name": name, "org_id": org_id})
+    assert r.status_code == 201, r.text
+    return r.json()

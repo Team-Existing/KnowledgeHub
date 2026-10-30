@@ -8,6 +8,7 @@ import { ModelSetupComponent } from '../../components/model-setup/model-setup.co
 import { errorMessage } from '../../services/http-error'
 import { IconComponent } from '../../components/icon/icon.component'
 import { PASSWORD_RULES } from '../../services/usernames'
+import { safeReturnUrl } from '../../services/auth.guard'
 
 /**
  * Sign-in starts with a model check: a model must be usable (an installed
@@ -33,6 +34,8 @@ export class LoginComponent implements OnInit {
   readonly passwordRules = PASSWORD_RULES
   // set by authInterceptor when the API rejected a stored token
   readonly sessionExpired: boolean
+  /** Where to go after signing in (an invite link, for example) */
+  readonly returnUrl: string | null
 
   constructor(
     private auth: AuthService,
@@ -41,6 +44,7 @@ export class LoginComponent implements OnInit {
     route: ActivatedRoute,
   ) {
     this.sessionExpired = route.snapshot.queryParamMap.has('expired')
+    this.returnUrl = safeReturnUrl(route.snapshot.queryParamMap.get('returnUrl'))
   }
 
   ngOnInit() {
@@ -81,7 +85,7 @@ export class LoginComponent implements OnInit {
         this.needsSetupToken = false
       }
       await this.auth.login(this.username, this.password)
-      this.router.navigate(['/knowledge'])
+      this.router.navigateByUrl(this.returnUrl ?? '/knowledge')
     } catch (e) {
       // 412: no model installed, 503: Ollama down (e.g. changed since the page loaded)
       if (e instanceof HttpErrorResponse && (e.status === 412 || e.status === 503)) {

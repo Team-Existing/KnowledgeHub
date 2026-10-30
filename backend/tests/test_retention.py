@@ -8,7 +8,7 @@ from typing import Dict
 import pytest
 
 from app import activity
-from tests.helpers import ingest_text
+from tests.helpers import create_group, create_org, ingest_text
 
 LONG_AGO = (datetime.now(timezone.utc) - timedelta(days=400)).isoformat()
 SOON = (datetime.now(timezone.utc) - timedelta(days=350)).isoformat()   # due within 30 days
@@ -72,7 +72,7 @@ def test_sign_in_and_requests_record_activity(client, make_user, db_query):
 
 
 def test_working_in_a_group_keeps_it_alive(client, alice, db_query):
-    gid = client.post("/groups", headers=alice, json={"name": "Alive"}).json()["id"]
+    gid = create_group(client, alice, create_org(client, alice), "Alive")["id"]
     backdate_group(db_query, gid)
     client.get("/knowledge", headers={**alice, "X-Space": gid})
     stamp = db_query("SELECT last_active_at FROM GroupSpace WHERE id = :id", id=gid)[0]["last_active_at"]
@@ -85,7 +85,7 @@ def test_inactive_user_is_deleted_with_personal_data_but_group_work_stays(client
     admin = make_user(role="admin")
     idle, active = make_user(), make_user()
     idle_id = me(client, idle)["id"]
-    gid = client.post("/groups", headers=active, json={"name": "Shared"}).json()["id"]
+    gid = create_group(client, active, create_org(client, active, idle), "Shared")["id"]
     client.post(f"/groups/{gid}/invitations", headers=active, json={"user_id": idle_id})
     client.post(f"/invitations/{gid}/accept", headers=idle)
     ingest_text(client, idle, title="Idle private", content="We decided idle things.")
@@ -106,21 +106,24 @@ def test_inactive_user_is_deleted_with_personal_data_but_group_work_stays(client
 def test_group_admin_deleted_hands_the_group_to_a_member(client, make_user, db_query):
     admin = make_user(role="admin")
     founder, member = make_user(), make_user()
-    gid = client.post("/groups", headers=founder, json={"name": "Handover"}).json()["id"]
+    org = create_org(client, founder, member)
+    gid = create_group(client, founder, org, "Handover")["id"]
     client.post(f"/groups/{gid}/invitations", headers=founder, json={"user_id": me(client, member)["id"]})
     client.post(f"/invitations/{gid}/accept", headers=member)
-    solo_gid = client.post("/groups", headers=founder, json={"name": "Solo"}).json()["id"]
+    solo_gid = create_group(client, founder, org, "Solo")["id"]
     backdate_user(db_query, me(client, founder)["id"])
 
     run_now(client, admin)
     groups = {g["id"]: g for g in client.get("/groups", headers=member).json()}
     assert groups[gid]["role"] == "admin"                                        # handed over
     assert db_query("SELECT count(*) AS n FROM GroupSpace WHERE id = :id", id=solo_gid)[0]["n"] == 0
+    # the organization passes to the remaining member
+    assert [o["role"] for o in client.get("/organizations", headers=member).json() if o["id"] == org] == ["owner"]
 
 
 def test_inactive_group_is_deleted_with_everything_in_it(client, make_user, db_query):
     admin, owner = make_user(role="admin"), make_user()
-    gid = client.post("/groups", headers=owner, json={"name": "Idle group"}).json()["id"]
+    gid = create_group(client, owner, create_org(client, owner), "Idle group")["id"]
     ingest_text(client, {**owner, "X-Space": gid}, title="Old", content="We decided long ago.")
     backdate_group(db_query, gid)
 
