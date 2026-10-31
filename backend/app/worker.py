@@ -75,6 +75,14 @@ def copilot_job(space_id: str, connector_id: str, ref: str) -> None:
     asyncio.run(_with_client(lambda client: webhook_job(client, space_id, connector_id, ref)))
 
 
+@celery_app.task(name="kh.slack_command")
+def slack_command(space_id: str, integration_id: str, text: str, response_url: str, asked_by: str) -> None:
+    """Answer a Slack /decisions command (services/slack.py)."""
+    from app.services.slack import answer_job
+
+    asyncio.run(_with_client(lambda client: answer_job(client, space_id, integration_id, text, response_url, asked_by)))
+
+
 @celery_app.task(name="kh.retention")
 def run_retention() -> dict:
     if not retention.enabled():

@@ -27,6 +27,8 @@ describe('CopilotComponent', () => {
     http.expectOne('/connectors/conn_1/copilot').flush({ enabled: false, has_secret: false, webhook_url: 'https://hub/copilot/github/conn_1/webhook' })
     http.expectOne('/knowledge/copilot/runs').flush([])
     await settle()
+    http.match('/knowledge/slack').forEach(r => r.flush([]))      // the Slack section below
+    await settle()
   })
 
   afterEach(() => http.verify())

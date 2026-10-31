@@ -675,6 +675,17 @@ export interface CopilotPreview {
   comment: string
 }
 
+/** GET /knowledge/slack: a Slack app's /decisions command (its signing secret never comes back) */
+export interface SlackIntegration {
+  id: string
+  name: string
+  request_url: string
+  command: string
+  created_at: string
+  created_by_name: string | null
+  last_used_at: string | null
+}
+
 /** GET /knowledge/copilot/runs */
 export interface CopilotRun {
   id: string

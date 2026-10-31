@@ -5,7 +5,7 @@ import { provideRouter } from '@angular/router'
 import { CommitmentsComponent } from './commitments.component'
 
 const COMMITMENT = {
-  id: 'action_1', title: 'Migrate billing tables', type: 'action-item', status: 'open', owner: 'Omar',
+  id: 'action_1', title: 'Migrate billing tables', type: 'action-item', status: 'in_progress', owner: 'Omar',
   due_date: '2026-01-01', due_text: null, overdue: true, health: { state: 'ok', signals: [] },
   decision: { id: 'decision_1', title: 'Move billing to PostgreSQL', status: 'active' },
 }
@@ -43,5 +43,8 @@ describe('CommitmentsComponent', () => {
     expect(text()).toContain('Open (2)')
     expect(text()).toContain('Finished (3)')
     expect(text()).toContain('All (5)')
+    // regression: the menu showed its first option ("Open") whatever the status was
+    const status = (fixture.nativeElement as HTMLElement).querySelector('select[aria-label^="Status of"]') as HTMLSelectElement
+    expect(status.value).toBe('in_progress')
   })
 })

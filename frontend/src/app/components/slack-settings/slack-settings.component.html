@@ -1,0 +1,43 @@
+<section class="detail-panel">
+  <h2>Slack</h2>
+  <p>With a Slack app, anyone in the workspace can type <code>/decisions move the payment service to MongoDB</code>
+    and see what the record says about the change. Only they see the answer, unless they start with <code>share</code>.
+    The app holds no bot token: it can't read or post in Slack on its own.</p>
+
+  @for (app of apps; track app.id) {
+    <div class="lineage-row" style="flex-direction:column;align-items:stretch;gap:0.4rem">
+      <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+        <strong class="grow">{{ app.name }}</strong>
+        <span class="muted-text">{{ app.last_used_at ? 'last used ' + (app.last_used_at | date:'short') : 'not used yet' }}</span>
+        <button class="link-btn" [disabled]="busy" (click)="replacing = replacing === app.id ? null : app.id">Replace secret</button>
+        <button class="link-btn" [disabled]="busy" (click)="remove(app)">Remove</button>
+      </div>
+      <div style="display:flex;gap:0.5rem">
+        <input [value]="app.request_url" readonly style="flex:1" aria-label="Request URL" (focus)="$any($event.target).select()" />
+        <button (click)="copy(app.request_url, app.id)">{{ copied === app.id ? 'Copied' : 'Copy request URL' }}</button>
+      </div>
+      @if (replacing === app.id) {
+        <div style="display:flex;gap:0.5rem">
+          <input type="password" [(ngModel)]="newSecret" placeholder="New signing secret" aria-label="New signing secret" style="flex:1" autocomplete="off" />
+          <button [disabled]="busy || newSecret.trim().length < 16" (click)="replace(app)">Save</button>
+        </div>
+      }
+    </div>
+  }
+
+  <details style="margin-top:0.75rem" [open]="!apps.length">
+    <summary>Connect a Slack workspace</summary>
+    <ol class="field-help" style="margin:0.5rem 0 0.5rem 1.2rem">
+      <li>At <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps</a>, create an app (from scratch) in your workspace.</li>
+      <li>Copy its <em>Signing Secret</em> (Basic Information) and add it below.</li>
+      <li>Under <em>Slash Commands</em>, create <code>/decisions</code> with the request URL shown after adding, and a short description.</li>
+      <li>Install the app to the workspace.</li>
+    </ol>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <input [(ngModel)]="name" placeholder="Workspace name, e.g. Acme" maxlength="80" aria-label="Workspace name" style="min-width:12rem" />
+      <input type="password" [(ngModel)]="secret" placeholder="Signing secret" aria-label="Signing secret" style="flex:1;min-width:14rem" autocomplete="off" />
+      <button class="primary" [disabled]="busy || !name.trim() || secret.trim().length < 16" (click)="add()">Add</button>
+    </div>
+  </details>
+  @if (error) { <p class="error-text">{{ error }}</p> }
+</section>

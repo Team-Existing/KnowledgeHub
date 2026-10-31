@@ -168,9 +168,9 @@ def _url(item: Row) -> Optional[str]:
     return f"{public}/knowledge/{item['id']}" if public else None
 
 
-def blocks(report: Row, noun: str) -> List[tuple]:
+def blocks(report: Row, noun: str, heading: Optional[str] = None, note: Optional[str] = None) -> List[tuple]:
     """The comment's content, independent of any platform's markup (copilot_targets renders it)."""
-    out: List[tuple] = [("heading", f"Knowledge Hubs: decisions this {noun} touches"), ("blank",)]
+    out: List[tuple] = [("heading", heading or f"Knowledge Hubs: decisions this {noun} touches"), ("blank",)]
     conflicts = [d for d in report["decisions"] if d.get("relation") == "conflicts"]
     changes = [d for d in report["decisions"] if d.get("relation") == "changes"]
     if conflicts:
@@ -210,8 +210,9 @@ def blocks(report: Row, noun: str) -> List[tuple]:
     if report["commitments"] and (conflicts or changes):
         out += [("line", f"**Commitments in flight on the same ground:** {len(report['commitments'])}"), ("blank",)]
 
-    out.append(("note", "Advisory only: Knowledge Hubs comments and changes nothing. "
-                + ("" if report.get("llm_used") else "No model assessed conflicts for this one. ")
+    assessed = "" if report.get("llm_used") else "No model assessed conflicts for this one. "
+    out.append(("note", note.format(assessed=assessed) if note else
+                "Advisory only: Knowledge Hubs comments and changes nothing. " + assessed
                 + f"Updated when the {noun} changes."))
     return out
 
