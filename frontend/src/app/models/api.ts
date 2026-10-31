@@ -651,11 +651,11 @@ export interface Connector {
   last_status: SyncStatus
   last_error: string | null
   last_result: SyncResult
-  /** GitHub connectors: whether the Decision Copilot is on */
+  /** GitHub, Jira and Linear connectors: whether the Decision Copilot is on */
   copilot?: { enabled: boolean; has_secret: boolean }
 }
 
-/** GET/PUT /connectors/{id}/copilot; the secret only in the response that creates it */
+/** GET/PUT /connectors/{id}/copilot; a created secret only in the response that creates it (GitHub, Jira) */
 export interface CopilotSettings {
   enabled: boolean
   has_secret: boolean
@@ -665,12 +665,13 @@ export interface CopilotSettings {
 
 /** POST /knowledge/copilot/preview */
 export interface CopilotPreview {
-  pr: { number: number; title: string; url: string; head_sha: string; draft: boolean; state: string }
+  /** ref: 42, ARCH-12, ENG-42; skip: why a webhook would leave it alone (a draft, done …) */
+  target: { ref: string; title: string; url: string; noun: string; skip: string | null }
   files: number
   report: ImpactReport
   /** whether the record has something to say: a webhook run would comment */
   relevant: boolean
-  /** the comment, in GitHub Markdown */
+  /** the comment, in the platform's markup (Markdown; Jira wiki markup) */
   comment: string
 }
 
@@ -678,10 +679,10 @@ export interface CopilotPreview {
 export interface CopilotRun {
   id: string
   connector_id: string
-  pr_number: number
-  pr_title: string | null
-  pr_url: string | null
-  head_sha: string | null
+  kind: 'github' | 'jira' | 'linear'
+  ref: string
+  title: string | null
+  url: string | null
   source: 'manual' | 'webhook'
   status: 'posted' | 'updated' | 'skipped' | 'failed'
   reason: string | null

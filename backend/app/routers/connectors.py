@@ -92,8 +92,8 @@ def _public(connector: Row, running: bool = False) -> Row:
         "config": config,
         "created_at": connector.get("created_at"),
         "created_by": connector.get("created_by_name"),
-        # the Decision Copilot's state (never its secret); GitHub connectors only
-        **({"copilot": copilot.settings(connector)} if connector["kind"] == "github" else {}),
+        # the Decision Copilot's state (never its secret); GitHub, Jira and Linear connectors
+        **({"copilot": copilot.settings(connector)} if connector["kind"] in copilot.KINDS else {}),
         "last_sync_at": connector.get("last_sync_at"),
         # a "running" whose lock has expired means the process doing it died; with a worker, Celery
         # redelivers the task and it shows "running" again

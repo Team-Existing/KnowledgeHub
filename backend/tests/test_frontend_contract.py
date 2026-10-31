@@ -25,8 +25,8 @@ NOT_FOR_THE_UI: Set[Tuple[str, str]] = {
     ("GET", "/knowledge/items/{item_id}"),
     # the sign-in provider sends the browser here; the app only starts the flow (/auth/sso/{id}/start)
     ("GET", "/auth/sso/{provider_id}/callback"),
-    # GitHub calls it, signed with the connector's secret; the app shows its URL
-    ("POST", "/copilot/github/{connector_id}/webhook"),
+    # GitHub, Jira or Linear calls it, verified with the connector's secret; the app shows its URL
+    ("POST", "/copilot/{kind}/{connector_id}/webhook"),
 }
 
 _HTTP_CALL = re.compile(

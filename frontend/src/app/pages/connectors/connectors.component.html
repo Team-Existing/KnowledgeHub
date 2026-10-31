@@ -106,9 +106,9 @@
             {{ c.last_status === 'running' ? 'Syncing…' : c.last_status === 'queued' ? 'Queued…' : 'Sync now' }}</button>
           <button (click)="openEdit(c)">Edit</button>
           <button (click)="toggleDocuments(c)">{{ documents[c.id] ? 'Hide' : 'Documents' }}</button>
-          @if (c.kind === 'github') {
+          @if (c.copilot) {
             <a class="btn-secondary" [routerLink]="['/decision-copilot']" [queryParams]="{ connector: c.id }"
-               style="align-self:center">PR Copilot{{ c.copilot?.enabled ? ' · on' : '' }}</a>
+               style="align-self:center">Copilot{{ c.copilot.enabled ? ' · on' : '' }}</a>
           }
           <button class="danger" [disabled]="busyId === c.id" (click)="remove(c)">Remove</button>
         </div>

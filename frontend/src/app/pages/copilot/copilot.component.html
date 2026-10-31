@@ -1,9 +1,9 @@
 <div class="knowledge-shell">
   <section class="toolbar">
     <div>
-      <h1>PR Copilot</h1>
-      <p>Puts the decisions a pull request touches where the change is being made: one comment on the pull request,
-        updated as it changes. It never approves, requests changes, labels or merges anything.</p>
+      <h1>Decision Copilot</h1>
+      <p>Puts the decisions a change touches where the change is being discussed: one comment on the pull request or issue,
+        updated as it changes. It never approves, requests changes, transitions, labels or merges anything.</p>
     </div>
   </section>
 
@@ -12,33 +12,37 @@
 
   @if (!connectors.length) {
     <section class="detail-panel">
-      <p>It works through a GitHub connector. <a routerLink="/connectors">Add one</a> for your repository, with a token that
-        can write pull request comments.</p>
+      <p>It works through a GitHub, Jira or Linear connector. <a routerLink="/connectors">Add one</a>, with credentials that
+        can write comments.</p>
     </section>
   } @else {
     <section class="ingest-panel">
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
-        <label class="field-help" for="connector">Repository</label>
+        <label class="field-help" for="connector">Where</label>
         <select id="connector" [ngModel]="connectorId" (ngModelChange)="choose($event)">
-          @for (c of connectors; track c.id) { <option [value]="c.id">{{ c.name }} · {{ c.config['repo_url'] }}</option> }
+          @for (c of connectors; track c.id) { <option [value]="c.id">{{ where(c) }}</option> }
         </select>
       </div>
 
-      <h2 style="font-size:1rem;margin:1rem 0 0.5rem">Check a pull request</h2>
+      <h2 style="font-size:1rem;margin:1rem 0 0.5rem">Check a {{ target[kind].noun }}</h2>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-        <input type="number" min="1" [(ngModel)]="prNumber" placeholder="Pull request number" aria-label="Pull request number" style="width:12rem" />
-        <button [disabled]="busy || !prNumber" (click)="analyze()">{{ busy ? 'Working…' : 'Preview' }}</button>
+        <input [(ngModel)]="ref" [placeholder]="target[kind].placeholder" [attr.aria-label]="target[kind].label" style="width:12rem" />
+        <button [disabled]="busy || !ref.trim()" (click)="analyze()">{{ busy ? 'Working…' : 'Preview' }}</button>
         @if (preview) {
           <button class="primary" [disabled]="busy" (click)="post()">Post the comment</button>
         }
       </div>
       @if (preview) {
         <p style="margin-top:0.75rem">
-          <a [href]="preview.pr.url" target="_blank" rel="noopener">#{{ preview.pr.number }} {{ preview.pr.title }}</a>
-          <span class="muted-text"> · {{ preview.files }} file{{ preview.files === 1 ? '' : 's' }} changed ·
-            {{ preview.relevant ? 'the record has something to say: the webhook would comment' : 'nothing on record bears on it: the webhook would stay quiet' }}</span>
+          <a [href]="preview.target.url" target="_blank" rel="noopener">{{ preview.target.ref }} {{ preview.target.title }}</a>
+          <span class="muted-text">
+            @if (kind === 'github') { · {{ preview.files }} file{{ preview.files === 1 ? '' : 's' }} changed }
+            · @if (preview.target.skip) { a webhook would leave it alone: {{ preview.target.skip }} }
+            @else if (preview.relevant) { the record has something to say: a webhook would comment }
+            @else { nothing on record bears on it: a webhook would stay quiet }
+          </span>
         </p>
-        <pre class="comment-preview" style="white-space:pre-wrap;background:var(--surface-2);padding:0.75rem;border-radius:8px;font-size:0.8rem">{{ preview.comment }}</pre>
+        <pre style="white-space:pre-wrap;background:var(--surface-2);padding:0.75rem;border-radius:8px;font-size:0.8rem">{{ preview.comment }}</pre>
       }
     </section>
 
@@ -46,14 +50,34 @@
       <section class="detail-panel">
         <h2>Comment automatically</h2>
         <p>
-          <label><input type="checkbox" [checked]="settings.enabled" [disabled]="busy" (change)="setEnabled(!settings.enabled)" />
-            Comment on pull requests when they're opened or updated, if the record has something to say</label>
+          <label><input type="checkbox" [checked]="settings.enabled" [disabled]="busy || (kind === 'linear' && !settings.has_secret && !linearSecret.trim())"
+                        (change)="setEnabled(!settings.enabled)" />
+            Comment when a {{ target[kind].noun }} is opened or changes, if the record has something to say</label>
         </p>
-        @if (settings.enabled) {
-          <p class="field-help">In the repository on GitHub: <em>Settings → Webhooks → Add webhook</em>, content type
-            <code>application/json</code>, events <em>Pull requests</em>:</p>
+
+        @if (kind === 'linear') {
+          <p class="field-help">In Linear: <em>Settings → API → Webhooks → New webhook</em>, with this URL and the
+            <em>Issues</em> resource. Then paste the signing secret Linear shows:</p>
           <div style="display:flex;gap:0.5rem;margin:0.4rem 0">
-            <input [value]="settings.webhook_url" readonly style="flex:1" aria-label="Payload URL" (focus)="$any($event.target).select()" />
+            <input [value]="settings.webhook_url" readonly style="flex:1" aria-label="Webhook URL" (focus)="$any($event.target).select()" />
+            <button (click)="copy(settings.webhook_url, 'url')">{{ copied === 'url' ? 'Copied' : 'Copy URL' }}</button>
+          </div>
+          <div style="display:flex;gap:0.5rem">
+            <input type="password" [(ngModel)]="linearSecret" [placeholder]="settings.has_secret ? 'Signing secret saved; paste a new one to replace it' : 'Linear signing secret'"
+                   aria-label="Linear signing secret" style="flex:1" autocomplete="off" />
+            <button [disabled]="busy || !linearSecret.trim()" (click)="setEnabled(true)">Save and turn on</button>
+          </div>
+        } @else if (settings.enabled) {
+          @if (kind === 'github') {
+            <p class="field-help">In the repository on GitHub: <em>Settings → Webhooks → Add webhook</em>, content type
+              <code>application/json</code>, events <em>Pull requests</em>:</p>
+          } @else {
+            <p class="field-help">In Jira: <em>Settings → System → WebHooks → Create a WebHook</em> with this URL and the secret,
+              events <em>Issue created</em> and <em>Issue updated</em>. From Jira Automation's <em>Send web request</em>, which can't sign,
+              send the secret in a header <code>X-Knowledge-Hubs-Token</code> instead.</p>
+          }
+          <div style="display:flex;gap:0.5rem;margin:0.4rem 0">
+            <input [value]="settings.webhook_url" readonly style="flex:1" aria-label="Webhook URL" (focus)="$any($event.target).select()" />
             <button (click)="copy(settings.webhook_url, 'url')">{{ copied === 'url' ? 'Copied' : 'Copy URL' }}</button>
           </div>
           @if (secret) {
@@ -65,9 +89,12 @@
           } @else {
             <button class="link-btn" [disabled]="busy" (click)="setEnabled(true, true)">Create a new secret</button>
           }
-          <p class="field-help" style="margin-top:0.5rem">The connector's token needs permission to write pull request comments
-            (fine-grained token: <em>Pull requests: read and write</em>).</p>
         }
+        <p class="field-help" style="margin-top:0.5rem">
+          @if (kind === 'github') { The connector's token needs to write pull request comments (fine-grained: <em>Pull requests: read and write</em>). }
+          @else if (kind === 'jira') { The connector's account needs permission to add comments in the project. }
+          @else { The connector's API key needs permission to create comments. }
+        </p>
       </section>
     }
 
@@ -77,11 +104,11 @@
       @for (r of runs; track r.id) {
         <div class="lineage-row" style="flex-wrap:wrap">
           <span class="grow">
-            @if (r.pr_url) { <a [href]="r.pr_url" target="_blank" rel="noopener">#{{ r.pr_number }} {{ r.pr_title }}</a> }
-            @else { #{{ r.pr_number }} }
+            @if (r.url) { <a [href]="r.url" target="_blank" rel="noopener">{{ r.ref }} {{ r.title }}</a> }
+            @else { {{ r.ref }} }
           </span>
           <span class="status-badge" [ngClass]="{ 'status-done': r.status === 'posted' || r.status === 'updated', 'verdict-not_achieved': r.status === 'failed' }">{{ r.status }}</span>
-          <span class="muted-text">{{ r.source }} · {{ r.created_at | date:'short' }}</span>
+          <span class="muted-text">{{ r.kind }} · {{ r.source }} · {{ r.created_at | date:'short' }}</span>
           @if (r.comment_url) { <a [href]="r.comment_url" target="_blank" rel="noopener">comment</a> }
           @if (r.reason) { <span class="muted-text" style="flex-basis:100%;font-size:0.8rem">{{ r.reason }}</span> }
         </div>

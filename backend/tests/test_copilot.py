@@ -1,4 +1,4 @@
-"""Decision Copilot: pull request comments from the record, on demand and from GitHub's webhook. Comments only."""
+"""Decision Copilot: comments from the record on GitHub pull requests, Jira and Linear issues. Comments only."""
 from __future__ import annotations
 
 import asyncio
@@ -32,11 +32,12 @@ class FakeGitHub:
         self.comments: List[Dict] = []
         self.refuse_writes = False
         self.sha = {7: "abc123", 8: "def456"}
+        self.files = {7: ["services/payments/store.py"], 8: ["README.md"]}
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         path, method = request.url.path, request.method
-        prs = {7: ("Move payments to MongoDB", "Switch the payment service's store.", ["services/payments/store.py"]),
-               8: ("Fix typo in README", "", ["README.md"])}
+        prs = {7: ("Move payments to MongoDB", "Switch the payment service's store.", self.files[7]),
+               8: ("Fix typo in README", "", self.files[8])}
         for n, (title, body, files) in prs.items():
             if path == f"/repos/acme/payments-api/pulls/{n}":
                 return httpx.Response(200, json={"number": n, "title": title, "body": body, "state": "open",
@@ -83,7 +84,7 @@ def setup(client, alice, llm, github):
 
 
 def preview(client, headers, connector, n=7) -> Dict:
-    r = client.post("/knowledge/copilot/preview", headers=headers, json={"connector_id": connector["id"], "pr_number": n})
+    r = client.post("/knowledge/copilot/preview", headers=headers, json={"connector_id": connector["id"], "ref": str(n)})
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -105,8 +106,8 @@ def pr_event(n=7, action="opened", sha=None, draft=False) -> Dict:
 def test_preview_shows_the_comment_without_posting(client, alice, setup, github, llm):
     llm.handlers["impact"] = lambda m: CONFLICT
     body = preview(client, alice, setup)
-    assert body["pr"] == {"number": 7, "title": "Move payments to MongoDB", "url": f"{REPO}/pull/7",
-                          "head_sha": "abc123", "draft": False, "state": "open"}
+    assert body["target"] == {"ref": "7", "title": "Move payments to MongoDB", "url": f"{REPO}/pull/7",
+                              "noun": "pull request", "skip": None}
     assert body["relevant"] is True and body["files"] == 1
     comment = body["comment"]
     assert comment.startswith(MARKER) and "may conflict with 1 recorded decision" in comment
@@ -121,7 +122,7 @@ def test_preview_shows_the_comment_without_posting(client, alice, setup, github,
 
 def test_posting_comments_once_then_updates_it(client, alice, setup, github, llm):
     llm.handlers["impact"] = lambda m: CONFLICT
-    ref = {"connector_id": setup["id"], "pr_number": 7}
+    ref = {"connector_id": setup["id"], "ref": "7"}
     first = client.post("/knowledge/copilot/post", headers=alice, json=ref).json()
     assert first["status"] == "posted" and first["comment_url"].endswith("#issuecomment-1")
     second = client.post("/knowledge/copilot/post", headers=alice, json=ref).json()
@@ -140,13 +141,13 @@ def test_a_change_the_record_says_nothing_about_gets_no_comment(client, alice, s
 
 def test_github_refusing_the_comment_is_reported(client, alice, setup, github):
     github.refuse_writes = True
-    r = client.post("/knowledge/copilot/post", headers=alice, json={"connector_id": setup["id"], "pr_number": 7})
+    r = client.post("/knowledge/copilot/post", headers=alice, json={"connector_id": setup["id"], "ref": "7"})
     assert r.status_code == 502 and "403" in r.json()["detail"]
     assert client.get("/knowledge/copilot/runs", headers=alice).json()[0]["status"] == "failed"
 
 
 def test_other_spaces_cannot_use_the_connector(client, alice, bob, setup):
-    r = client.post("/knowledge/copilot/preview", headers=bob, json={"connector_id": setup["id"], "pr_number": 7})
+    r = client.post("/knowledge/copilot/preview", headers=bob, json={"connector_id": setup["id"], "ref": "7"})
     assert r.status_code == 404
     assert client.get(f"/connectors/{setup['id']}/copilot", headers=bob).status_code == 404
 
@@ -184,11 +185,12 @@ def test_a_signed_pull_request_event_gets_a_comment(client, alice, setup, github
     assert r.status_code == 202
     assert len(github.comments) == 1 and github.comments[0]["body"].startswith(MARKER)
     assert client.get("/knowledge/copilot/runs", headers=alice).json()[0]["source"] == "webhook"
-    # the same commit again: not analysed twice; a new commit updates the one comment
-    github.requests.clear()
-    client.post(url, **signed(secret, pr_event(action="synchronize")))
-    assert github.requests == []
+    # nothing it analyses changed (a push to the same files): no second comment or edit
     github.sha[7] = "fff999"
+    client.post(url, **signed(secret, pr_event(action="synchronize", sha="fff999")))
+    assert [r.method for r in github.requests if r.method != "GET"] == ["POST"]
+    # it touches another file now: analysed again, and the one comment is updated
+    github.files[7] = ["services/payments/store.py", "services/payments/migrate.py"]
     client.post(url, **signed(secret, pr_event(action="synchronize", sha="fff999")))
     assert len(github.comments) == 1 and any(r.method == "PATCH" for r in github.requests)
 
@@ -217,7 +219,7 @@ def test_unsigned_wrongly_signed_or_disabled_webhooks_are_refused(client, alice,
 
 
 def test_deleting_the_connector_deletes_its_runs(client, alice, setup, github, db_query):
-    client.post("/knowledge/copilot/post", headers=alice, json={"connector_id": setup["id"], "pr_number": 8})
+    client.post("/knowledge/copilot/post", headers=alice, json={"connector_id": setup["id"], "ref": "8"})
     assert db_query("SELECT count(*) AS n FROM CopilotRun WHERE connector_id = :c", c=setup["id"])[0]["n"] == 1
     assert client.delete(f"/connectors/{setup['id']}", headers=alice).status_code == 204
     assert db_query("SELECT count(*) AS n FROM CopilotRun WHERE connector_id = :c", c=setup["id"])[0]["n"] == 0
@@ -233,7 +235,8 @@ def test_a_pull_request_already_being_analysed_is_not_analysed_again(client, ali
     from app import coordination
     llm.handlers["impact"] = lambda m: CONFLICT
     secret = enable(client, alice, setup)["webhook_secret"]
-    lock = coordination.copilot_lock(setup["id"], 7)
+    from app.services.copilot import copilot_lock
+    lock = copilot_lock(setup["id"], "7")
     token = asyncio.run(coordination.acquire(lock, ttl=30))
     try:
         assert client.post(f"/copilot/github/{setup['id']}/webhook", **signed(secret, pr_event())).status_code == 202
@@ -253,10 +256,10 @@ def test_in_worker_mode_the_webhook_only_queues_the_analysis(client, alice, setu
     monkeypatch.setattr(worker.celery_app, "send_task", lambda name, args: sent.append((name, args)))
     assert client.post(f"/copilot/github/{setup['id']}/webhook", **signed(secret, pr_event())).status_code == 202
     space = client.get("/auth/me", headers=alice).json()["id"]
-    assert sent == [("kh.copilot_pr", [space, setup["id"], 7, "abc123"])]
+    assert sent == [("kh.copilot", [space, setup["id"], "7"])]
     assert github.comments == [] and github.requests == []                  # nothing ran in the API process
 
     # what the worker then executes, with its own database client
-    worker.copilot_pr.run(space, setup["id"], 7, "abc123")
+    worker.copilot_job.run(space, setup["id"], "7")
     runs = client.get("/knowledge/copilot/runs", headers=alice).json()
-    assert runs[0]["source"] == "webhook" and runs[0]["pr_number"] == 7
+    assert runs[0]["source"] == "webhook" and runs[0]["ref"] == "7" and runs[0]["kind"] == "github"

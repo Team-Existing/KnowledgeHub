@@ -52,7 +52,7 @@ export class AppComponent implements OnDestroy {
     { label: 'Ask', items: [
       { path: '/graphrag', label: 'GraphRAG', icon: 'ask' },
       { path: '/impact', label: 'Impact', icon: 'impact' },
-      { path: '/decision-copilot', label: 'PR Copilot', icon: 'review' },
+      { path: '/decision-copilot', label: 'Copilot', icon: 'review' },
     ] },
     { label: 'Collaborate', items: [
       { path: '/connectors', label: 'Sources', icon: 'sources' },
