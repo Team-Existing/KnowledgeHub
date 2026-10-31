@@ -66,7 +66,7 @@ class OrganizationRepository:
         p = {"o": org_id}
         await self.session.execute("DELETE VERTEX FROM Node WHERE user_id = :o", p)   # edges go with them
         await delete_space_systems(self.session, org_id)
-        for doc in ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog", "CopilotRun"):
+        for doc in ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog", "CopilotRun", "SlackIntegration"):
             await self.session.execute(f"DELETE FROM {doc} WHERE user_id = :o", p)
         await self.session.execute("DELETE FROM OrgInvite WHERE org_id = :o", p)
         await self.session.execute("DELETE FROM OrgDomain WHERE org_id = :o", p)

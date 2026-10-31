@@ -265,3 +265,26 @@ class Linear:
 
 
 ADAPTERS = {a.kind: a for a in (GitHub, Jira, Linear)}
+
+
+def slack_mrkdwn(blocks: List[tuple]) -> str:
+    """Slack's mrkdwn: *bold*, <url|text> links, no headings."""
+    def esc(text: str) -> str:            # Slack's three control characters
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    out: List[str] = []
+    for b in blocks:
+        if b[0] in ("heading", "bold"):
+            out.append(f"*{esc(b[1])}*")
+        elif b[0] == "warning":
+            out.append(f":warning: {esc(b[1])}")
+        elif b[0] == "item":
+            text, url, subs = esc(b[1]), b[2], b[3]
+            out.append(f"• <{url}|{text}>" if url else f"• *{text}*")
+            out += [f"      ◦ {esc(s)}" for s in subs]
+        elif b[0] == "line":
+            out.append(esc(b[1]).replace("**", "*"))
+        elif b[0] == "note":
+            out.append(f"_{esc(b[1])}_")
+        else:
+            out.append("")
+    return "\n".join(out).strip()

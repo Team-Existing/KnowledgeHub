@@ -64,7 +64,7 @@ To use a GPU, an Ollama you already run, or to work on the code with live reload
 | [Inactive accounts and groups](docs/retention.md) | Automatic deletion and its safety rails |
 | [Local models](docs/local-models.md) | The supported LLMs and how they're chosen |
 | [Single sign-on](docs/sso.md) | Google, Microsoft or any OpenID Connect provider; joining an organization by email domain |
-| [Decision Copilot](docs/decision-copilot.md) | A comment on GitHub pull requests, Jira and Linear issues with the decisions, conflicts and systems they touch (advisory only) |
+| [Decision Copilot](docs/decision-copilot.md) | A comment on GitHub pull requests, Jira and Linear issues, and Slack's `/decisions` command: the decisions, conflicts and systems a change touches (advisory only) |
 | [Impact analysis](docs/impact-analysis.md) | What a proposed change touches: earlier decisions and their reasoning, potential conflicts, dependent systems, risks |
 | [Commitments and outcomes](docs/commitments.md) | Owners, due dates and status of what decisions set in motion; did the decision work? |
 | [Hosted models](docs/hosted-models.md) | OpenAI-compatible APIs: configuration and what is sent |

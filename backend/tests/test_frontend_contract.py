@@ -27,6 +27,8 @@ NOT_FOR_THE_UI: Set[Tuple[str, str]] = {
     ("GET", "/auth/sso/{provider_id}/callback"),
     # GitHub, Jira or Linear calls it, verified with the connector's secret; the app shows its URL
     ("POST", "/copilot/{kind}/{connector_id}/webhook"),
+    # Slack calls it for /decisions, signed with the app's signing secret; the app shows its URL
+    ("POST", "/slack/{integration_id}/command"),
 }
 
 _HTTP_CALL = re.compile(

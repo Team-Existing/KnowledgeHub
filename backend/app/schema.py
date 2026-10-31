@@ -25,6 +25,7 @@ Organization              the tenant: its own shared space, members, groups and 
 OrgMember                 user <-> organization: role owner | admin | member, status active | left | removed
 OrgInvite                 an invite link to an organization (only the token's hash is stored)
 OrgDomain                 an email domain whose verified SSO users join the organization
+SlackIntegration          a Slack app's /decisions command for a space (only its signing secret, encrypted)
 CopilotRun                one Decision Copilot analysis of a pull request or issue: posted, updated, skipped or failed
 SsoIdentity               a provider account (provider + subject) that signs in as a user
 GroupSpace                a group: a shared space inside an organization (org_id)
@@ -256,6 +257,15 @@ CREATE PROPERTY CopilotRun.status IF NOT EXISTS STRING
 CREATE PROPERTY CopilotRun.created_at IF NOT EXISTS STRING
 CREATE INDEX IF NOT EXISTS ON CopilotRun (id) UNIQUE
 CREATE INDEX IF NOT EXISTS ON CopilotRun (user_id) NOTUNIQUE
+
+CREATE DOCUMENT TYPE SlackIntegration IF NOT EXISTS
+CREATE PROPERTY SlackIntegration.id IF NOT EXISTS STRING
+CREATE PROPERTY SlackIntegration.user_id IF NOT EXISTS STRING
+CREATE PROPERTY SlackIntegration.name IF NOT EXISTS STRING
+CREATE PROPERTY SlackIntegration.signing_secret IF NOT EXISTS STRING
+CREATE PROPERTY SlackIntegration.created_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON SlackIntegration (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON SlackIntegration (user_id) NOTUNIQUE
 
 CREATE DOCUMENT TYPE OrgInvite IF NOT EXISTS
 CREATE PROPERTY OrgInvite.id IF NOT EXISTS STRING
