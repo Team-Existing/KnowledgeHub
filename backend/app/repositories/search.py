@@ -34,9 +34,14 @@ def query_terms(q: str) -> List[str]:
 
 
 def lucene_query(q: str, require_all: bool = True) -> str:
-    """User text → Lucene query of prefix terms. Only \\w characters survive, so no operator injection."""
+    """
+    User text → Lucene query: each word as the whole term or a prefix, `(billing billing*)`.
+    A bare prefix query (`billing*`) on ArcadeDB's full-text index can miss documents that
+    hold the exact word: with three decisions about billing it found two. Only \\w
+    characters survive, so no operator injection.
+    """
     prefix = "+" if require_all else ""
-    return " ".join(f"{prefix}{t}*" for t in query_terms(q))
+    return " ".join(f"{prefix}({t} {t}*)" for t in query_terms(q))
 
 
 def snippet(content: str, terms: Sequence[str], radius: int = 60) -> Optional[str]:

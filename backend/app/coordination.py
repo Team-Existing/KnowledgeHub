@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 SYNC_LOCK_TTL = 120        # seconds; renewed every SYNC_LOCK_TTL / 4 while a sync runs
 RETENTION_LOCK_TTL = 3600
+COPILOT_LOCK_TTL = 600     # one Copilot analysis: fetch, impact analysis (one LLM call), comment
 # Redis being down must fail fast, never hang: /health would otherwise exceed the
 # load balancer's check and take every app instance out of rotation.
 REDIS_TIMEOUT = 2.0
@@ -190,4 +191,22 @@ async def dispatch_sync(space_id: str, connector_id: str, actor_id: str, backgro
     if background is None:
         raise RuntimeError("in-process mode needs FastAPI BackgroundTasks to run the sync")
     background.add_task(run_sync_job, space_id, connector_id, actor_id)
+    return "in-process"
+
+
+async def dispatch_copilot(space_id: str, connector_id: str, ref: str, background=None) -> str:
+    """
+    Analyse a pull request or issue for the Decision Copilot after a webhook: on
+    the Celery worker in worker mode, otherwise as a background task in this process.
+    """
+    if worker_mode():
+        from starlette.concurrency import run_in_threadpool
+        from app.worker import celery_app
+        await run_in_threadpool(celery_app.send_task, "kh.copilot", args=[space_id, connector_id, ref])
+        return "worker"
+    from app.db import get_client
+    from app.services.copilot import webhook_job
+    if background is None:
+        raise RuntimeError("in-process mode needs FastAPI BackgroundTasks to run the analysis")
+    background.add_task(webhook_job, get_client(), space_id, connector_id, ref)
     return "in-process"

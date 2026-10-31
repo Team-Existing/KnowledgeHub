@@ -1,0 +1,124 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h1>Impact analysis</h1>
+      <p>Before changing course: what earlier decisions, risks, lessons and commitments say about it, and which systems it reaches.</p>
+    </div>
+  </section>
+
+  <section class="ingest-panel">
+    @if (decisionId) {
+      <p>Reconsidering a decision @if (report?.subject) { : <a [routerLink]="['/knowledge', report!.subject!.id]">{{ report!.subject!.title }}</a> }
+        <button class="link-btn" (click)="clearDecision()">Describe a change instead</button></p>
+    }
+    <label class="field-help" for="proposal">The proposed change</label>
+    <textarea id="proposal" rows="3" [(ngModel)]="proposal" maxlength="4000" style="width:100%"
+              [placeholder]="decisionId ? 'Optional: what would replace it, e.g. Move payments to MongoDB' : 'e.g. Move the payment service from PostgreSQL to MongoDB'"></textarea>
+    @if (systems.length) {
+      <p class="field-help" style="margin:0.5rem 0 0.3rem">Systems it touches (also found from the names in the text):</p>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+        @for (s of systems; track s.id) {
+          <label class="pill" style="cursor:pointer">
+            <input type="checkbox" [checked]="chosen.has(s.id)" (change)="toggle(s.id)" /> {{ s.name }}
+          </label>
+        }
+      </div>
+    } @else {
+      <p class="field-help" style="margin-top:0.4rem">Tip: add your services and their dependencies on the <a routerLink="/systems">Systems</a> page
+        to see what a change reaches.</p>
+    }
+    <div style="margin-top:0.75rem">
+      <button class="primary" [disabled]="busy || !canRun" (click)="analyze()">{{ busy ? 'Analyzing…' : 'Analyze' }}</button>
+    </div>
+  </section>
+
+  @if (error) { <p class="error-text">{{ error }}</p> }
+
+  @if (report; as r) {
+    <p class="muted-text">
+      {{ r.counts.decisions }} decision{{ r.counts.decisions === 1 ? '' : 's' }} ·
+      {{ r.counts.systems }} system{{ r.counts.systems === 1 ? '' : 's' }} ·
+      {{ r.counts.risks }} risk{{ r.counts.risks === 1 ? '' : 's' }} ·
+      {{ r.counts.lessons }} lesson{{ r.counts.lessons === 1 ? '' : 's' }} ·
+      {{ r.counts.commitments }} commitment{{ r.counts.commitments === 1 ? '' : 's' }} in flight
+      @if (!r.llm_used && current.length) { · <span title="No model answered, so decisions aren't labelled as conflicting or consistent">not assessed by a model</span> }
+    </p>
+    @if (r.counts.conflicts) {
+      <div class="health-banner" role="alert">
+        Potential conflict with {{ r.counts.conflicts }} current decision{{ r.counts.conflicts === 1 ? '' : 's' }}. Read the recorded reasoning below before going ahead.
+      </div>
+    }
+
+    <div class="detail-grid">
+      <section class="detail-panel">
+        <h2>Decisions on record</h2>
+        @if (!r.decisions.length) { <p class="muted-text">No recorded decision touches this.</p> }
+        @for (d of current; track d.id) {
+          <div class="lineage-row" style="flex-direction:column;align-items:stretch;gap:0.25rem">
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+              <a class="grow" [routerLink]="['/knowledge', d.id]">{{ d.title }}</a>
+              @if (d.relation) {
+                <span class="status-badge" [ngClass]="{ 'verdict-not_achieved': d.relation === 'conflicts', 'verdict-partly': d.relation === 'changes', 'verdict-achieved': d.relation === 'consistent' }">{{ relationLabel[d.relation] }}</span>
+              }
+            </div>
+            @if (d.relation_reason) { <span class="muted-text">{{ d.relation_reason }}</span> }
+            @if (d.why) { <span><strong>Why:</strong> {{ d.why }}</span> }
+            @if (alternatives(d)) { <span><strong>Alternatives considered:</strong> {{ alternatives(d) }}</span> }
+            <span class="muted-text" style="font-size:0.8rem">
+              @if (d.owner) { {{ d.owner }} · } {{ d.reasons.join(' · ') }}
+              @if (d.open_commitments) { · {{ d.open_commitments }} commitment{{ d.open_commitments === 1 ? '' : 's' }} in flight }
+              @if (d.outcome?.verdict) { · outcome: {{ verdictLabel[d.outcome!.verdict!] }} }
+            </span>
+          </div>
+        }
+        @if (history.length) {
+          <h3 style="font-size:0.875rem;margin:1rem 0 0.5rem">History</h3>
+          @for (d of history; track d.id) {
+            <div class="lineage-row" style="flex-wrap:wrap">
+              <a class="grow" [routerLink]="['/knowledge', d.id]">{{ d.title }}</a>
+              <span class="status-badge" [ngClass]="'status-' + d.status">{{ d.status }}</span>
+              @if (d.replaced_by) { <span class="muted-text" style="flex-basis:100%;font-size:0.8rem">replaced by <a [routerLink]="['/knowledge', d.replaced_by.id]">{{ d.replaced_by.title }}</a></span> }
+            </div>
+          }
+        }
+      </section>
+
+      <section class="detail-panel">
+        <h2>Systems reached</h2>
+        @if (!r.systems.length) { <p class="muted-text">No known system is named or chosen.</p> }
+        @for (s of r.systems; track s.id) {
+          <div class="lineage-row" [style.margin-left.rem]="s.depth * 1">
+            <span class="grow">{{ s.name }} <span class="muted-text">· {{ s.reason }}</span></span>
+            @if (s.owner) { <span class="muted-text">{{ s.owner }}</span> }
+          </div>
+        }
+
+        @if (r.risks.length) {
+          <h2 style="margin-top:1.25rem">Risks</h2>
+          @for (x of r.risks; track x.id) {
+            <div class="lineage-row" style="flex-wrap:wrap">
+              <a class="grow" [routerLink]="['/knowledge', x.id]">{{ x.title }}</a>
+              @if (x.status) { <span class="status-badge" [ngClass]="'status-' + x.status">{{ x.status }}</span> }
+            </div>
+          }
+        }
+        @if (r.lessons.length) {
+          <h2 style="margin-top:1.25rem">Lessons</h2>
+          @for (x of r.lessons; track x.id) {
+            <div class="lineage-row"><a class="grow" [routerLink]="['/knowledge', x.id]">{{ x.title }}</a></div>
+          }
+        }
+        @if (r.commitments.length) {
+          <h2 style="margin-top:1.25rem">Commitments in flight</h2>
+          @for (x of r.commitments; track x.id) {
+            <div class="lineage-row" style="flex-wrap:wrap">
+              <a class="grow" [routerLink]="['/knowledge', x.id]">{{ x.title }}</a>
+              @if (x.commitment?.owner) { <span class="muted-text">{{ x.commitment!.owner }}</span> }
+              @if (x.commitment?.overdue) { <span class="status-badge is-overdue">Overdue</span> }
+            </div>
+          }
+        }
+      </section>
+    </div>
+  }
+</div>

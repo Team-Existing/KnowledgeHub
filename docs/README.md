@@ -6,6 +6,8 @@
 - [Screenshots](screenshots.md): every page of the app
 - [Accounts, roles and spaces](accounts-and-spaces.md)
 - [Decision tracking](decision-tracking.md)
+- [Decision Copilot](decision-copilot.md): the decisions a pull request or issue touches, as a comment on it
+- [Impact analysis](impact-analysis.md): what a proposed change touches, according to the record
 - [Commitments and outcomes](commitments.md): what decisions set in motion, and whether they worked
 - [Knowledge health](knowledge-health.md): what may be out of date, and why
 - [Connectors](connectors.md)

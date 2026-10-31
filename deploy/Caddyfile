@@ -48,7 +48,7 @@
 		file_server
 	}
 
-	@api path /auth* /admin* /spaces* /groups* /organizations* /invitations* /knowledge* /connectors* /models* /health* /docs* /openapi.json
+	@api path /auth* /admin* /spaces* /groups* /organizations* /invitations* /copilot* /knowledge* /connectors* /models* /health* /docs* /openapi.json
 	handle @api {
 		reverse_proxy {$APP_UPSTREAMS} {
 			lb_policy round_robin

@@ -9,6 +9,9 @@
 | **Health** | What may be out of date: items whose source changed, that build on a reversed decision, that someone flagged, or whose review date is near. Confirm them, flag them or set review dates ([Knowledge health](knowledge-health.md)) |
 | **Playbooks** | Repeatable procedures (a release, onboarding), written as steps or built from how-tos and checklists already in the space |
 | **Sources** | Connectors that pull in transcripts, notes, ADRs, pull requests and issues |
+| **Copilot** | Preview or post the comment a GitHub pull request or a Jira or Linear issue gets; turn on the webhook; recent runs |
+| **Impact** | Describe a change; see the decisions, conflicts, systems, risks, lessons and commitments it touches |
+| **Systems** | Services, databases and teams, their dependencies, and the knowledge about each |
 | **Commitments** | Action items with owner, due date and status, overdue first; decisions' expected outcomes and verdicts |
 | **Organizations** | Create organizations, invite people with links, manage roles and members |
 | **Groups** | Create groups inside an organization, invite its members, answer invitations |

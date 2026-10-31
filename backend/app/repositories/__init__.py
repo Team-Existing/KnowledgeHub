@@ -10,6 +10,7 @@ from app.repositories.lineage import ItemEventRepository, LineageRepository
 from app.repositories.misc import CrossLinkRepository, PlaybookRepository, QueryLogRepository
 from app.repositories.relationships import RelationshipRepository
 from app.repositories.search import SearchRepository
+from app.repositories.systems import SystemRepository
 from app.repositories.users import UserRepository
 
 __all__ = [
@@ -24,5 +25,6 @@ __all__ = [
     "QueryLogRepository",
     "RelationshipRepository",
     "SearchRepository",
+    "SystemRepository",
     "UserRepository",
 ]

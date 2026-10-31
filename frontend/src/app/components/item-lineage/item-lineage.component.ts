@@ -100,7 +100,10 @@ export class ItemLineageComponent implements OnChanges {
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
   }
 
-  get hasStatus(): boolean { return (this.lineage?.declarable_statuses.length ?? 0) > 0 }
+  /** Decisions and risks; a commitment's status is set in its Commitment panel (item-tracking) */
+  get hasStatus(): boolean {
+    return this.item.type !== 'action-item' && (this.lineage?.declarable_statuses.length ?? 0) > 0
+  }
 
   phrase(link: LineageLink, direction: Direction): string { return PHRASES[link.kind]?.[direction] ?? link.kind }
 

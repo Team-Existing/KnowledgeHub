@@ -101,6 +101,8 @@ class FakeLLM:
             return "rerank"
         if user.startswith("Context:"):
             return "generate"
+        if user.startswith("Proposed change:"):
+            return "impact"
         return "unknown"
 
     async def chat(self, messages: Messages, temperature: float = 0,

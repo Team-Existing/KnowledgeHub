@@ -8,8 +8,8 @@ from app.arcadedb import ArcadeSession
 
 Row = Dict[str, Any]
 
-_FIELDS = ("id, user_id, kind, name, config, created_at, created_by_name, last_sync_at, last_status, "
-           "last_error, last_result")
+_FIELDS = ("id, user_id, kind, name, config, created_at, created_by, created_by_name, last_sync_at, last_status, "
+           "last_error, last_result, copilot")
 
 
 def synced_document_id(connector_id: str, external_id: str) -> str:
@@ -42,6 +42,7 @@ class ConnectorRepository:
     async def delete(self, user_id: str, connector_id: str) -> None:
         params = {"id": connector_id, "u": user_id}
         await self.session.execute("DELETE FROM SyncedDocument WHERE connector_id = :id AND user_id = :u", params)
+        await self.session.execute("DELETE FROM CopilotRun WHERE connector_id = :id AND user_id = :u", params)
         await self.session.execute("DELETE FROM Connector WHERE id = :id AND user_id = :u", params)
 
     # ── synced documents ────────────────────────────────────────────────────

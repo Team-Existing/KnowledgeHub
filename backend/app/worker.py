@@ -1,7 +1,7 @@
 """
 Celery worker and scheduler (worker mode: REDIS_URL set).
 
-    celery -A app.worker worker --loglevel=INFO      # runs connector syncs and the clean-up
+    celery -A app.worker worker --loglevel=INFO      # runs connector syncs, Copilot analyses, the clean-up
     celery -A app.worker beat   --loglevel=INFO      # exactly ONE of these: schedules the clean-up
 
 Tasks are acknowledged only after they finish (acks_late) and are put back
@@ -65,6 +65,14 @@ def sync_connector(space_id: str, connector_id: str, actor_id: str) -> None:
     from app.services.connectors.sync import run_sync_job
 
     asyncio.run(_with_client(lambda client: run_sync_job(space_id, connector_id, actor_id, client=client)))
+
+
+@celery_app.task(name="kh.copilot")
+def copilot_job(space_id: str, connector_id: str, ref: str) -> None:
+    """A Decision Copilot analysis after a GitHub, Jira or Linear webhook (services/copilot.py)."""
+    from app.services.copilot import webhook_job
+
+    asyncio.run(_with_client(lambda client: webhook_job(client, space_id, connector_id, ref)))
 
 
 @celery_app.task(name="kh.retention")

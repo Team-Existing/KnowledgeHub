@@ -10,7 +10,10 @@ CONTAINS                  Artifact -> KnowledgeItem
 RELATED_TO                KnowledgeItem -> KnowledgeItem (cross-links, with score)
 LINK                      any Node -> Node, from OKF import (property `type` = relation label)
 EVOLVES                   KnowledgeItem -> KnowledgeItem, newer -> older (property `kind`:
-                          supersedes | reverses | amends | realizes | mitigates | learned_from)
+                          supersedes | reverses | amends | realizes | mitigates | learned_from | implements)
+System                    a service, database, team … (not a Node: kept out of the knowledge graph)
+AFFECTS                   KnowledgeItem -> System: the item concerns that system
+DEPENDS_ON                System -> System: the first depends on the second
 
 Documents
 ---------
@@ -22,6 +25,7 @@ Organization              the tenant: its own shared space, members, groups and 
 OrgMember                 user <-> organization: role owner | admin | member, status active | left | removed
 OrgInvite                 an invite link to an organization (only the token's hash is stored)
 OrgDomain                 an email domain whose verified SSO users join the organization
+CopilotRun                one Decision Copilot analysis of a pull request or issue: posted, updated, skipped or failed
 SsoIdentity               a provider account (provider + subject) that signs in as a user
 GroupSpace                a group: a shared space inside an organization (org_id)
 Membership                user <-> group: status invited | active | declined | left | removed
@@ -132,6 +136,31 @@ CREATE EDGE TYPE LINK IF NOT EXISTS
 CREATE PROPERTY LINK.user_id IF NOT EXISTS STRING
 CREATE PROPERTY LINK.type IF NOT EXISTS STRING
 CREATE INDEX IF NOT EXISTS ON LINK (user_id) NOTUNIQUE
+CREATE VERTEX TYPE System IF NOT EXISTS
+CREATE PROPERTY System.id IF NOT EXISTS STRING
+CREATE PROPERTY System.user_id IF NOT EXISTS STRING
+CREATE PROPERTY System.name IF NOT EXISTS STRING
+CREATE PROPERTY System.kind IF NOT EXISTS STRING
+CREATE PROPERTY System.description IF NOT EXISTS STRING
+CREATE PROPERTY System.aliases IF NOT EXISTS LIST OF STRING
+CREATE PROPERTY System.owner IF NOT EXISTS STRING
+CREATE PROPERTY System.created_at IF NOT EXISTS STRING
+CREATE PROPERTY System.created_by IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON System (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON System (user_id) NOTUNIQUE
+
+CREATE EDGE TYPE AFFECTS IF NOT EXISTS
+CREATE PROPERTY AFFECTS.user_id IF NOT EXISTS STRING
+CREATE PROPERTY AFFECTS.origin IF NOT EXISTS STRING
+CREATE PROPERTY AFFECTS.created_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON AFFECTS (user_id) NOTUNIQUE
+
+CREATE EDGE TYPE DEPENDS_ON IF NOT EXISTS
+CREATE PROPERTY DEPENDS_ON.user_id IF NOT EXISTS STRING
+CREATE PROPERTY DEPENDS_ON.note IF NOT EXISTS STRING
+CREATE PROPERTY DEPENDS_ON.created_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON DEPENDS_ON (user_id) NOTUNIQUE
+
 CREATE EDGE TYPE EVOLVES IF NOT EXISTS
 CREATE PROPERTY EVOLVES.user_id IF NOT EXISTS STRING
 CREATE PROPERTY EVOLVES.kind IF NOT EXISTS STRING
@@ -214,6 +243,19 @@ CREATE PROPERTY OrgDomain.added_by IF NOT EXISTS STRING
 CREATE PROPERTY OrgDomain.added_at IF NOT EXISTS STRING
 CREATE INDEX IF NOT EXISTS ON OrgDomain (domain) UNIQUE
 CREATE INDEX IF NOT EXISTS ON OrgDomain (org_id) NOTUNIQUE
+
+CREATE DOCUMENT TYPE CopilotRun IF NOT EXISTS
+CREATE PROPERTY CopilotRun.id IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.user_id IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.connector_id IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.kind IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.ref IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.revision IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.comment_id IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.status IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.created_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON CopilotRun (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON CopilotRun (user_id) NOTUNIQUE
 
 CREATE DOCUMENT TYPE OrgInvite IF NOT EXISTS
 CREATE PROPERTY OrgInvite.id IF NOT EXISTS STRING

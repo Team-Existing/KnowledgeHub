@@ -79,6 +79,67 @@ export interface CommitmentsResponse {
   counts: Record<CommitmentStatus | 'overdue', number>
 }
 
+/** A service, database, team …; see backend repositories/systems.py */
+export type SystemKind = 'service' | 'database' | 'library' | 'infrastructure' | 'team' | 'product' | 'other'
+export interface SystemInfo {
+  id: string
+  name: string
+  kind: SystemKind
+  description: string | null
+  aliases: string[]
+  owner: string | null
+  /** systems this one depends on, and those that depend on it */
+  depends_on: string[]
+  dependents: string[]
+  item_count: number
+}
+/** GET /knowledge/systems */
+export interface SystemsResponse {
+  systems: SystemInfo[]
+  kinds: SystemKind[]
+}
+export interface SystemBrief { id: string; name: string; kind: SystemKind }
+/** GET /knowledge/items/{id}/systems */
+export interface ItemSystems {
+  linked: SystemBrief[]
+  /** systems the item names but isn't linked to */
+  suggested: SystemBrief[]
+}
+
+/** POST /knowledge/impact; see backend services/impact.py */
+export type ImpactRelation = 'conflicts' | 'changes' | 'consistent' | 'unrelated'
+export interface ImpactItem {
+  id: string
+  title: string
+  type: string
+  status: string | null
+  date: string | null
+  /** why it's in the report: "affects Payments", "similar (0.62)" … */
+  reasons: string[]
+}
+export interface ImpactDecision extends ImpactItem {
+  why: string | null
+  alternatives: string | string[] | null
+  owner: string | null
+  outcome: OutcomeInfo | null
+  open_commitments: number
+  replaced_by: ImpactItem | null
+  relation: ImpactRelation | null
+  relation_reason: string | null
+}
+export interface ImpactReport {
+  proposal: string
+  subject: ImpactItem | null
+  systems: (SystemBrief & { owner: string | null; depth: number; reason: string; via: string[] })[]
+  decisions: ImpactDecision[]
+  risks: (ImpactItem & { severity?: string })[]
+  lessons: ImpactItem[]
+  commitments: (ImpactItem & { commitment?: CommitmentInfo })[]
+  /** whether the model labelled how the proposal relates to each current decision */
+  llm_used: boolean
+  counts: { conflicts: number; changes: number; systems: number; decisions: number; risks: number; lessons: number; commitments: number }
+}
+
 /** GET /knowledge/outcomes */
 export interface OutcomeEntry extends KnowledgeItem {
   outcome: OutcomeInfo
@@ -590,6 +651,44 @@ export interface Connector {
   last_status: SyncStatus
   last_error: string | null
   last_result: SyncResult
+  /** GitHub, Jira and Linear connectors: whether the Decision Copilot is on */
+  copilot?: { enabled: boolean; has_secret: boolean }
+}
+
+/** GET/PUT /connectors/{id}/copilot; a created secret only in the response that creates it (GitHub, Jira) */
+export interface CopilotSettings {
+  enabled: boolean
+  has_secret: boolean
+  webhook_url: string
+  webhook_secret?: string
+}
+
+/** POST /knowledge/copilot/preview */
+export interface CopilotPreview {
+  /** ref: 42, ARCH-12, ENG-42; skip: why a webhook would leave it alone (a draft, done …) */
+  target: { ref: string; title: string; url: string; noun: string; skip: string | null }
+  files: number
+  report: ImpactReport
+  /** whether the record has something to say: a webhook run would comment */
+  relevant: boolean
+  /** the comment, in the platform's markup (Markdown; Jira wiki markup) */
+  comment: string
+}
+
+/** GET /knowledge/copilot/runs */
+export interface CopilotRun {
+  id: string
+  connector_id: string
+  kind: 'github' | 'jira' | 'linear'
+  ref: string
+  title: string | null
+  url: string | null
+  source: 'manual' | 'webhook'
+  status: 'posted' | 'updated' | 'skipped' | 'failed'
+  reason: string | null
+  comment_url: string | null
+  counts: Partial<ImpactReport['counts']>
+  created_at: string
 }
 
 /** GET /connectors/{id}/documents */
