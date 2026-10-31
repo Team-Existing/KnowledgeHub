@@ -34,6 +34,7 @@ Where settings go depends on how you run it:
 | `MAX_UPLOAD_MB` | `20` | Cap on request bodies, uploaded files and fetched pages |
 | `GRAPHRAG_RERANK` | `off` | `on` adds an LLM rerank of the retrieved candidates (about one more LLM call per question) |
 | `GRAPHRAG_QUERY_REWRITE` | `off` | `on` rewrites each question into sub-queries plus a hypothetical answer with the LLM before retrieving (one more LLM call) |
+| `VERIFY_ON_ACCEPT` | `on` | `off` stops comparing newly accepted items with similar knowledge for duplicates and contradictions ([verification](knowledge-health.md#verification)) |
 | `IMPACT_LLM` | `on` | `off` skips the one LLM call of [impact analysis](impact-analysis.md) that labels decisions as conflicting, changing or consistent |
 | `GRAPHRAG_LLM_ROUTE` | `off` | `on` asks the LLM to classify questions the embedding classifier is unsure about |
 | `OLLAMA_KEEP_ALIVE` | `30m` | How long Ollama keeps the model loaded after a call. Reloading an 8B model takes 30–60 s on a CPU |

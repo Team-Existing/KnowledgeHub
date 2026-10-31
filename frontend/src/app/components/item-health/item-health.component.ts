@@ -7,7 +7,7 @@ import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
 import { describeSignal, HEALTH_LABEL } from '../../services/health'
-import { KnowledgeItem } from '../../models/api'
+import { ConsistencyCheck, KnowledgeItem } from '../../models/api'
 
 const RETIRED = ['superseded', 'reversed', 'rejected', 'deprecated', 'closed']
 
@@ -25,6 +25,8 @@ export class ItemHealthComponent implements OnChanges {
   readonly label = HEALTH_LABEL
   readonly describe = describeSignal
   mode: '' | 'verify' | 'flag' = ''
+  /** what the last consistency check found, in words */
+  checkResult = ''
   note = ''; reviewDue = ''
   error = ''; busy = false
 
@@ -57,6 +59,19 @@ export class ItemHealthComponent implements OnChanges {
     await this.run('Could not set the review date', () => firstValueFrom(this.http.put(
       `${API_BASE}/knowledge/items/${encodeURIComponent(this.item.id)}/review-date`,
       { review_due: this.reviewDue || null })))
+  }
+
+  /** Duplicates and contradictions among similar current knowledge (backend services/verification.py) */
+  async checkConsistency() {
+    this.checkResult = ''
+    await this.run('Could not check', async () => {
+      const r = await firstValueFrom(this.http.post<ConsistencyCheck>(
+        `${API_BASE}/knowledge/items/${encodeURIComponent(this.item.id)}/health/check`, {}))
+      const found = r.contradictions.length + r.duplicates.length
+      this.checkResult = !r.checked ? 'No similar current knowledge to compare with.'
+        : found ? `Found ${r.contradictions.length} contradiction${r.contradictions.length === 1 ? '' : 's'} and ${r.duplicates.length} possible duplicate${r.duplicates.length === 1 ? '' : 's'}; see the signals above.`
+        : `Compared with ${r.checked} similar item${r.checked === 1 ? '' : 's'}: ${r.llm_used ? 'no contradictions or duplicates' : 'no duplicates (no model was available to look for contradictions)'}.`
+    })
   }
 
   private async run(failure: string, call: () => Promise<unknown>) {

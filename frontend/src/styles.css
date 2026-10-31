@@ -388,6 +388,10 @@ main {
 .verdict-not_achieved { background: var(--danger-soft); color: var(--danger-text); }
 .status-reversed, .status-rejected, .status-materialized { background: var(--danger-soft); color: var(--danger-text); }
 .health-potentially_stale, .health-needs_review { background: var(--warning-soft); color: var(--warning-text); }
+.status-invalidated, .lifecycle-invalidated { background: var(--danger-soft); color: var(--danger-text); }
+.lifecycle-active { background: var(--success-soft); color: var(--success-text); }
+.lifecycle-needs_review, .lifecycle-potentially_stale { background: var(--warning-soft); color: var(--warning-text); }
+.lifecycle-superseded { background: var(--surface-3); color: var(--text-3); }
 .health-ok { background: var(--success-soft); color: var(--success-text); }
 
 .conf-high { background: var(--success-soft); color: var(--success-text); }

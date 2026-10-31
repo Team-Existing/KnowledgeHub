@@ -46,6 +46,11 @@ export class KnowledgeDetailComponent implements OnInit {
   get artifact(): Artifact | undefined {
     return this.ctx?.artifact ?? undefined
   }
+  readonly lifecycleLabel: Record<string, string> = {
+    active: 'Active', needs_review: 'Needs review', potentially_stale: 'Potentially stale',
+    superseded: 'Superseded', invalidated: 'Invalidated',
+  }
+
   get relationships(): Relationship[] {
     return this.ctx?.relationships ?? []
   }

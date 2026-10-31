@@ -11,6 +11,8 @@ Health never comes from age alone. An item is only questioned on evidence:
 | **Something it builds on changed** | The decision it amends is reversed or superseded; a decision that mitigates it (a risk) is reversed or superseded; the risk it mitigates happens anyway |
 | **Flagged** | Someone marks it as possibly outdated, with a reason |
 | **Outcome not achieved** | A decision's recorded [outcome](commitments.md) is *not achieved* |
+| **Contradicted** | Newer knowledge says otherwise (see [Verification](#verification)). The older item is flagged, naming the newer one |
+| **Possible duplicate** | An item is nearly the same text as an older one. The newer one is flagged |
 
 Each item then has one of three states:
 
@@ -21,6 +23,33 @@ Each item then has one of three states:
 | **Up to date** | Neither |
 
 Items whose status already says they no longer hold (superseded, reversed, rejected, deprecated, closed, and commitments that are done or dropped) aren't questioned. Items still waiting in the review queue aren't flagged when their source changes, because they will be reviewed anyway.
+
+## One lifecycle
+
+Every item also has a one-word **lifecycle**, combining its status and its health. Its page shows it.
+
+| Lifecycle | Meaning |
+|---|---|
+| **Active** | Still considered valid |
+| **Needs review** | Approaching its review date |
+| **Potentially stale** | Evidence says its assumptions may have changed (any signal above) |
+| **Superseded** | Replaced by a newer decision (superseded or reversed) |
+| **Invalidated** | No longer applicable: declared *invalidated* (or deprecated, rejected; a risk closed) |
+
+## Verification
+
+When an item is accepted in review, Knowledge Hubs compares it with similar current knowledge of the same type: decisions, best practices, lessons, risks and how-tos.
+
+- **Possible duplicates:** items with nearly the same text (embedding similarity of at least 0.92) are flagged. No model is needed.
+- **Contradictions:** for up to five items on a similar topic (similarity of at least 0.55), one model call says whether the new item contradicts each. When it does, the **older** item is flagged *contradicted*, with the reason, because newer evidence says otherwise.
+
+What isn't compared:
+- items already linked to each other (a person has said how they relate)
+- items that are already retired
+
+Nothing else changes. A person decides whether the newer item supersedes the older one, and the decision page's link suggestions offer exactly that.
+
+**Check against similar knowledge**, on an item's page, runs the same comparison on demand. `VERIFY_ON_ACCEPT=off` turns off the automatic check.
 
 ## What you do about it
 

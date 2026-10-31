@@ -19,13 +19,14 @@ OUTPUT RULES — follow exactly:
 1. Return ONLY a single JSON object. No markdown, no code fences, no explanation.
 2. Use this exact shape:
 {
-  "decisions": [{"what": "...", "why": "...", "who": "..."}],
+  "decisions": [{"what": "...", "why": "...", "who": "...", "alternatives": ["..."]}],
   "action_items": [{"task": "...", "owner": "...", "due": "..."}],
   "risks": [{"risk": "...", "severity": "low|medium|high"}],
   "summary": "..."
 }
 3. decisions: things explicitly agreed, decided, or confirmed — in any format. Keep one decision in one
-   item with all its parts ("keep X and add Y"), and put its reason in "why".
+   item with all its parts ("keep X and add Y"), and put its reason in "why". Put the options that were
+   considered and not chosen in "alternatives" ("PostgreSQL instead of MongoDB" -> ["MongoDB"]); [] if none.
 4. action_items: concrete tasks assigned or volunteered by a person.
 5. risks: concerns, blockers, open questions, or uncertainties raised.
 6. summary: 2-3 sentences covering the main outcome or thread conclusion.
@@ -46,7 +47,7 @@ OUTPUT RULES — follow exactly:
 1. Return ONLY a single JSON object. No markdown, no code fences, no explanation.
 2. Use this exact shape:
 {
-  "decisions": [{"what": "...", "why": "...", "who": "..."}],
+  "decisions": [{"what": "...", "why": "...", "who": "...", "alternatives": ["..."]}],
   "action_items": [{"task": "...", "owner": "...", "due": "..."}],
   "how_tos": [{"what": "...", "steps": ["...", "..."]}],
   "best_practices": [{"what": "...", "why": "..."}],
@@ -55,6 +56,7 @@ OUTPUT RULES — follow exactly:
 }
 3. decisions: choices the text states were made or agreed — not proposals or options still being considered.
    Keep one decision in one item with all its parts ("keep X and add Y"), and put its reason in "why".
+   Put the options considered and not chosen in "alternatives" ("PostgreSQL instead of MongoDB" -> ["MongoDB"]).
 4. action_items: concrete tasks assigned to someone or explicitly still to be done.
 5. how_tos: procedures with at least two ordered steps. "what" names the goal; steps are short imperative phrases.
 6. best_practices: explicit recommendations or rules the text tells the reader to follow.
@@ -86,14 +88,14 @@ _RISK = {"type": "array", "maxItems": 10, "items": {"type": "object", "propertie
     "required": ["risk", "severity"]}}
 
 _TRANSCRIPT_SCHEMA: Dict[str, Any] = {"type": "object", "properties": {
-    "decisions": _entries("what", "why", "who"),
+    "decisions": _entries("what", "why", "who", lists=("alternatives",)),
     "action_items": _entries("task", "owner", "due"),
     "risks": _RISK,
     "summary": {"type": "string"},
 }, "required": ["decisions", "action_items", "risks", "summary"]}
 
 _DOCUMENT_SCHEMA: Dict[str, Any] = {"type": "object", "properties": {
-    "decisions": _entries("what", "why", "who"),
+    "decisions": _entries("what", "why", "who", lists=("alternatives",)),
     "action_items": _entries("task", "owner", "due"),
     "how_tos": _entries("what", lists=("steps",)),
     "best_practices": _entries("what", "why"),

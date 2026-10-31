@@ -23,7 +23,7 @@ Fields not relevant to a given type are omitted (not set to null/empty).
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 
 def normalize_item_details(
@@ -71,6 +71,12 @@ def normalize_item_details(
     due = raw.get("due") or raw.get("when") or ""
     if due:
         out["due"] = str(due).strip()
+
+    # ── alternatives (decisions): the options considered and not chosen ───
+    if item_type == "decision":
+        alternatives = clean_alternatives(raw.get("alternatives"))
+        if alternatives:
+            out["alternatives"] = alternatives
 
     # ── severity (risks) ──────────────────────────────────────────────────
     if item_type == "risk":
@@ -144,3 +150,19 @@ def calibrated_confidence(
         + density_bonus
     )
     return round(min(score, 0.92), 3)
+
+
+def clean_alternatives(value: Any) -> List[str]:
+    """The options a decision considered and didn't choose, as a short list: from a list, or "A, B or C"."""
+    import re
+    if isinstance(value, str):
+        value = re.split(r",|;|\bor\b|\band\b", value)
+    if not isinstance(value, list):
+        return []
+    out: List[str] = []
+    for v in value:
+        text = str(v or "").strip(" .;:-")
+        if 1 < len(text) <= 80 and text.lower() not in ("none", "n/a", "") and text not in out:
+            out.append(text)
+    return out[:6]
+

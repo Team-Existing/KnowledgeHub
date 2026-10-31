@@ -11,7 +11,7 @@ from app.arcadedb import ArcadeSession
 from app.db import get_session
 from app.repositories import KnowledgeItemRepository
 from app.serializers import item_dict
-from app.services import health
+from app.services import health, verification
 from app.spaces import Space, current_space
 
 router = APIRouter(prefix="/knowledge", tags=["health"])
@@ -51,6 +51,17 @@ async def attention(
     result = await health.attention(session, space.id, limit, offset)
     response.headers["X-Total-Count"] = str(result["total"])
     return {"items": [item_dict(i) for i in result["items"]], "total": result["total"], "counts": result["counts"]}
+
+
+@router.post("/items/{item_id}/health/check")
+async def check_consistency(
+    item_id: str, space: Space = Depends(current_space), session: ArcadeSession = Depends(get_session),
+) -> Dict[str, Any]:
+    """Compare the item with similar current knowledge now: duplicates and contradictions (services/verification.py)."""
+    await _owned_item(session, space, item_id)
+    found = await verification.check(session, space.id, item_id, space.actor)
+    item = await KnowledgeItemRepository(session).get_owned(space.id, item_id)
+    return {**found, "item": item_dict(item)}
 
 
 @router.post("/items/{item_id}/health/flag")

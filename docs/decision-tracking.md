@@ -4,7 +4,7 @@ Every **decision** and **risk** has a lifecycle status:
 
 | Type | Statuses |
 |---|---|
-| Decision | `active` (default), `proposed`, `superseded`, `reversed`, `deprecated`, `rejected` |
+| Decision | `active` (default), `proposed`, `superseded`, `reversed`, `deprecated`, `invalidated` (no longer applicable, e.g. its assumptions no longer hold), `rejected` |
 | Risk | `open` (default), `mitigated`, `materialized`, `closed` |
 
 Items are linked newer → older:

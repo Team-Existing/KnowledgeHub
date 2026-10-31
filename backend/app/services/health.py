@@ -33,10 +33,11 @@ from app.repositories import ItemEventRepository, KnowledgeItemRepository, Linea
 
 Row = Dict[str, Any]
 
-SIGNAL_KINDS = ("source_changed", "removed_from_source", "dependency_changed", "flagged", "outcome_not_achieved")
+SIGNAL_KINDS = ("source_changed", "removed_from_source", "dependency_changed", "flagged", "outcome_not_achieved",
+                "contradicted", "possible_duplicate")       # the last two: services/verification.py
 REVIEW_SOON_DAYS = 14
 # statuses that already say an item no longer holds
-RETIRED_STATUSES = ["superseded", "reversed", "rejected", "deprecated", "closed", "done", "dropped"]
+RETIRED_STATUSES = ["superseded", "reversed", "rejected", "deprecated", "invalidated", "closed", "done", "dropped"]
 
 
 def _now() -> str:
@@ -45,6 +46,25 @@ def _now() -> str:
 
 def _today() -> date:
     return datetime.now(timezone.utc).date()
+
+
+# One lifecycle per item, as the product describes it, from its status and its health:
+#   superseded   replaced by a newer decision (superseded or reversed)
+#   invalidated  no longer applicable (declared invalidated, deprecated or rejected; a risk closed)
+#   potentially_stale / needs_review   current, but in question (health)
+#   active       current and not in question
+_REPLACED = {"superseded", "reversed"}
+_NO_LONGER_APPLIES = {"invalidated", "deprecated", "rejected", "closed"}
+
+
+def lifecycle(item: Row, today: Optional[date] = None) -> str:
+    status = item.get("status")
+    if status in _REPLACED:
+        return "superseded"
+    if status in _NO_LONGER_APPLIES or item.get("review_status") == "rejected":
+        return "invalidated"
+    state = health_of(item, today)["state"]
+    return state if state != "ok" else "active"
 
 
 def health_of(item: Row, today: Optional[date] = None) -> Row:

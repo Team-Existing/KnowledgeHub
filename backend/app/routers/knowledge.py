@@ -23,7 +23,8 @@ from app.repositories import (
 )
 from app.serializers import artifact_dict, item_dict, playbook_dict
 from app.services import artifact_pipeline as pipeline
-from app.services import lineage
+from app.services import lineage, verification
+from app.services.providers import active_model
 from app.services.cross_source_linker import find_cross_links
 from app.services.file_ingestion import extract_text_from_upload, fetch_url
 from app.services.okf import export_okf_payload
@@ -281,10 +282,14 @@ async def list_review_queue(
 async def review_item(
     item_id: str,
     body: ReviewDecision,
+    background: BackgroundTasks,
     space: Space = Depends(current_space),
     session: ArcadeSession = Depends(get_session),
 ) -> Dict[str, Any]:
     item = await _owned_item(session, space, item_id)
+    if body.status == "accepted" and item.get("review_status") != "accepted" and verification.enabled():
+        # newly accepted: does it duplicate or contradict what's already here? (services/verification.py)
+        background.add_task(verification.check_later, space.id, item_id, space.actor, active_model())
     fields: Row = {"review_status": body.status, "review_note": body.note}
     if body.title:
         fields["title"] = body.title

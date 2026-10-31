@@ -6,7 +6,7 @@ import { HttpClient } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
-import { SystemInfo, SystemKind, SystemsResponse } from '../../models/api'
+import { DependencySuggestion, SystemInfo, SystemKind, SystemsResponse } from '../../models/api'
 
 /**
  * The space's systems (services, databases, teams …) and what depends on what.
@@ -19,6 +19,8 @@ import { SystemInfo, SystemKind, SystemsResponse } from '../../models/api'
 })
 export class SystemsComponent implements OnInit {
   systems: SystemInfo[] = []
+  /** dependencies the knowledge states that aren't recorded yet */
+  suggestions: DependencySuggestion[] = []
   kinds: SystemKind[] = []
   selected: SystemInfo | null = null
 
@@ -46,6 +48,7 @@ export class SystemsComponent implements OnInit {
     try {
       const body = await firstValueFrom(this.http.get<SystemsResponse>(`${API_BASE}/knowledge/systems`))
       this.systems = body.systems; this.kinds = body.kinds
+      this.suggestions = await firstValueFrom(this.http.get<DependencySuggestion[]>(`${API_BASE}/knowledge/systems/suggestions`))
       if (this.selected) {
         const again = this.systems.find(s => s.id === this.selected!.id)
         if (again) this.select(again)
@@ -84,6 +87,14 @@ export class SystemsComponent implements OnInit {
     await this.run(async () => {
       await firstValueFrom(this.http.post(`${API_BASE}/knowledge/systems/${encodeURIComponent(this.selected!.id)}/dependencies`,
         { depends_on: this.dependsOn }))
+      await this.load()
+    }, 'Could not add the dependency')
+  }
+
+  async acceptSuggestion(s: DependencySuggestion) {
+    await this.run(async () => {
+      await firstValueFrom(this.http.post(`${API_BASE}/knowledge/systems/${encodeURIComponent(s.from)}/dependencies`,
+        { depends_on: s.to, note: `From: ${s.evidence[0]?.title ?? 'the knowledge base'}`.slice(0, 500) }))
       await this.load()
     }, 'Could not add the dependency')
   }

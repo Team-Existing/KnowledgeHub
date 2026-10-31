@@ -21,6 +21,23 @@
     </div>
   </section>
 
+  @if (suggestions.length) {
+    <section class="detail-panel" style="margin-bottom:1rem">
+      <h2>Suggested from your knowledge</h2>
+      <p class="muted-text" style="margin-top:0">Dependencies your knowledge states but that aren't recorded yet.</p>
+      @for (s of suggestions; track s.from + s.to) {
+        <div class="lineage-row" style="flex-wrap:wrap">
+          <span class="grow"><strong>{{ s.from_name }}</strong> depends on <strong>{{ s.to_name }}</strong></span>
+          <button class="primary" [disabled]="busy" (click)="acceptSuggestion(s)">Add</button>
+          <span class="muted-text" style="flex-basis:100%;font-size:0.8rem">
+            as <a [routerLink]="['/knowledge', s.evidence[0].id]">{{ s.evidence[0].title }}</a> says
+            @if (s.evidence.length > 1) { (and {{ s.evidence.length - 1 }} more) }
+          </span>
+        </div>
+      }
+    </section>
+  }
+
   <div class="detail-grid">
     <section class="detail-panel">
       <h2>All systems</h2>

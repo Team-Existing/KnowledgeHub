@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from app.services import tracking
-from app.services.health import health_of
+from app.services.health import health_of, lifecycle
 
 Row = Dict[str, Any]
 
@@ -46,6 +46,8 @@ def item_dict(i: Row) -> Row:
         "declared_status": i.get("declared_status"),
         # whether it may be out of date while still current (see services/health.py)
         "health": health_of(i),
+        # active / needs_review / potentially_stale / superseded / invalidated, in one word
+        "lifecycle": lifecycle(i),
         # commitments (action items) and decision outcomes: see services/tracking.py
         **({"commitment": tracking.commitment_view(i)} if i.get("type") == "action-item" else {}),
         **({"outcome": tracking.outcome_view(i)} if i.get("type") == "decision" else {}),

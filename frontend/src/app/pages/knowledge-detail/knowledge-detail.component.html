@@ -40,6 +40,10 @@
         @if (item.status) {
           <span class="status-badge chip-link" [ngClass]="'status-' + item.status" (click)="scrollTo('history')">{{ item.status.replace('_', ' ') }}</span>
         }
+        @if (item.lifecycle && item.lifecycle !== 'active') {
+          <span class="status-badge chip-link" [ngClass]="'lifecycle-' + item.lifecycle" (click)="scrollTo('health')"
+                title="Its lifecycle: whether it still holds">{{ lifecycleLabel[item.lifecycle] }}</span>
+        }
       </div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
         @if (!editing) {

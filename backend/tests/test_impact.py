@@ -209,3 +209,21 @@ def test_deleting_a_space_deletes_its_systems(client, alice, db_query):
     assert client.delete(f"/groups/{group['id']}", headers=alice).status_code == 204
     assert db_query("SELECT count(*) AS n FROM System WHERE user_id = :g", g=group["id"])[0]["n"] == 0
     assert db_query("SELECT count(*) AS n FROM DEPENDS_ON WHERE user_id = :g", g=group["id"])[0]["n"] == 0
+
+
+def test_dependencies_are_suggested_from_what_the_knowledge_says(client, alice):
+    ingest_text(client, alice, title="Data flows", content=(
+        "We decided that Ledger reads from the payment service every night.\n"
+        "Best practice: the notifications service publishes to Bus, never calls Ledger directly."))
+    for name, aliases in (("Payments", ["payment service"]), ("Ledger", []), ("Notifications", ["notifications service"]), ("Bus", [])):
+        system(client, alice, name, aliases=aliases)
+    found = client.get("/knowledge/systems/suggestions", headers=alice).json()
+    pairs = {(s["from_name"], s["to_name"]) for s in found}
+    # "never calls Ledger" isn't a dependency; nor is anything across a sentence break
+    assert pairs == {("Ledger", "Payments"), ("Notifications", "Bus")}
+    ledger = next(s for s in found if s["from_name"] == "Ledger")
+    assert ledger["evidence"][0]["title"].startswith("We decided that Ledger reads from")
+    # once recorded, a dependency isn't suggested again
+    depends(client, alice, {"id": ledger["from"]}, {"id": ledger["to"]})
+    assert ("Ledger", "Payments") not in {(s["from_name"], s["to_name"]) for s in
+                                          client.get("/knowledge/systems/suggestions", headers=alice).json()}

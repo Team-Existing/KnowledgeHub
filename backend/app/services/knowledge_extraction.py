@@ -1,7 +1,7 @@
 import re
 from typing import Dict, List
 
-from app.services.item_schema import calibrated_confidence, normalize_item_details
+from app.services.item_schema import calibrated_confidence, clean_alternatives, normalize_item_details
 
 
 def _unique(values: List[str]) -> List[str]:
@@ -25,7 +25,8 @@ class KnowledgeExtraction:
 
     def extract_decisions(self, text: str) -> List[Dict]:
         decisions = []
-        for sentence in self._sentences(text):
+        sentences = self._sentences(text)
+        for index, sentence in enumerate(sentences):
             if self._contains(sentence, self.decision_keywords):
                 has_rationale = bool(re.search(r"\b(because|since|therefore|so that|in order to)\b", sentence, re.IGNORECASE))
                 raw = {
@@ -35,6 +36,7 @@ class KnowledgeExtraction:
                     "who": self._extract_decision_maker(sentence),
                     "evidence": sentence,
                     "confidence": calibrated_confidence(sentence, self.decision_keywords, has_rationale),
+                    "alternatives": self._extract_alternatives(sentence, sentences[index + 1:index + 3]),
                 }
                 decisions.append(normalize_item_details(raw, "decision", "regex"))
         return self._dedupe_dicts(decisions, "what")
@@ -96,6 +98,22 @@ class KnowledgeExtraction:
                 }
                 risks.append(normalize_item_details(raw, "risk", "regex"))
         return self._dedupe_dicts(risks, "what")
+
+    _ALTERNATIVE_IN = re.compile(r"\b(?:instead of|rather than)\s+([^,.;]+?)(?:\s+(?:because|since|so that|for|as)\b|[,.;]|$)",
+                                 re.IGNORECASE)
+    _ALTERNATIVE_AFTER = re.compile(r"^(?:alternatives?(?: considered| rejected)?|rejected|we (?:also )?(?:considered|rejected))"
+                                    r"\s*:?\s*(.+)$", re.IGNORECASE)
+
+    def _extract_alternatives(self, decision: str, following: List[str]) -> List[str]:
+        """Options not chosen: "X instead of Y" in the decision, or a following "Alternatives considered: …" line."""
+        found = [m.group(1) for m in self._ALTERNATIVE_IN.finditer(decision)]
+        for sentence in following:
+            if self._contains(sentence, self.decision_keywords):
+                break
+            match = self._ALTERNATIVE_AFTER.match(sentence.strip())
+            if match:
+                found.append(match.group(1))
+        return [a for part in found for a in clean_alternatives(part)]
 
     def _extract_rationale(self, full_text: str, decision: str) -> str:
         match = re.search(r"\b(because|since|so that|in order to)\b", decision, re.IGNORECASE)

@@ -87,6 +87,13 @@ async def list_systems(space: Space = Depends(current_space), session: ArcadeSes
     return {"systems": systems, "kinds": list(SYSTEM_KINDS)}
 
 
+@router.get("/systems/suggestions")
+async def suggested_dependencies(space: Space = Depends(current_space),
+                                 session: ArcadeSession = Depends(get_session)) -> List[Row]:
+    """Dependencies the knowledge states ("Reporting reads from Payments") that aren't recorded yet."""
+    return await impact.dependency_suggestions(session, space.id)
+
+
 @router.post("/systems", status_code=201)
 async def create_system(body: SystemCreate, space: Space = Depends(current_space),
                         session: ArcadeSession = Depends(get_session)) -> Row:

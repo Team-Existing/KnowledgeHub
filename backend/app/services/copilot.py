@@ -186,6 +186,9 @@ def blocks(report: Row, noun: str, heading: Optional[str] = None, note: Optional
             subs = [f"{d.get('status') or 'active'}, {label}" + (f": {d['relation_reason']}" if d.get("relation_reason") else "")]
             if d.get("why"):
                 subs.append(f"Why it was decided: {str(d['why'])[:300]}")
+            if d.get("alternatives"):
+                alt = d["alternatives"]
+                subs.append("Alternatives considered: " + (", ".join(map(str, alt)) if isinstance(alt, list) else str(alt)))
             if d.get("replaced_by"):
                 subs.append(f"Since replaced by: {d['replaced_by']['title']}")
             out.append(("item", (d.get("title") or "").replace("\n", " "), _url(d), subs))

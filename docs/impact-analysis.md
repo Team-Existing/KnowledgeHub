@@ -4,7 +4,7 @@ Before changing course, say what you want to change ("move the payment service f
 
 - **Decisions on record:**
   - what the team decided on the same ground, and why
-  - the alternatives it considered, who owns it, and its recorded outcome
+  - the alternatives it considered (extraction records them: "PostgreSQL *instead of* MongoDB", or an "Alternatives considered: …" line), who owns it, and its recorded outcome
   - how many commitments are still in flight
   - for decisions that are now history, what replaced them
 - **Potential conflicts:** whether the change goes against a current decision, changes it, or fits it, with a one-line reason.
@@ -23,6 +23,10 @@ Impact analysis needs to know your systems: services, databases, libraries, infr
 
 - **Add each system**, with its owner and any other names it goes by (aliases). The aliases matter: knowledge that mentions *any* of a system's names counts as being about it.
 - **Record what depends on what.** If Reporting reads from Payments, Reporting *depends on* Payments, so a change to Payments reaches Reporting.
+- **Or accept what your knowledge already says.** *Suggested from your knowledge* lists dependencies that items state, for example "Reporting reads from the payment service" or "the notifications service publishes to NATS". Each suggestion links to the item that says it.
+  - A suggestion needs both names in one sentence, joined by a phrase such as *depends on*, *reads from*, *calls*, *uses* or *publishes to*.
+  - Nothing negates it in between ("never calls"), and no other system is named in between.
+  - **Add** records the dependency.
 - **Link knowledge to systems** on an item's page, under **Systems**. An item that names a system you haven't linked it to gets a one-click *Link it*.
 
 ## How each entry gets into the report
@@ -47,4 +51,4 @@ Without a model (none reachable, or `IMPACT_LLM=off`), the report is the same, e
 ## Limits
 
 - **Proposals name systems by matching words.** A proposal that describes a system without naming it ("the thing that charges cards") only reaches it if you tick the system, or through similar knowledge.
-- **Dependencies are entered by hand.** Importing them from service catalogs or infrastructure code is not built yet.
+- **Dependencies come from people and from what the knowledge says.** Importing them from service catalogs or infrastructure code is not built yet.

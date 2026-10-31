@@ -57,6 +57,10 @@
           </label>
           <button [disabled]="busy || reviewDue === (item.health.review_due ?? '')" (click)="saveReviewDate()">Save date</button>
         </div>
+        <div style="margin-top:0.6rem">
+          <button class="link-btn" [disabled]="busy" (click)="checkConsistency()">Check against similar knowledge</button>
+          @if (checkResult) { <span class="muted-text" style="margin-left:0.5rem">{{ checkResult }}</span> }
+        </div>
       }
     }
   }

@@ -103,6 +103,8 @@ class FakeLLM:
             return "generate"
         if user.startswith("Proposed change:"):
             return "impact"
+        if user.startswith("New entry:"):
+            return "verify"
         return "unknown"
 
     async def chat(self, messages: Messages, temperature: float = 0,

@@ -46,7 +46,7 @@ CHAIN_KINDS = {"supersedes", "reverses", "amends"}
 
 DEFAULT_STATUS = {"decision": "active", "risk": "open", "action-item": "open"}
 DECLARABLE_STATUSES = {
-    "decision": ["proposed", "active", "deprecated", "rejected", "reversed", "superseded"],
+    "decision": ["proposed", "active", "deprecated", "invalidated", "rejected", "reversed", "superseded"],
     "risk": ["open", "mitigated", "materialized", "closed"],
     "action-item": ["open", "in_progress", "done", "dropped"],
 }

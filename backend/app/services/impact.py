@@ -264,3 +264,53 @@ async def _judge(proposal: str, decisions: List[Row], items: Dict[str, Row]) -> 
             decisions[n - 1]["relation"] = a["relation"]
             decisions[n - 1]["relation_reason"] = str(a.get("reason") or "")[:400]
     return True
+
+
+# ── dependencies suggested by the knowledge itself ──────────────────────────
+
+# "<A> reads from <B>": A depends on B
+_DEPENDS = re.compile(
+    r"\b(depends on|depend on|relies on|rely on|reads from|read from|writes to|write to|calls|call|uses|use|"
+    r"consumes|consume|queries|query|publishes to|publish to|subscribes to|subscribe to|talks to|is built on|runs on)\b",
+    re.IGNORECASE)
+_GAP = 60   # at most this many characters between the two names, in one sentence
+_NEGATED = re.compile(r"[.!?;\n]|\b(never|not|no longer|don't|doesn't|won't|no more|stopped|instead of|rather than)\b",
+                      re.IGNORECASE)
+
+
+def _spans(text: str, system: Row) -> List[tuple]:
+    return [(m.start(), m.end()) for n in _names(system)
+            for m in re.finditer(rf"(?<![\w-]){re.escape(n.strip())}(?![\w-])", text, re.IGNORECASE)]
+
+
+async def dependency_suggestions(session: ArcadeSession, user_id: str, limit: int = 20) -> List[Row]:
+    """
+    "A depends on B" where some item names A, then a dependency phrase, then B
+    ("Reporting reads from the payment service"). Not already recorded; each with
+    the items that say so.
+    """
+    systems = await SystemRepository(session).list(user_id)
+    existing = {(d["from"], d["to"]) for d in await SystemRepository(session).dependencies(user_id)}
+    found: Dict[tuple, List[Row]] = defaultdict(list)
+    for item in await KnowledgeItemRepository(session).list(user_id, exclude_rejected=True):
+        text = item_text(item)
+        spans = {s["id"]: _spans(text, s) for s in systems}
+        every = [span for sid in spans for span in spans[sid]]
+
+        def says(ae: int, bs: int) -> bool:
+            """A dependency phrase between the names: same sentence, not negated, no other system between."""
+            between = text[ae:bs]
+            return (0 <= bs - ae <= _GAP and bool(_DEPENDS.search(between)) and not _NEGATED.search(between)
+                    and not any(ae <= s < bs for s, _ in every))
+
+        for a in systems:
+            for b in systems:
+                if a["id"] == b["id"] or (a["id"], b["id"]) in existing:
+                    continue
+                if any(says(ae, bs) for _, ae in spans[a["id"]] for bs, _ in spans[b["id"]]):
+                    found[(a["id"], b["id"])].append({"id": item["id"], "title": item.get("title")})
+    by_id = {s["id"]: s for s in systems}
+    out = [{"from": by_id[a]["id"], "from_name": by_id[a]["name"], "to": by_id[b]["id"], "to_name": by_id[b]["name"],
+            "evidence": items[:3]} for (a, b), items in found.items()]
+    out.sort(key=lambda s: (-len(s["evidence"]), s["from_name"], s["to_name"]))
+    return out[:limit]

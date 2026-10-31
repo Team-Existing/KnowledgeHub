@@ -7,7 +7,7 @@ export type ReviewStatus = 'pending' | 'accepted' | 'rejected'
 export type ExtractionEngine = 'regex' | 'local_llm' | 'cloud_llm' | 'structured'
 
 /** Lifecycle of decisions, risks and commitments (null for other item types); see backend services/lineage.py */
-export type DecisionStatus = 'proposed' | 'active' | 'superseded' | 'reversed' | 'deprecated' | 'rejected'
+export type DecisionStatus = 'proposed' | 'active' | 'superseded' | 'reversed' | 'deprecated' | 'invalidated' | 'rejected'
 export type RiskStatus = 'open' | 'mitigated' | 'materialized' | 'closed'
 export type CommitmentStatus = 'open' | 'in_progress' | 'done' | 'dropped'
 export type ItemStatus = DecisionStatus | RiskStatus | CommitmentStatus
@@ -41,11 +41,15 @@ export interface KnowledgeItem {
   status: ItemStatus | null
   declared_status: ItemStatus | null
   health: ItemHealth
+  /** status and health in one word; see backend services/health.py lifecycle() */
+  lifecycle: Lifecycle
   /** action items: see backend services/tracking.py */
   commitment?: CommitmentInfo
   /** decisions */
   outcome?: OutcomeInfo
 }
+
+export type Lifecycle = 'active' | 'needs_review' | 'potentially_stale' | 'superseded' | 'invalidated'
 
 export interface CommitmentInfo {
   owner: string | null
@@ -99,6 +103,14 @@ export interface SystemsResponse {
   kinds: SystemKind[]
 }
 export interface SystemBrief { id: string; name: string; kind: SystemKind }
+/** GET /knowledge/systems/suggestions: "from depends on to", as some knowledge says */
+export interface DependencySuggestion {
+  from: string
+  from_name: string
+  to: string
+  to_name: string
+  evidence: { id: string; title: string }[]
+}
 /** GET /knowledge/items/{id}/systems */
 export interface ItemSystems {
   linked: SystemBrief[]
@@ -156,7 +168,16 @@ export interface OutcomesResponse {
 /** Whether a current item may be out of date; see backend services/health.py */
 export type HealthState = 'ok' | 'needs_review' | 'potentially_stale'
 export type HealthSignalKind = 'source_changed' | 'removed_from_source' | 'dependency_changed' | 'flagged'
-  | 'outcome_not_achieved'
+  | 'outcome_not_achieved' | 'contradicted' | 'possible_duplicate'
+
+/** POST /knowledge/items/{id}/health/check */
+export interface ConsistencyCheck {
+  checked: number
+  llm_used: boolean
+  duplicates: { id: string; title: string; score: number }[]
+  contradictions: { id: string; title: string; by: string; reason: string }[]
+  item: KnowledgeItem
+}
 export interface HealthSignal {
   kind: HealthSignalKind
   at: string
