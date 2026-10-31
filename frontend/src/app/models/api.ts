@@ -47,6 +47,41 @@ export interface KnowledgeItem {
   commitment?: CommitmentInfo
   /** decisions */
   outcome?: OutcomeInfo
+  /** model-extracted items: whether the source says this; see backend services/grounding.py */
+  support?: ItemSupport | null
+}
+
+/** POST /knowledge/assistant: see backend services/orchestrator.py */
+export type AssistantAgent = 'research' | 'impact' | 'learning' | 'watchtower' | 'verification'
+export interface AssistantStep {
+  agent: AssistantAgent
+  label: string
+  why: string
+  ok: boolean
+  ms: number
+  error?: string
+  /** its shape depends on the agent; the page reads the fields it shows */
+  result?: any
+}
+export interface AssistantRun {
+  question: string
+  plan: { agent: AssistantAgent; label: string; why: string }[]
+  steps: AssistantStep[]
+}
+
+export interface ItemSupport {
+  status: 'supported' | 'partly' | 'unsupported' | 'unverified'
+  /** text: the source has every word of it; model: a model compared it with the closest passages */
+  method: 'text' | 'model' | 'none'
+  passage: string
+  reason: string
+  checked_at: string
+}
+
+/** POST /knowledge/items/{id}/support/check */
+export interface SupportCheck {
+  support: ItemSupport & { id: string }
+  item: KnowledgeItem
 }
 
 export type Lifecycle = 'active' | 'needs_review' | 'potentially_stale' | 'superseded' | 'invalidated'
@@ -168,7 +203,7 @@ export interface OutcomesResponse {
 /** Whether a current item may be out of date; see backend services/health.py */
 export type HealthState = 'ok' | 'needs_review' | 'potentially_stale'
 export type HealthSignalKind = 'source_changed' | 'removed_from_source' | 'dependency_changed' | 'flagged'
-  | 'outcome_not_achieved' | 'contradicted' | 'possible_duplicate'
+  | 'outcome_not_achieved' | 'contradicted' | 'possible_duplicate' | 'unsupported'
 
 /** POST /knowledge/items/{id}/health/check */
 export interface ConsistencyCheck {
@@ -706,6 +741,61 @@ export interface SlackIntegration {
   created_by_name: string | null
   last_used_at: string | null
 }
+
+/** GET /knowledge/digests: weekly digests of what needs attention (the webhook URL never comes back) */
+export interface DigestInfo {
+  id: string
+  name: string
+  /** 0 = Monday */
+  weekday: number
+  created_at: string
+  created_by_name: string | null
+  last_sent_at: string | null
+  last_status: string | null
+}
+export interface DigestList { digests: DigestInfo[]; hour_utc: number; weekdays: string[] }
+/** GET /knowledge/digests/preview */
+export interface DigestPreview {
+  sections: { title: string; count: number; entries: { id: string; title: string; note: string }[] }[]
+  total: number
+}
+
+/** GET /knowledge/api-keys: read-only keys for developer portals (the key itself only on creation) */
+export interface ApiKeyInfo {
+  id: string
+  name: string
+  hint: string
+  created_by_name: string | null
+  created_at: string
+  last_used_at: string | null
+}
+export interface CreatedApiKey extends ApiKeyInfo { key: string }
+
+/** Institutional learning (backend services/learning.py) */
+export interface LearnItem { id: string; title: string; type: string; status: string | null; date: string | null; why?: string | null; who?: string | null }
+export interface SystemMap {
+  system: { id: string; name: string; kind: string; owner: string | null; description: string | null }
+  depends_on: string[]
+  dependents: string[]
+  current: (LearnItem & { health: string; alternatives: string[] | null })[]
+  history: (LearnItem & { outcome: OutcomeInfo | null; replaced_by?: { id: string; title: string; kind: string } })[]
+  risks: (LearnItem & { severity?: string })[]
+  lessons: LearnItem[]
+  commitments: (LearnItem & { commitment: CommitmentInfo })[]
+  people: { name: string; items: number }[]
+}
+/** GET /knowledge/learning/map */
+export interface KnowledgeMap { systems: SystemMap[]; all_systems: { id: string; name: string }[] }
+/** GET /knowledge/learning/abandoned */
+export interface Abandoned {
+  decisions: (LearnItem & { how: string; note?: string | null; replaced_by: { id: string; title: string; why: string | null } | null })[]
+  rejected_alternatives: { option: string; instead: { id: string; title: string }; why: string | null }[]
+  dropped_commitments: LearnItem[]
+}
+/** GET /knowledge/learning/mistakes */
+export interface Mistakes { groups: { title: string; count: number; systems: string[]; items: LearnItem[]; latest: string }[] }
+/** GET /knowledge/learning/controversial */
+export interface Controversial { decisions: (LearnItem & { reasons: string[]; score: number })[] }
 
 /** GET /knowledge/copilot/runs */
 export interface CopilotRun {

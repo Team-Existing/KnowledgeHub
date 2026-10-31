@@ -468,7 +468,7 @@ def test_connectors_have_no_built_in_endpoints():
         for field in module.FIELDS:
             assert not (isinstance(field.default, str) and field.default.startswith("http")), \
                 f"{module.KIND}.{field.name} defaults to {field.default}"
-    for kind in ("github", "jira", "linear"):
+    for kind in ("github", "jira", "linear", "slack"):
         assert any(f.required and "url" in f.name for f in REGISTRY[kind].FIELDS), kind
 
 

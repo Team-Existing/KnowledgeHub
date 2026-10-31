@@ -15,6 +15,12 @@ with a note. The evidence shown with it is what the graph already knows: the
 decision's commitments and how many are done, the lessons learned from it, and
 the risks it mitigates. A decision whose outcome wasn't achieved is flagged on
 the Health page, since what it promised no longer holds.
+
+A missed outcome (not achieved, or partly) becomes a lesson: an "Outcome
+review" source per decision states what was expected, what happened and how its
+commitments went, and holds one lesson, linked `learned_from` the decision and
+waiting in the review queue for the team to sharpen and accept. Recording the
+verdict again updates that source rather than adding another.
 """
 from __future__ import annotations
 
@@ -143,7 +149,67 @@ async def record_outcome(session: ArcadeSession, user_id: str, item: Row, verdic
         await health.add_signal(session, user_id, item, "outcome_not_achieved", {"note": note} if note else {},
                                 actor=actor)
     await session.commit()
+    if verdict in MISSED:
+        await lesson_from_outcome(session, user_id, item["id"], actor)
     return await KnowledgeItemRepository(session).get_owned(user_id, item["id"])
+
+
+MISSED = {"not_achieved": "did not achieve", "partly": "only partly achieved"}
+
+
+async def lesson_from_outcome(session: ArcadeSession, user_id: str, decision_id: str, actor: Optional[str]) -> Optional[Row]:
+    """The pending lesson a missed outcome leaves behind, linked to the decision. Commits. Returns the lesson."""
+    from app.services import artifact_pipeline, lineage
+    from app.services.artifact_pipeline import stable_id
+    repo, edges_repo = KnowledgeItemRepository(session), LineageRepository(session)
+    decision = await repo.get_owned(user_id, decision_id)
+    if not decision or decision.get("outcome") not in MISSED:
+        return None
+    edges = await edges_repo.list(user_id)
+    commit_ids = [e["from"] for e in edges if e["kind"] == "implements" and e["to"] == decision_id]
+    risk_ids = [e["to"] for e in edges if e["kind"] == "mitigates" and e["from"] == decision_id]
+    linked = {i["id"]: i for i in await repo.get_many(user_id, commit_ids + risk_ids)}
+    commits = [linked[i] for i in commit_ids if i in linked]
+    risks = [linked[i] for i in risk_ids if i in linked]
+
+    title = decision.get("title") or "a decision"
+    missed, expected, note = MISSED[decision["outcome"]], decision.get("expected_outcome"), decision.get("outcome_note")
+    lines = [f"Outcome review of the decision “{title}”.",
+             f"Expected: {expected}." if expected else "No expected outcome was written down.",
+             f"Verdict: it {missed} what was expected" + (f" (recorded by {decision['outcome_by']})." if decision.get("outcome_by") else "."),
+             f"What happened: {note}" if note else "What happened wasn't written down."]
+    if commits:
+        done = [c for c in commits if (c.get("status") or OPEN) == DONE]
+        unfinished = [c for c in commits if (c.get("status") or OPEN) not in FINISHED]
+        dropped = [c for c in commits if c.get("status") == DROPPED]
+        lines.append(f"Commitments: {len(done)} of {len(commits)} done."
+                     + "".join(f" Not finished: {c['title']}." for c in unfinished)
+                     + "".join(f" Dropped: {c['title']}." for c in dropped))
+    happened = [r for r in risks if r.get("status") == "materialized"]
+    if happened:
+        lines.append("Risks it was meant to prevent that happened anyway: " + "; ".join(r["title"] for r in happened) + ".")
+    why = note or (f"Expected {expected}" if expected else "")
+    lesson_title = f"“{title}” {missed} what was expected" + (f": {note}" if note else "")
+    lines.append(f"Lesson: {lesson_title}")
+
+    artifact_id = stable_id(user_id, "artifact", f"outcome-review:{decision_id}")
+    result = await artifact_pipeline.ingest_structured(
+        session, user_id, f"Outcome review: {title}"[:180], "\n".join(lines), "outcome-review", "outcome_review",
+        actor or decision.get("author") or "", list(decision.get("tags") or []),
+        [{"prefix": "lesson", "type": "lesson", "title": lesson_title,
+          "details": {"what": lesson_title, "why": why, "decision_id": decision_id,
+                      "verdict": decision["outcome"], "who": actor or ""}}],
+        artifact_id=artifact_id)
+    lesson = result["items"][0]
+    try:
+        await lineage.add_link(session, user_id, lesson["id"], decision_id, "learned_from",
+                               note="from the recorded outcome", origin="outcome", actor=actor)
+    except lineage.LineageError:
+        pass                                  # already linked: the verdict was recorded before
+    await ItemEventRepository(session).add(user_id, decision_id, "lesson_drafted",
+                                           {"item_id": lesson["id"], "title": lesson_title}, actor=actor)
+    await session.commit()
+    return await repo.get_owned(user_id, lesson["id"])
 
 
 # ── views ───────────────────────────────────────────────────────────────────

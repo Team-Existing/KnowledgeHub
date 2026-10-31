@@ -50,6 +50,11 @@ def personal_space(user: User) -> Space:
 
 
 async def resolve_space(session: ArcadeSession, user: User, space_id: Optional[str]) -> Space:
+    if user.api_key_space:
+        # an API key works in its own space only (and its creator must still be a member there)
+        if space_id and space_id != user.api_key_space:
+            raise HTTPException(status_code=403, detail="This API key belongs to another space")
+        space_id = user.api_key_space
     if not space_id or space_id == user.id:
         return personal_space(user)
     orgs = OrganizationRepository(session)

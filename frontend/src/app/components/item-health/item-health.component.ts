@@ -7,14 +7,15 @@ import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
 import { describeSignal, HEALTH_LABEL } from '../../services/health'
-import { ConsistencyCheck, KnowledgeItem } from '../../models/api'
+import { ConsistencyCheck, KnowledgeItem, SupportCheck } from '../../models/api'
+import { SupportNoteComponent } from '../support-note/support-note.component'
 
 const RETIRED = ['superseded', 'reversed', 'rejected', 'deprecated', 'closed']
 
 /** Whether the item may be out of date, and the actions to flag it, confirm it or set a review date. */
 @Component({
   selector: 'app-item-health',
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, SupportNoteComponent],
   templateUrl: './item-health.component.html'
 })
 export class ItemHealthComponent implements OnChanges {
@@ -72,6 +73,12 @@ export class ItemHealthComponent implements OnChanges {
         : found ? `Found ${r.contradictions.length} contradiction${r.contradictions.length === 1 ? '' : 's'} and ${r.duplicates.length} possible duplicate${r.duplicates.length === 1 ? '' : 's'}; see the signals above.`
         : `Compared with ${r.checked} similar item${r.checked === 1 ? '' : 's'}: ${r.llm_used ? 'no contradictions or duplicates' : 'no duplicates (no model was available to look for contradictions)'}.`
     })
+  }
+
+  /** Whether the item's source says what it claims (backend services/grounding.py) */
+  async checkSupport() {
+    await this.run('Could not check against the source', () => firstValueFrom(this.http.post<SupportCheck>(
+      `${API_BASE}/knowledge/items/${encodeURIComponent(this.item.id)}/support/check`, {})))
   }
 
   private async run(failure: string, call: () => Promise<unknown>) {

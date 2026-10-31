@@ -393,6 +393,11 @@ main {
 .lifecycle-needs_review, .lifecycle-potentially_stale { background: var(--warning-soft); color: var(--warning-text); }
 .lifecycle-superseded { background: var(--surface-3); color: var(--text-3); }
 .health-ok { background: var(--success-soft); color: var(--success-text); }
+.support-supported { background: var(--success-soft); color: var(--success-text); text-transform: none; }
+.support-partly { background: var(--warning-soft); color: var(--warning-text); text-transform: none; }
+.support-unsupported { background: var(--danger-soft); color: var(--danger-text); text-transform: none; }
+.support-unverified { background: var(--surface-3); color: var(--text-3); text-transform: none; }
+.support-note { margin-top: 0.5rem; }
 
 .conf-high { background: var(--success-soft); color: var(--success-text); }
 .conf-mid  { background: var(--warning-soft); color: var(--warning-text); }

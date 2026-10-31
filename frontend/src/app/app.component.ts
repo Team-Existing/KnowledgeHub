@@ -50,8 +50,10 @@ export class AppComponent implements OnDestroy {
       { path: '/playbooks', label: 'Playbooks', icon: 'playbooks' },
     ] },
     { label: 'Ask', items: [
+      { path: '/assistant', label: 'Assistant', icon: 'assistant' },
       { path: '/graphrag', label: 'GraphRAG', icon: 'ask' },
       { path: '/impact', label: 'Impact', icon: 'impact' },
+      { path: '/learn', label: 'Learn', icon: 'learn' },
       { path: '/decision-copilot', label: 'Copilot', icon: 'review' },
     ] },
     { label: 'Collaborate', items: [

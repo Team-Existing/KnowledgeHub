@@ -2,10 +2,19 @@
 
 All endpoints except `/auth/register`, `/auth/setup`, `/auth/token`, `GET /health`, `GET /models/catalog` and `POST /models/bootstrap-install` need `Authorization: Bearer <token>`. Data endpoints act in the space named by the `X-Space` header (an organization id, a group id, or your own user id); without it they use your personal space. Interactive docs are at `http://localhost:8000/docs` (off in the production stack: `API_DOCS`).
 
+**Read-only API keys** (for developer portals, wikis and CI checks): create one on the Copilot page under *Developer portals*, and send it as `Authorization: Bearer khk_…`.
+
+- **Scope:** a key works in the space it was created in, acting as its creator, who must still be a member. It has a member's rights at most, whatever the creator's server role.
+- **Routes:** only the read routes. Those are `GET /knowledge`, `/knowledge/search`, `/knowledge/register`, `/knowledge/items/{id}` (and its `lineage`, `context` and `systems`), `/knowledge/health`, `/knowledge/commitments`, `/knowledge/outcomes`, `/knowledge/systems`, `/knowledge/learning/…`, `/auth/me`, plus `POST /knowledge/graphrag/query` and `POST /knowledge/impact`. Anything else answers 403.
+- **Storage:** only a hash of the key is stored.
+
 | Group | Endpoints |
 |---|---|
 | Auth | `POST /auth/register` (`username`, `password`, and `setup_token` for the first account when the server sets `SETUP_TOKEN`), `GET /auth/setup` (whether that token is needed), `POST /auth/token` (form fields `username`, `password`; token valid for 8 h; 429 after repeated failures), `POST /auth/logout` (ends every session of the account), `GET /auth/me` (role and permissions) |
 | Admin *(server admins)* | `GET /admin/users` (with last activity and expiry), `POST /admin/users` (create with a role), `PATCH /admin/users/{id}` (change role), `GET /admin/retention` (what's due), `POST /admin/retention/run` |
+| Assistant | `POST /knowledge/assistant` (`question`): `plan` and `steps` with each agent's result ([assistant](assistant.md)) |
+| Learn | `GET /knowledge/learning/map?system=<id>` (repeatable), `GET /knowledge/learning/abandoned`, `/mistakes`, `/controversial` |
+| Weekly digest & API keys | `GET/POST /knowledge/digests` (name, Slack `webhook_url`, `weekday`), `GET /knowledge/digests/preview`, `POST /knowledge/digests/{id}/send`, `DELETE /knowledge/digests/{id}`; `GET/POST /knowledge/api-keys` (the key is returned once), `DELETE /knowledge/api-keys/{id}` |
 | Slack | `GET/POST /knowledge/slack` (name, `signing_secret`), `PUT/DELETE /knowledge/slack/{id}`; `POST /slack/{id}/command` (Slack's `/decisions` requests, signed) |
 | Decision Copilot | `GET/PUT /connectors/{id}/copilot` (enable; a created webhook secret is returned once; Linear: send `webhook_secret`); `POST /knowledge/copilot/preview`, `POST /knowledge/copilot/post` (`connector_id`, `ref`: 42 / ARCH-12 / ENG-42); `GET /knowledge/copilot/runs`; `POST /copilot/{github,jira,linear}/{connector_id}/webhook` (verified, see [Decision Copilot](decision-copilot.md)) |
 | Systems & impact | `GET/POST /knowledge/systems`, `PATCH/DELETE /knowledge/systems/{id}`, `POST /knowledge/systems/{id}/dependencies`, `DELETE /knowledge/systems/{id}/dependencies/{other_id}`; `GET/POST /knowledge/items/{id}/systems`, `DELETE /knowledge/items/{id}/systems/{system_id}`; `POST /knowledge/impact` (`proposal`, `system_ids`, `decision_id`) |
@@ -20,7 +29,7 @@ All endpoints except `/auth/register`, `/auth/setup`, `/auth/token`, `GET /healt
 | Review | `GET /knowledge/review?limit=&offset=` (oldest first, default 50; `X-Total-Count` header), `PATCH /knowledge/review/{id}` |
 | Search | `GET /knowledge/search?q=&type=&source_type=&tag=&limit=` (default 50; artifacts come with a `snippet` and a `first_item_id`, not their text) |
 | Links | `POST /knowledge/link`, `GET /knowledge/links` |
-| Health | `GET /knowledge/health?limit=&offset=` (current items that may be out of date or are due for review, most urgent first; `counts`, `total`, `X-Total-Count`), `POST /knowledge/items/{id}/health/flag` (`note`, required), `POST /knowledge/items/{id}/health/verify` (`note`, `review_due`: clears the signals and sets the next review date, or none), `PUT /knowledge/items/{id}/review-date` (`review_due` or `null`). Every item carries `health`: `state`, `signals`, `review_due`, `overdue`, `verified_at`, `verified_by` |
+| Health | `GET /knowledge/health?limit=&offset=` (current items that may be out of date or are due for review, most urgent first; `counts`, `total`, `X-Total-Count`), `POST /knowledge/items/{id}/health/flag` (`note`, required), `POST /knowledge/items/{id}/health/verify` (`note`, `review_due`: clears the signals and sets the next review date, or none), `PUT /knowledge/items/{id}/review-date` (`review_due` or `null`), `POST /knowledge/items/{id}/support/check` (whether its source says what it claims: `support` with `status` supported, partly, unsupported or unverified, `method`, `passage`, `reason`; also on every item, `null` until checked). Every item carries `health`: `state`, `signals`, `review_due`, `overdue`, `verified_at`, `verified_by` |
 | Lineage | `GET /knowledge/lineage/kinds`, `GET/POST /knowledge/items/{id}/lineage`, `DELETE /knowledge/items/{id}/lineage/{other}`, `GET …/lineage/suggestions`, `PUT /knowledge/items/{id}/status`, `GET /knowledge/register?type=&limit=&offset=` (newest first, default 300; `total`, and `related` for chain items outside the page) |
 | Playbooks | `GET /knowledge/playbooks`, `POST /knowledge/playbooks` (same title replaces), `DELETE /knowledge/playbooks/{id}` |
 | OKF | `GET /knowledge/okf/export`, `POST /knowledge/okf/import` |

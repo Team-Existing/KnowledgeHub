@@ -43,6 +43,9 @@
         <span class="muted-text"> · {{ o.recorded_by }}, {{ o.recorded_at | date:'mediumDate' }}</span>
         <button class="link-btn" [disabled]="busy" (click)="recordVerdict(null)">Withdraw</button>
       </p>
+      @if (o.verdict !== 'achieved') {
+        <p class="field-help">A lesson was drafted from this outcome: it waits in the <a routerLink="/review">review queue</a> for the team to sharpen and accept.</p>
+      }
     } @else if (o.expected) {
       <h3 style="font-size:0.875rem;margin:1rem 0 0.4rem">Did it work?</h3>
       <textarea rows="2" [(ngModel)]="verdictNote" maxlength="2000" style="width:100%"
@@ -52,7 +55,7 @@
           <button [disabled]="busy" (click)="recordVerdict(v)">{{ verdictLabel[v] }}</button>
         }
       </div>
-      <p class="field-help" style="margin-top:0.4rem">“Not achieved” flags the decision on the Health page for a second look.</p>
+      <p class="field-help" style="margin-top:0.4rem">“Not achieved” flags the decision on the Health page for a second look. A missed or partial outcome also drafts a lesson, linked to this decision.</p>
     }
   }
   @if (error) { <p class="error-text">{{ error }}</p> }

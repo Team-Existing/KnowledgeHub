@@ -216,3 +216,34 @@ def test_graphrag_sees_owners_due_dates_and_outcomes(client, alice, kb, llm):
     context = llm.last("generate")[-1]["content"]
     assert "owner: Ana" in context and f"due: {PAST} (overdue)" in context
     assert "outcome: partly: reports still slow" in context
+
+
+def test_a_missed_outcome_becomes_a_lesson(client, alice, kb):
+    decision = kb["decision"]["id"]
+    put(client, alice, f"/knowledge/items/{decision}/outcome/expectation", {"expected": "No lost transactions", "check_by": PAST})
+    client.post(f"/knowledge/items/{kb['migrate']['id']}/lineage", headers=alice,
+                json={"target_id": decision, "kind": "implements"})
+    put(client, alice, f"/knowledge/items/{decision}/outcome", {"verdict": "not_achieved", "note": "Two invoices were lost"})
+
+    waiting = next(d for d in client.get("/knowledge/outcomes", headers=alice).json()["recorded"] if d["id"] == decision)
+    [drafted] = [l for l in waiting["lessons"]]
+    lesson = client.get(f"/knowledge/items/{drafted['id']}", headers=alice).json()
+    assert lesson["type"] == "lesson" and lesson["review_status"] == "pending"
+    assert lesson["title"] == "“Move billing to PostgreSQL” did not achieve what was expected: Two invoices were lost"
+    [content] = [a["content"] for a in client.get("/knowledge", headers=alice, params={"include_content": True}).json()["artifacts"]
+                 if a["id"] == lesson["artifact_id"]]
+    assert "Expected: No lost transactions." in content
+    assert "Commitments: 0 of 1 done. Not finished: Migrate billing tables to PostgreSQL." in content
+    assert "lesson_drafted" in events(client, alice, decision)
+
+    # recording it again updates the same lesson instead of adding one
+    put(client, alice, f"/knowledge/items/{decision}/outcome", {"verdict": "not_achieved", "note": "Two invoices were lost"})
+    again = next(d for d in client.get("/knowledge/outcomes", headers=alice).json()["recorded"] if d["id"] == decision)
+    assert [l["id"] for l in again["lessons"]] == [drafted["id"]]
+
+
+def test_an_achieved_outcome_leaves_no_lesson(client, alice, kb):
+    decision = kb["decision"]["id"]
+    put(client, alice, f"/knowledge/items/{decision}/outcome", {"verdict": "achieved", "note": "fine"})
+    entry = next(d for d in client.get("/knowledge/outcomes", headers=alice).json()["recorded"] if d["id"] == decision)
+    assert entry["lessons"] == []

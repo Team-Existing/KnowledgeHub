@@ -1,0 +1,152 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h1>Learn</h1>
+      <p>Institutional memory for newcomers and for anyone about to change something: why things look the way they do,
+        what was tried and abandoned, the mistakes that keep coming back, and the decisions people disagree about.</p>
+    </div>
+  </section>
+
+  <div role="tablist" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem">
+    @for (t of tabs; track t.key) {
+      <button role="tab" [class.primary]="tab === t.key" [attr.aria-selected]="tab === t.key" (click)="show(t.key)">{{ t.label }}</button>
+    }
+  </div>
+  @if (error) { <p class="error-text">{{ error }}</p> }
+  @if (loading) { <p class="muted-text">Loading…</p> }
+
+  @if (tab === 'map' && map) {
+    @if (!map.all_systems.length) {
+      <p class="muted-text">Add your services and teams on the <a routerLink="/systems">Systems</a> page: the map is organized by system.</p>
+    } @else {
+      <p class="field-help">Your systems (the map shows all of them until you pick some):</p>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1rem">
+        @for (s of map.all_systems; track s.id) {
+          <button [class.primary]="chosen.has(s.id)" (click)="toggle(s.id)" [attr.aria-pressed]="chosen.has(s.id)">{{ s.name }}</button>
+        }
+      </div>
+      @for (m of map.systems; track m.system.id) {
+        <section class="detail-panel" style="margin-bottom:1rem">
+          <h2>{{ m.system.name }} <span class="muted-text" style="font-size:0.85rem;font-weight:400">{{ m.system.kind }}@if (m.system.owner) { · owned by {{ m.system.owner }} }</span></h2>
+          <p class="muted-text" style="margin-top:0">
+            @if (m.depends_on.length) { Depends on {{ m.depends_on.join(', ') }}. }
+            @if (m.dependents.length) { {{ m.dependents.join(', ') }} depend{{ m.dependents.length === 1 ? 's' : '' }} on it. }
+            @if (m.people.length) { People: {{ m.people.map(p => p.name).join(', ') }}. }
+          </p>
+
+          <h3>What holds now</h3>
+          @if (!m.current.length) { <p class="muted-text">No current decision on record.</p> }
+          @for (d of m.current; track d.id) {
+            <div class="lineage-row" style="flex-direction:column;align-items:stretch;gap:0.2rem">
+              <a [routerLink]="['/knowledge', d.id]">{{ d.title }}</a>
+              @if (d.why) { <span class="muted-text">Why: {{ d.why }}</span> }
+              @if (d.alternatives?.length) { <span class="muted-text">Instead of: {{ d.alternatives!.join(', ') }}</span> }
+              @if (d.health !== 'ok') { <span class="status-badge health-potentially_stale" style="align-self:flex-start">may be out of date</span> }
+            </div>
+          }
+
+          @if (m.history.length > m.current.length) {
+            <h3 style="margin-top:1rem">How it came to be</h3>
+            <ol style="margin:0 0 0 1.2rem;padding:0">
+              @for (h of m.history; track h.id) {
+                <li style="margin-bottom:0.35rem">
+                  <a [routerLink]="['/knowledge', h.id]">{{ h.title }}</a>
+                  <span class="muted-text"> · {{ h.date }}</span>
+                  @if (h.status && h.status !== 'active') { <span class="status-badge" [ngClass]="'status-' + h.status" style="margin-left:0.3rem">{{ h.status }}</span> }
+                  @if (h.replaced_by) { <span class="muted-text"> → {{ h.replaced_by.kind }} by <a [routerLink]="['/knowledge', h.replaced_by.id]">{{ h.replaced_by.title }}</a></span> }
+                  @if (h.outcome?.verdict) { <span class="muted-text"> · outcome: {{ verdictLabel[h.outcome!.verdict!] }}</span> }
+                </li>
+              }
+            </ol>
+          }
+
+          <div class="detail-grid" style="margin-top:1rem">
+            <div>
+              <h3>Open risks</h3>
+              @if (!m.risks.length) { <p class="muted-text">None on record.</p> }
+              @for (r of m.risks; track r.id) { <p style="margin:0.2rem 0"><a [routerLink]="['/knowledge', r.id]">{{ r.title }}</a>@if (r.status === 'materialized') { <span class="status-badge status-materialized" style="margin-left:0.3rem">happened</span> }</p> }
+            </div>
+            <div>
+              <h3>Lessons</h3>
+              @if (!m.lessons.length) { <p class="muted-text">None on record.</p> }
+              @for (l of m.lessons; track l.id) { <p style="margin:0.2rem 0"><a [routerLink]="['/knowledge', l.id]">{{ l.title }}</a></p> }
+            </div>
+          </div>
+          @if (m.commitments.length) {
+            <h3 style="margin-top:1rem">In flight</h3>
+            @for (c of m.commitments; track c.id) {
+              <p style="margin:0.2rem 0"><a [routerLink]="['/knowledge', c.id]">{{ c.title }}</a>
+                <span class="muted-text"> · {{ c.commitment.owner || 'no owner' }}@if (c.commitment.due_date) { , due {{ c.commitment.due_date }} }</span>
+                @if (c.commitment.overdue) { <span class="status-badge is-overdue" style="margin-left:0.3rem">Overdue</span> }</p>
+            }
+          }
+        </section>
+      }
+    }
+  }
+
+  @if (tab === 'abandoned' && abandoned) {
+    <section class="detail-panel">
+      <h2>Decisions given up</h2>
+      @if (!abandoned.decisions.length) { <p class="muted-text">Nothing has been abandoned yet.</p> }
+      @for (d of abandoned.decisions; track d.id) {
+        <div class="lineage-row" style="flex-direction:column;align-items:stretch;gap:0.2rem">
+          <span><a [routerLink]="['/knowledge', d.id]">{{ d.title }}</a> <span class="status-badge" [ngClass]="'status-' + d.how" style="margin-left:0.3rem">{{ d.how }}</span></span>
+          @if (d.replaced_by) { <span class="muted-text">Replaced by <a [routerLink]="['/knowledge', d.replaced_by.id]">{{ d.replaced_by.title }}</a>@if (d.replaced_by.why) { : {{ d.replaced_by.why }} }</span> }
+          @if (d.note) { <span class="muted-text">“{{ d.note }}”</span> }
+        </div>
+      }
+      @if (abandoned.rejected_alternatives.length) {
+        <h3 style="margin-top:1rem">Options considered and not chosen</h3>
+        @for (a of abandoned.rejected_alternatives; track $index) {
+          <p style="margin:0.25rem 0"><strong>{{ a.option }}</strong> <span class="muted-text">instead of</span>
+            <a [routerLink]="['/knowledge', a.instead.id]">{{ a.instead.title }}</a></p>
+        }
+      }
+      @if (abandoned.dropped_commitments.length) {
+        <h3 style="margin-top:1rem">Commitments dropped</h3>
+        @for (c of abandoned.dropped_commitments; track c.id) { <p style="margin:0.2rem 0"><a [routerLink]="['/knowledge', c.id]">{{ c.title }}</a></p> }
+      }
+    </section>
+  }
+
+  @if (tab === 'mistakes' && mistakes) {
+    <section class="detail-panel">
+      <h2>Mistakes that keep coming back</h2>
+      <p class="muted-text" style="margin-top:0">Lessons and risks that happened, grouped when they're about the same thing; the most repeated first.</p>
+      @if (!mistakes.groups.length) { <p class="muted-text">No lessons or risks that happened on record yet.</p> }
+      @for (g of mistakes.groups; track $index) {
+        <div class="lineage-row" style="flex-direction:column;align-items:stretch;gap:0.2rem">
+          <span><strong>{{ g.title }}</strong>
+            @if (g.count > 1) { <span class="status-badge is-overdue" style="margin-left:0.3rem">{{ g.count }} times</span> }
+            @if (g.systems.length) { <span class="muted-text"> · {{ g.systems.join(', ') }}</span> }</span>
+          @for (i of g.items; track i.id) { <a [routerLink]="['/knowledge', i.id]" style="font-size:0.85rem">{{ i.title }}</a> }
+        </div>
+      }
+    </section>
+  }
+
+  @if (tab === 'controversial' && controversial) {
+    <section class="detail-panel">
+      <h2>Decisions people disagree about</h2>
+      <p class="muted-text" style="margin-top:0">Changed back and forth, amended often, contradicted, flagged, or not delivering what was expected.</p>
+      @if (!controversial.decisions.length) { <p class="muted-text">No decision shows signs of controversy.</p> }
+      @for (d of controversial.decisions; track d.id) {
+        <div class="lineage-row" style="flex-direction:column;align-items:stretch;gap:0.2rem">
+          <a [routerLink]="['/knowledge', d.id]">{{ d.title }}</a>
+          <span class="muted-text">{{ d.reasons.join(' · ') }}</span>
+        </div>
+      }
+    </section>
+  }
+
+  @if (tab === 'ask') {
+    <section class="detail-panel">
+      <h2>Ask in plain English</h2>
+      <p class="muted-text" style="margin-top:0">GraphRAG answers from the record, with citations. Pick a question to start from:</p>
+      @for (q of questions; track q) {
+        <p style="margin:0.35rem 0"><a [routerLink]="['/graphrag']" [queryParams]="{ q }">{{ q }}</a></p>
+      }
+    </section>
+  }
+</div>

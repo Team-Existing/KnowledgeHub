@@ -1,3 +1,4 @@
+import { DigestSettingsComponent } from '../../components/digest-settings/digest-settings.component'
 import { Component, OnInit } from '@angular/core'
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
@@ -12,7 +13,7 @@ import { KnowledgeHealthResponse, HealthState, KnowledgeItem } from '../../model
 /** Current items that may be out of date or are due for review, most urgent first. */
 @Component({
   selector: 'app-health',
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, DigestSettingsComponent],
   templateUrl: './health.component.html'
 })
 export class HealthComponent implements OnInit {

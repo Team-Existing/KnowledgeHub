@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 import bcrypt
 import jwt
 from fastapi.security import OAuth2PasswordBearer
@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from app.arcadedb import ArcadeSession
 from app.db import User, get_session
 from app.repositories.users import UserRepository
-from app import activity
+from app import activity, api_keys
 from app.services.providers import use_model
 
 SECRET_KEY = os.getenv("SECRET_KEY", "")
@@ -115,6 +115,7 @@ def create_token(user_id: str, token_version: int = 0) -> str:
 
 
 async def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     session: ArcadeSession = Depends(get_session),
 ) -> User:
@@ -123,6 +124,8 @@ async def get_current_user(
         detail="Invalid or expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if token.startswith(api_keys.PREFIX):
+        return await _api_key_user(request, token, session, credentials_error)
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["exp", "sub"]})
         user_id: Optional[str] = payload.get("sub")
@@ -140,3 +143,18 @@ async def get_current_user(
     use_model(user.get("llm_model"))
     return User(id=user["id"], username=user["username"], role=user.get("role") or "member",
                 llm_model=user.get("llm_model"), email=user.get("email"))
+
+
+async def _api_key_user(request: Request, key: str, session: ArcadeSession, credentials_error: HTTPException) -> User:
+    """A read-only API key: its creator, confined to the key's space and READ_ONLY routes."""
+    found = await api_keys.lookup(session, key)
+    user = await UserRepository(session).get(found["created_by"]) if found else None
+    if not user:
+        raise credentials_error
+    if not api_keys.allowed(request.method, request.url.path):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API keys are read-only")
+    await api_keys.touch(session, found["id"])
+    use_model(user.get("llm_model"))
+    # a regular member's rights at most, whatever the creator's server role
+    return User(id=user["id"], username=user["username"], role="member", llm_model=user.get("llm_model"),
+                email=user.get("email"), api_key_space=found["user_id"])

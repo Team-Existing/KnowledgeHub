@@ -18,6 +18,7 @@ class User:
     role: str = "member"
     llm_model: Optional[str] = None   # the user's chosen LLM (see services/llm_catalog.py)
     email: Optional[str] = None       # verified by an SSO provider; never typed in (see services/sso.py)
+    api_key_space: Optional[str] = None   # signed in with a read-only API key for this space (app/api_keys.py)
 
 
 def get_client() -> ArcadeClient:

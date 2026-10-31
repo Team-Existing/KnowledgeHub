@@ -34,7 +34,8 @@ from app.repositories import ItemEventRepository, KnowledgeItemRepository, Linea
 Row = Dict[str, Any]
 
 SIGNAL_KINDS = ("source_changed", "removed_from_source", "dependency_changed", "flagged", "outcome_not_achieved",
-                "contradicted", "possible_duplicate")       # the last two: services/verification.py
+                "contradicted", "possible_duplicate",       # these two: services/verification.py
+                "unsupported")                              # services/grounding.py
 REVIEW_SOON_DAYS = 14
 # statuses that already say an item no longer holds
 RETIRED_STATUSES = ["superseded", "reversed", "rejected", "deprecated", "invalidated", "closed", "done", "dropped"]

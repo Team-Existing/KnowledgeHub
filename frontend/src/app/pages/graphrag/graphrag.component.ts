@@ -55,7 +55,11 @@ export class GraphragComponent implements AfterViewChecked {
     public modelService: ModelService, 
     private sanitizer: DomSanitizer,
     private router: Router
-  ) {}
+  ) {
+    // a suggested question (the Learn page links here with ?q=…): ready to send, not sent
+    const q = this.router.parseUrl(this.router.url).queryParams['q']
+    if (typeof q === 'string') this.input = q.slice(0, 1000)
+  }
 
   isNoAnswer(content: string): boolean {
     const noAnswerPhrases = [

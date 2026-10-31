@@ -53,6 +53,8 @@ os.environ["OLLAMA_STATUS_CACHE_SECONDS"] = "0"
 os.environ.pop("SETUP_TOKEN", None)
 # the inactivity job would race the tests on the shared database; tests run it explicitly
 os.environ["RETENTION_ENABLED"] = "false"
+os.environ["DIGEST_ENABLED"] = "false"              # likewise the weekly digests
+os.environ["CHECK_SUPPORT"] = "off"                # tests of it turn it on (it adds LLM calls)
 # folder connectors may read the temp dir only (pytest's tmp_path lives under it)
 os.environ["CONNECTOR_ROOTS"] = tempfile.gettempdir()
 
@@ -105,6 +107,8 @@ class FakeLLM:
             return "impact"
         if user.startswith("New entry:"):
             return "verify"
+        if user.startswith("Claims to check:"):
+            return "ground"
         return "unknown"
 
     async def chat(self, messages: Messages, temperature: float = 0,

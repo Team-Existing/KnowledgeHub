@@ -9,6 +9,8 @@
 | **Health** | What may be out of date: items whose source changed, that build on a reversed decision, that someone flagged, or whose review date is near. Confirm them, flag them or set review dates ([Knowledge health](knowledge-health.md)) |
 | **Playbooks** | Repeatable procedures (a release, onboarding), written as steps or built from how-tos and checklists already in the space |
 | **Sources** | Connectors that pull in transcripts, notes, ADRs, pull requests and issues |
+| **Assistant** | Ask anything: a rule-based plan picks research, impact, learning or watchtower agents, then verification marks unbacked sentences |
+| **Learn** | Knowledge map per system, tried and abandoned, recurring mistakes, controversial decisions, suggested questions |
 | **Copilot** | Preview or post the comment a GitHub pull request or a Jira or Linear issue gets; turn on the webhook; recent runs; connect Slack's `/decisions` command |
 | **Impact** | Describe a change; see the decisions, conflicts, systems, risks, lessons and commitments it touches |
 | **Systems** | Services, databases and teams, their dependencies, and the knowledge about each |
@@ -28,7 +30,7 @@
 | Transcripts, email, Slack | LLM, with a regex fallback | decision, action-item, risk |
 | Git ADRs (connector) | None: each ADR *is* a decision | decision, with its status and lineage |
 
-Each item records which extractor produced it, shown as a badge in the review queue.
+Each item records which extractor produced it, shown as a badge in the review queue. Items a model extracted are also checked against their source, and the review card says whether the source states them ([unsupported claims](knowledge-health.md#unsupported-claims)).
 
 **Search** uses ArcadeDB's Lucene indexes. Items match on title, tags and type; sources on title, author, tags and body text. Sources matched only in their body rank below metadata matches and come back with a snippet.
 

@@ -28,6 +28,7 @@ describe('CopilotComponent', () => {
     http.expectOne('/knowledge/copilot/runs').flush([])
     await settle()
     http.match('/knowledge/slack').forEach(r => r.flush([]))      // the Slack section below
+    http.match('/knowledge/api-keys').forEach(r => r.flush([]))   // and the developer-portal keys
     await settle()
   })
 

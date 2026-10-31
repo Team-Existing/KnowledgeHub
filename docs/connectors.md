@@ -13,6 +13,7 @@ The **Sources** page connects knowledge where it already lives. **The app never 
 | GitHub | The repository link, e.g. `https://github.com/acme/api` or a GitHub Enterprise link; a token for private repos | Merged pull requests and their discussion |
 | Jira | Your Jira site, e.g. `https://acme.atlassian.net`; an API token (plus email for Cloud); a JQL query | Issues and their comments |
 | Linear | Linear's API address, `https://api.linear.app/graphql`; a personal API key | Issues and their comments |
+| Slack | Slack's API address, `https://slack.com/api`; a bot token (`xoxb-…`) from a Slack app with `channels:history` (`groups:history` for private channels), invited to each channel; the channel IDs | Each thread as a conversation, and each day's messages outside threads as one more. Extracted like transcripts: decisions, action items and risks, with who said them. A channel the app can't read is reported, and the others still sync |
 
 A github.com link is read through GitHub's API host, `api.github.com`; an Enterprise link through `<your host>/api/v3`.
 

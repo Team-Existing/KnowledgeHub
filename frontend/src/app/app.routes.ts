@@ -37,6 +37,8 @@ export const routes: Routes = [
   { path: 'search', loadComponent: () => import('./pages/search/search.component').then(m => m.SearchComponent), canActivate: [authGuard] },
   { path: 'decisions', loadComponent: () => import('./pages/decisions/decisions.component').then(m => m.DecisionsComponent), canActivate: [authGuard] },
   { path: 'systems', loadComponent: () => import('./pages/systems/systems.component').then(m => m.SystemsComponent), canActivate: [authGuard] },
+  { path: 'assistant', loadComponent: () => import('./pages/assistant/assistant.component').then(m => m.AssistantComponent), canActivate: [authGuard] },
+  { path: 'learn', loadComponent: () => import('./pages/learn/learn.component').then(m => m.LearnComponent), canActivate: [authGuard] },
   { path: 'decision-copilot', loadComponent: () => import('./pages/copilot/copilot.component').then(m => m.CopilotComponent), canActivate: [authGuard] },
   { path: 'impact', loadComponent: () => import('./pages/impact/impact.component').then(m => m.ImpactComponent), canActivate: [authGuard] },
   { path: 'commitments', loadComponent: () => import('./pages/commitments/commitments.component').then(m => m.CommitmentsComponent), canActivate: [authGuard] },

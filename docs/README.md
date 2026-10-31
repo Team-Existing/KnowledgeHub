@@ -6,6 +6,8 @@
 - [Screenshots](screenshots.md): every page of the app
 - [Accounts, roles and spaces](accounts-and-spaces.md)
 - [Decision tracking](decision-tracking.md)
+- [Assistant](assistant.md): one question, the agents that fit it (research, impact, learning, watchtower), and a check of the answer against its sources
+- [Learn](learning.md): the knowledge map, what was tried and abandoned, recurring mistakes, controversial decisions
 - [Decision Copilot](decision-copilot.md): the decisions a pull request or issue touches, as a comment on it
 - [Impact analysis](impact-analysis.md): what a proposed change touches, according to the record
 - [Commitments and outcomes](commitments.md): what decisions set in motion, and whether they worked

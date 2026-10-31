@@ -25,6 +25,8 @@ Organization              the tenant: its own shared space, members, groups and 
 OrgMember                 user <-> organization: role owner | admin | member, status active | left | removed
 OrgInvite                 an invite link to an organization (only the token's hash is stored)
 OrgDomain                 an email domain whose verified SSO users join the organization
+ApiKey                    a read-only key to a space for developer portals (only its hash; app/api_keys.py)
+Digest                    a weekly digest of what needs attention, posted to a Slack incoming webhook
 SlackIntegration          a Slack app's /decisions command for a space (only its signing secret, encrypted)
 CopilotRun                one Decision Copilot analysis of a pull request or issue: posted, updated, skipped or failed
 SsoIdentity               a provider account (provider + subject) that signs in as a user
@@ -122,6 +124,7 @@ CREATE PROPERTY KnowledgeItem.outcome IF NOT EXISTS STRING
 CREATE PROPERTY KnowledgeItem.outcome_note IF NOT EXISTS STRING
 CREATE PROPERTY KnowledgeItem.outcome_at IF NOT EXISTS STRING
 CREATE PROPERTY KnowledgeItem.outcome_by IF NOT EXISTS STRING
+CREATE PROPERTY KnowledgeItem.support IF NOT EXISTS MAP
 CREATE INDEX IF NOT EXISTS ON KnowledgeItem (artifact_id) NOTUNIQUE
 CREATE INDEX IF NOT EXISTS ON KnowledgeItem (review_status) NOTUNIQUE
 CREATE INDEX IF NOT EXISTS ON KnowledgeItem (title, tags_text, type) FULL_TEXT
@@ -257,6 +260,23 @@ CREATE PROPERTY CopilotRun.status IF NOT EXISTS STRING
 CREATE PROPERTY CopilotRun.created_at IF NOT EXISTS STRING
 CREATE INDEX IF NOT EXISTS ON CopilotRun (id) UNIQUE
 CREATE INDEX IF NOT EXISTS ON CopilotRun (user_id) NOTUNIQUE
+
+CREATE DOCUMENT TYPE ApiKey IF NOT EXISTS
+CREATE PROPERTY ApiKey.id IF NOT EXISTS STRING
+CREATE PROPERTY ApiKey.user_id IF NOT EXISTS STRING
+CREATE PROPERTY ApiKey.key_hash IF NOT EXISTS STRING
+CREATE PROPERTY ApiKey.created_by IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON ApiKey (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON ApiKey (key_hash) UNIQUE
+CREATE INDEX IF NOT EXISTS ON ApiKey (user_id) NOTUNIQUE
+
+CREATE DOCUMENT TYPE Digest IF NOT EXISTS
+CREATE PROPERTY Digest.id IF NOT EXISTS STRING
+CREATE PROPERTY Digest.user_id IF NOT EXISTS STRING
+CREATE PROPERTY Digest.weekday IF NOT EXISTS INTEGER
+CREATE PROPERTY Digest.last_sent_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON Digest (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON Digest (user_id) NOTUNIQUE
 
 CREATE DOCUMENT TYPE SlackIntegration IF NOT EXISTS
 CREATE PROPERTY SlackIntegration.id IF NOT EXISTS STRING

@@ -12,6 +12,6 @@ from __future__ import annotations
 from types import ModuleType
 from typing import Dict
 
-from app.services.connectors import folder, git_adr, github, jira, linear
+from app.services.connectors import folder, git_adr, github, jira, linear, slack
 
-REGISTRY: Dict[str, ModuleType] = {m.KIND: m for m in (folder, git_adr, github, jira, linear)}
+REGISTRY: Dict[str, ModuleType] = {m.KIND: m for m in (folder, git_adr, github, jira, linear, slack)}

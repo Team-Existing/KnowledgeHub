@@ -1,0 +1,119 @@
+<div class="knowledge-shell">
+  <section class="toolbar">
+    <div>
+      <h1>Assistant</h1>
+      <p>Ask anything. The assistant picks the agents that fit the question (research, impact, learning, watchtower),
+        runs them, and checks the answer against its sources. It only reads; it never changes the record.</p>
+    </div>
+  </section>
+
+  <form class="detail-panel" (ngSubmit)="ask()" style="margin-bottom:1rem">
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <input name="question" [(ngModel)]="question" placeholder="e.g. Should we move billing off PostgreSQL?"
+             style="flex:1;min-width:220px" aria-label="Question" maxlength="2000" />
+      <button class="primary" type="submit" [disabled]="loading || question.trim().length < 3">{{ loading ? 'Working…' : 'Ask' }}</button>
+    </div>
+    @if (!run && !loading) {
+      <p class="field-help" style="margin-bottom:0">Try:
+        @for (q of examples; track q) { <button type="button" class="link-btn" (click)="ask(q)">{{ q }}</button>@if (!$last) { · } }
+      </p>
+    }
+  </form>
+
+  @if (error) { <p class="error-text">{{ error }}</p> }
+
+  @if (run) {
+    <section class="detail-panel" style="margin-bottom:1rem">
+      <h2>Plan</h2>
+      <ol style="margin:0 0 0 1.2rem;padding:0">
+        @for (p of run.plan; track $index) { <li><strong>{{ p.label }}</strong><span class="muted-text">: {{ p.why }}</span></li> }
+      </ol>
+    </section>
+
+    @for (s of run.steps; track $index) {
+      <section class="detail-panel" style="margin-bottom:1rem" [attr.data-agent]="s.agent">
+        <h2>{{ s.label }} <span class="muted-text" style="font-size:0.8rem;font-weight:400">{{ s.ms }} ms</span></h2>
+        @if (!s.ok) {
+          <p class="error-text">This step failed: {{ s.error }}</p>
+        } @else {
+          @switch (s.agent) {
+            @case ('research') {
+              <p style="white-space:pre-wrap">{{ s.result.answer }}</p>
+              @if (s.result.citations?.length) {
+                <p class="muted-text">Sources:
+                  @for (c of s.result.citations; track c.id) { <a [routerLink]="['/knowledge', c.id]">{{ c.title }}</a>@if (!$last) { · } }
+                </p>
+              }
+            }
+            @case ('verification') {
+              @if (s.result.skipped) {
+                <p class="muted-text">Nothing to check: {{ s.result.skipped }}.</p>
+              } @else {
+                <p>{{ s.result.backed }} of {{ plural(s.result.sentences.length, 'sentence') }} backed by a source.
+                  @if (s.result.unbacked) { <span class="status-badge support-unsupported">{{ s.result.unbacked }} to check</span> }</p>
+                @for (x of s.result.sentences; track $index) {
+                  @if (!x.backed) {
+                    <p style="margin:0.25rem 0"><span class="status-badge support-unsupported">no source says this</span> {{ x.text }}</p>
+                  }
+                }
+              }
+            }
+            @case ('impact') {
+              <p class="muted-text" style="margin-top:0">{{ plural(s.result.counts.conflicts, 'conflict') }},
+                {{ plural(s.result.counts.decisions, 'decision') }}, {{ plural(s.result.counts.systems, 'system') }},
+                {{ plural(s.result.counts.risks, 'risk') }}, {{ plural(s.result.counts.lessons, 'lesson') }}.
+                <a routerLink="/impact">Full analysis</a></p>
+              @for (d of s.result.decisions; track d.id) {
+                <p style="margin:0.25rem 0"><a [routerLink]="['/knowledge', d.id]">{{ d.title }}</a>
+                  @if (d.relation) { <span class="status-badge" [class.verdict-not_achieved]="d.relation === 'conflicts'" style="margin-left:0.3rem">{{ d.relation }}</span> }
+                  @if (d.reason) { <span class="muted-text"> {{ d.reason }}</span> }</p>
+              }
+              @if (s.result.systems.length) {
+                <p class="muted-text">Systems: @for (x of s.result.systems; track x.id) { {{ x.name }}@if (!$last) {, } }</p>
+              }
+              @for (l of s.result.lessons; track l.id) { <p style="margin:0.2rem 0">Lesson: <a [routerLink]="['/knowledge', l.id]">{{ l.title }}</a></p> }
+              @for (r of s.result.risks; track r.id) { <p style="margin:0.2rem 0">Risk: <a [routerLink]="['/knowledge', r.id]">{{ r.title }}</a></p> }
+            }
+            @case ('learning') {
+              @switch (s.result.view) {
+                @case ('map') {
+                  @for (m of s.result.systems; track m.system.id) {
+                    <h3>{{ m.system.name }}</h3>
+                    @for (d of m.current; track d.id) {
+                      <p style="margin:0.2rem 0"><a [routerLink]="['/knowledge', d.id]">{{ d.title }}</a>@if (d.why) { <span class="muted-text">: {{ d.why }}</span> }</p>
+                    }
+                    @for (l of m.lessons; track l.id) { <p style="margin:0.2rem 0">Lesson: <a [routerLink]="['/knowledge', l.id]">{{ l.title }}</a></p> }
+                  }
+                }
+                @case ('mistakes') {
+                  @for (g of s.result.groups; track $index) {
+                    <p style="margin:0.25rem 0"><strong>{{ g.title }}</strong>@if (g.count > 1) { <span class="status-badge is-overdue" style="margin-left:0.3rem">{{ g.count }} times</span> }</p>
+                  }
+                }
+                @default {
+                  @for (d of s.result.decisions; track d.id) {
+                    <p style="margin:0.25rem 0"><a [routerLink]="['/knowledge', d.id]">{{ d.title }}</a>
+                      @if (d.how) { <span class="status-badge" style="margin-left:0.3rem">{{ d.how }}</span> }
+                      @if (d.reasons) { <span class="muted-text"> {{ d.reasons.join(' · ') }}</span> }</p>
+                  }
+                }
+              }
+              @if (!(s.result.systems?.length || s.result.groups?.length || s.result.decisions?.length)) { <p class="muted-text">Nothing on record yet.</p> }
+              <p class="muted-text"><a routerLink="/learn">More on the Learn page</a></p>
+            }
+            @case ('watchtower') {
+              <p class="muted-text" style="margin-top:0">{{ s.result.attention_total }} may be out of date or due for review,
+                {{ plural(s.result.overdue_total, 'overdue commitment') }}, {{ plural(s.result.outcomes_due_total, 'outcome') }} to judge.</p>
+              @for (i of s.result.attention; track i.id) { <p style="margin:0.2rem 0">Check: <a [routerLink]="['/knowledge', i.id]">{{ i.title }}</a></p> }
+              @for (c of s.result.overdue_commitments; track c.id) {
+                <p style="margin:0.2rem 0">Overdue: <a [routerLink]="['/knowledge', c.id]">{{ c.title }}</a>
+                  <span class="muted-text"> {{ c.owner || 'no owner' }}@if (c.due_date) { , due {{ c.due_date }} }</span></p>
+              }
+              @for (d of s.result.outcomes_due; track d.id) { <p style="margin:0.2rem 0">Judge the outcome: <a [routerLink]="['/knowledge', d.id]">{{ d.title }}</a></p> }
+            }
+          }
+        }
+      </section>
+    }
+  }
+</div>

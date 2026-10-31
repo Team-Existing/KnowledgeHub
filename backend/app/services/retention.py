@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 Row = Dict[str, Any]
 
 # documents whose owner id (user_id) may be a personal space or a group
-_SPACE_DOCUMENTS = ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog", "CopilotRun", "SlackIntegration")
+_SPACE_DOCUMENTS = ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog", "CopilotRun", "SlackIntegration", "Digest", "ApiKey")
 
 
 def enabled() -> bool:
@@ -150,6 +150,7 @@ async def delete_user(session: ArcadeSession, user_id: str) -> Row:
     await session.execute("DELETE FROM Membership WHERE user_id = :u", {"u": user_id})
     await session.execute("DELETE FROM OrgMember WHERE user_id = :u", {"u": user_id})
     await session.execute("DELETE FROM SsoIdentity WHERE user_id = :u", {"u": user_id})
+    await session.execute("DELETE FROM ApiKey WHERE created_by = :u", {"u": user_id})   # keys acted as them
     await session.execute("DELETE FROM User WHERE id = :u", {"u": user_id})
     await session.commit()
     return {"handed_over": handed_over, "groups_deleted": groups_deleted, "organizations_deleted": orgs_deleted}

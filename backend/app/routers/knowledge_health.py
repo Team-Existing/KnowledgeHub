@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field
 
 from app.arcadedb import ArcadeSession
 from app.db import get_session
-from app.repositories import KnowledgeItemRepository
+from app.repositories import ArtifactRepository, KnowledgeItemRepository
 from app.serializers import item_dict
-from app.services import health, verification
+from app.services import grounding, health, verification
 from app.spaces import Space, current_space
 
 router = APIRouter(prefix="/knowledge", tags=["health"])
@@ -62,6 +62,19 @@ async def check_consistency(
     found = await verification.check(session, space.id, item_id, space.actor)
     item = await KnowledgeItemRepository(session).get_owned(space.id, item_id)
     return {**found, "item": item_dict(item)}
+
+
+@router.post("/items/{item_id}/support/check")
+async def check_support(
+    item_id: str, space: Space = Depends(current_space), session: ArcadeSession = Depends(get_session),
+) -> Dict[str, Any]:
+    """Whether the item's source says what it claims, checked now (services/grounding.py)."""
+    item = await _owned_item(session, space, item_id)
+    artifact = await ArtifactRepository(session).get_owned(space.id, item.get("artifact_id") or "")
+    if not artifact:
+        raise HTTPException(status_code=409, detail="The item's source is gone: there is nothing to check it against")
+    [support] = await grounding.check_items(session, space.id, [item], artifact.get("content") or "", space.actor)
+    return {"support": support, "item": item_dict(await KnowledgeItemRepository(session).get_owned(space.id, item_id))}
 
 
 @router.post("/items/{item_id}/health/flag")

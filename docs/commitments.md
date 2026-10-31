@@ -35,6 +35,16 @@ Next to each decision is the evidence the graph already holds:
 
 **A decision whose outcome was not achieved is flagged on the Health page**, because what it promised no longer holds. Someone can then confirm it still stands, or record what replaces it.
 
+### Missed outcomes become lessons
+
+When an outcome is recorded as *not achieved* or *partly achieved*, Knowledge Hubs drafts the lesson:
+
+- **An "Outcome review" source** for the decision says what was expected, the verdict and who recorded it, what happened (the evidence), how its commitments went (how many are done, which aren't finished, which were dropped), and which risks it was meant to prevent happened anyway.
+- **One lesson** in that source: *"Move billing to PostgreSQL" did not achieve what was expected: two invoices were lost*. It is linked *learned from* the decision.
+- **It waits in the review queue** for the team to sharpen into what to do differently, and accept.
+
+From then on, the lesson shows wherever lessons do: with the decision's outcome, on the [Learn](learning.md) page among recurring mistakes, in impact analysis and in Copilot comments for changes on the same ground. Recording the verdict again updates the same outcome review rather than adding another.
+
 Everything (status changes, owners, due dates, expectations, verdicts) is in the item's history, with who did it.
 
 ## In answers

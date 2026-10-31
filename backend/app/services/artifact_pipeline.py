@@ -193,6 +193,12 @@ async def index_artifact(
     it's an LLM call, about 30 seconds on a CPU, and nothing in the response needs it.
     """
     await embed_and_store(session, user_id, items)
+    from app.services import grounding
+    if grounding.needs_check(items):      # does the source say what the model extracted?
+        if background is not None:
+            background.add_task(grounding.check_later, user_id, artifact["id"], active_model())
+        else:
+            await grounding.check_artifact(session, user_id, artifact["id"])
     if not summarise:
         return
     if background is not None:
@@ -353,6 +359,8 @@ async def ingest_transcript(
     engine = "regex" if llm_result.get("llm_error") else "local_llm"
 
     items = build_llm_items(user_id, artifact["id"], llm_result, author, tags, artifact["created_at"])
+    for item in items:
+        item.setdefault("extraction_engine", engine)
     relationships = await persist_artifact(session, user_id, artifact, items, metadata, engine)
     await index_artifact(session, user_id, artifact, items, background=background)
     return {

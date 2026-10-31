@@ -68,6 +68,10 @@ From then on:
   - One analysis per pull request or issue runs at a time, so two events arriving together post one comment.
   - The analysis uses the model chosen by whoever added the connector.
 
+## Developer portals
+
+To show the same knowledge in an internal developer portal, a wiki or a CI check, create a **read-only API key** on the Copilot page under *Developer portals*. A portal can then call `POST /knowledge/impact` or `POST /knowledge/graphrag/query` with it. The key reads one space and changes nothing ([API keys](api.md)).
+
 ## Slack
 
 In Slack, anyone can ask before making a change:

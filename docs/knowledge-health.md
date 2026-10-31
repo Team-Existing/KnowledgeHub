@@ -51,6 +51,22 @@ Nothing else changes. A person decides whether the newer item supersedes the old
 
 **Check against similar knowledge**, on an item's page, runs the same comparison on demand. `VERIFY_ON_ACCEPT=off` turns off the automatic check.
 
+### Unsupported claims
+
+A model can extract a decision its source never states, or change one ("stop the nightly export" from "we keep the nightly export"). So after a model extracts items from a document, transcript or conversation, each one is checked against that source **before anyone reviews it**:
+
+1. **The text.** Knowledge Hubs finds the passage of the source (one or two sentences) closest to the claim. If the passage has every content word of the claim, and both are negated or neither is, the claim is *supported*. No model is needed. Having most of the words in common isn't enough.
+2. **The model.** The other claims go to one model call (ten at a time), each with its two closest passages. The model says whether the passages state the claim: *supported*, *partly* (some of it was added or changed) or *unsupported*, with a one-sentence reason.
+
+The review queue shows the verdict on each card, quoting the passage when it isn't a plain match. The item's page shows it too, with **Check against its source** to run it again. An *unsupported* item also gets a health signal, so it isn't forgotten once accepted; a later *supported* verdict clears it.
+
+What isn't checked:
+- items found by the rule-based extractor: they quote a sentence of their source as it is
+- checklists
+- structured sources (ADRs, issues), which state their items explicitly
+
+Without a model, claims the text doesn't cover stay *not checked*. `CHECK_SUPPORT=off` turns the check off.
+
 ## What you do about it
 
 - **The Health page** lists everything that needs a look: items that may be out of date first (those with the most signals first), then review dates, soonest first.
@@ -61,6 +77,28 @@ Nothing else changes. A person decides whether the newer item supersedes the old
 - If it no longer holds, record what replaced it as usual: link the newer decision (*supersedes*, *reverses*) or declare a status.
 
 Every signal, confirmation and review date is in the item's history, with who did it.
+
+## The weekly digest
+
+On the Health page, under *Weekly digest*, a space can send a weekly summary of what needs attention to one or more Slack channels. It covers:
+- what may be out of date (with the latest reason)
+- reviews due within two weeks
+- overdue commitments
+- decisions past their check-by date with no verdict
+
+**Setting it up:**
+1. In Slack, create an app with *Incoming Webhooks* turned on, and add a webhook for the channel.
+2. Paste the webhook URL and pick the weekday.
+
+**When it's sent:**
+- It goes out at `DIGEST_HOUR` (UTC, default 8).
+- **Send now** sends it at once.
+- A week with nothing to report sends nothing.
+- The page previews what the digest would say right now.
+
+**Security and scheduling:**
+- The URL must be a Slack incoming webhook (`https://hooks.slack.com/services/…`). It's stored encrypted and never shown again.
+- The scheduled check runs hourly: on Celery beat in worker mode, otherwise in the API process. A shared lock means no digest goes out twice. `DIGEST_ENABLED=false` stops scheduled sending.
 
 ## Answers
 

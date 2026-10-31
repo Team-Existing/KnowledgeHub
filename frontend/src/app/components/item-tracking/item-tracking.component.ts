@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core'
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
+import { RouterLink } from '@angular/router'
 import { HttpClient } from '@angular/common/http'
 import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
@@ -14,7 +15,7 @@ import { CommitmentStatus, KnowledgeItem, Verdict } from '../../models/api'
  */
 @Component({
   selector: 'app-item-tracking',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './item-tracking.component.html'
 })
 export class ItemTrackingComponent implements OnChanges {

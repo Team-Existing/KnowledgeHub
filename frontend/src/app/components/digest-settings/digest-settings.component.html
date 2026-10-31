@@ -1,0 +1,42 @@
+<section class="detail-panel" style="margin-top:1rem">
+  <h2>Weekly digest</h2>
+  <p class="muted-text" style="margin-top:0">
+    Once a week, post what needs attention here to a Slack channel: what may be out of date, reviews due,
+    overdue commitments and decisions due for a verdict. A week with nothing to report sends nothing.
+  </p>
+  @if (error) { <p class="error-text">{{ error }}</p> }
+  @if (notice) { <p class="space-banner">{{ notice }}</p> }
+
+  @if (preview) {
+    <p>Right now it would say:
+      @if (!preview.total) { <span class="muted-text">nothing (all clear).</span> }
+      @for (s of preview.sections; track s.title) { <span class="pill" style="margin-left:0.3rem">{{ s.title }}: {{ s.count }}</span> }
+    </p>
+  }
+
+  @if (list) {
+    @for (d of list.digests; track d.id) {
+      <div class="lineage-row" style="flex-wrap:wrap">
+        <strong class="grow">{{ d.name }}</strong>
+        <span class="muted-text">{{ list.weekdays[d.weekday] }}s at {{ list.hour_utc }}:00 UTC</span>
+        @if (d.last_sent_at) { <span class="muted-text">last: {{ d.last_status }}, {{ d.last_sent_at | date:'short' }}</span> }
+        <button [disabled]="busy" (click)="sendNow(d)">Send now</button>
+        <button class="link-btn" [disabled]="busy" (click)="remove(d)">Remove</button>
+      </div>
+    }
+    <details style="margin-top:0.6rem" [open]="!list.digests.length">
+      <summary>Send it to a Slack channel</summary>
+      <p class="field-help">In Slack, create an app with <em>Incoming Webhooks</em> turned on and add a webhook for the channel; paste its URL here.
+        It's stored encrypted and never shown again.</p>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <input [(ngModel)]="name" placeholder="Channel, e.g. #platform-team" maxlength="80" aria-label="Channel name" style="min-width:12rem" />
+        <input type="password" [(ngModel)]="webhookUrl" placeholder="https://hooks.slack.com/services/…" aria-label="Incoming webhook URL"
+               style="flex:1;min-width:16rem" autocomplete="off" />
+        <select [(ngModel)]="weekday" aria-label="Day">
+          @for (day of list.weekdays; track $index) { <option [ngValue]="$index">{{ day }}</option> }
+        </select>
+        <button class="primary" [disabled]="busy || !name.trim() || !webhookUrl.trim()" (click)="add()">Add</button>
+      </div>
+    </details>
+  }
+</section>

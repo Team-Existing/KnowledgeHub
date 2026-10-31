@@ -14,6 +14,7 @@ How Knowledge Hubs protects accounts and data. To report a vulnerability, see [S
   - *Upgrading:* existing accounts that differ only in case keep working with their exact name and are listed in a startup warning.
 
 **Data isolation**
+- **Read-only API keys** work in one space, as their creator (a member's rights at most), only on read routes, and only while the creator is still a member. Only a SHA-256 hash is stored. The weekly digest's Slack webhook URL is stored encrypted and must point at `hooks.slack.com`.
 - **Slack's `/decisions`** holds no bot token: it answers through the request's own reply address, which must be `hooks.slack.com`. Requests must carry Slack's signature with a timestamp under five minutes old; the signing secret is stored encrypted.
 - **Decision Copilot webhooks** are verified with the connector's secret (GitHub and Jira HMAC signatures, Linear's signature plus a five-minute replay window), stored encrypted. The Copilot only ever writes one comment per pull request or issue ([details](decision-copilot.md)).
 - **Single sign-on.** The OpenID Connect code flow with PKCE, state and nonce. ID tokens are verified against the provider's keys, issuer and audience. Accounts are never linked by matching email; only provider-verified emails are stored or used for domain joins, and public mail domains can't be claimed. Details in [Single sign-on](sso.md).

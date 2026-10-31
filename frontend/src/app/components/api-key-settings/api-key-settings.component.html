@@ -1,0 +1,30 @@
+<section class="detail-panel">
+  <h2>Developer portals</h2>
+  <p>Show this space's knowledge where engineers already work (a Backstage plugin, a wiki, a CI check) with a
+    <strong>read-only API key</strong>. It can search, read items, ask GraphRAG and run impact analysis in this space, acting as you;
+    it can't change anything, and stops working if you leave the space.</p>
+
+  @for (k of keys; track k.id) {
+    <div class="lineage-row" style="flex-wrap:wrap">
+      <strong class="grow">{{ k.name }}</strong>
+      <code>{{ k.hint }}</code>
+      <span class="muted-text">{{ k.last_used_at ? 'used ' + (k.last_used_at | date:'short') : 'not used yet' }}</span>
+      <button class="link-btn" [disabled]="busy" (click)="revoke(k)">Revoke</button>
+    </div>
+  }
+  @if (created) {
+    <div class="space-banner" style="display:block;margin-top:0.5rem">
+      <p style="margin:0 0 0.4rem">The key for {{ created.name }}, shown only now:</p>
+      <div style="display:flex;gap:0.5rem">
+        <input [value]="created.key" readonly style="flex:1" aria-label="API key" (focus)="$any($event.target).select()" />
+        <button (click)="copy()">{{ copied ? 'Copied' : 'Copy' }}</button>
+      </div>
+      <p class="field-help" style="margin:0.4rem 0 0">Send it as <code>Authorization: Bearer &lt;key&gt;</code>, e.g. <code>POST /knowledge/impact</code>.</p>
+    </div>
+  }
+  <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
+    <input [(ngModel)]="name" placeholder="What uses it, e.g. Backstage" maxlength="80" aria-label="Key name" style="flex:1" />
+    <button class="primary" [disabled]="busy || !name.trim()" (click)="create()">Create key</button>
+  </div>
+  @if (error) { <p class="error-text">{{ error }}</p> }
+</section>

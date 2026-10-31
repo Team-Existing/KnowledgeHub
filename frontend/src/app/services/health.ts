@@ -15,6 +15,7 @@ export function describeSignal(s: HealthSignal): string {
     case 'flagged': return `Flagged${s.actor ? ` by ${s.actor}` : ''}: “${s.note ?? ''}”`
     case 'contradicted': return `Newer knowledge contradicts it${s.item_title ? `: “${s.item_title}”` : ''}${s.reason ? ` (${s.reason})` : ''}`
     case 'possible_duplicate': return `It may duplicate “${s.item_title ?? 'another item'}”`
+    case 'unsupported': return `Its source doesn't say this${s.reason ? ` (${s.reason})` : ''}`
     case 'outcome_not_achieved': return `Its outcome was recorded as not achieved${s.note ? `: “${s.note}”` : ''}`
     default: return s.kind
   }

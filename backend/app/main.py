@@ -17,10 +17,10 @@ from app import coordination, migrations
 from app.auth import check_secret_key
 from app.db import close_db, get_client, init_db, migrate_on_startup
 from app.middleware import BodySizeLimitMiddleware
-from app.routers import (admin, auth, connectors, graphrag, groups, health, knowledge, knowledge_health, lineage,
-                         copilot, models, organizations, slack, sso, systems, tracking)
+from app.routers import (admin, api_keys, auth, connectors, graphrag, groups, health, knowledge, knowledge_health, lineage,
+                         assistant, copilot, digests, learning, models, organizations, slack, sso, systems, tracking)
 from app.services.file_ingestion import MAX_UPLOAD_BYTES
-from app.services import retention
+from app.services import digest, retention
 from app.services.connectors.sync import QueueUnavailable
 from app.services.providers import get_embedding_provider
 
@@ -46,14 +46,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await migrations.run(get_client())
     # The inactivity clean-up: Celery beat schedules it in worker mode (REDIS_URL set);
     # otherwise this process runs it now and then every RETENTION_CHECK_HOURS.
-    retention_task = None if coordination.worker_mode() else asyncio.create_task(retention.loop(get_client()))
+    # So does the weekly digest's hourly check (services/digest.py).
+    background_tasks = [] if coordination.worker_mode() else [
+        asyncio.create_task(retention.loop(get_client())), asyncio.create_task(digest.loop(get_client()))]
     try:
         yield
     finally:
-        if retention_task:
-            retention_task.cancel()
+        for task in background_tasks:
+            task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await retention_task
+                await task
         await close_db()
 
 
@@ -101,5 +103,9 @@ app.include_router(graphrag.router)
 app.include_router(lineage.router)
 app.include_router(knowledge_health.router)
 app.include_router(tracking.router)
+app.include_router(digests.router)
+app.include_router(api_keys.router)
+app.include_router(learning.router)
+app.include_router(assistant.router)
 app.include_router(systems.router)
 app.include_router(knowledge.router)

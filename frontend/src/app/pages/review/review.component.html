@@ -37,6 +37,7 @@
         } @else {
           <h2 style="margin:0.75rem 0 0.25rem">{{ item.title }}</h2>
           <p class="muted-text">by {{ item.author }}</p>
+          <app-support-note [support]="item.support" [compact]="true" />
           <div class="tag-row">@for (t of item.tags; track t) { <span>#{{ t }}</span> }</div>
           <div class="review-actions">
             <button class="success" [disabled]="loading" (click)="decide(item.id, 'accepted')">Accept</button>

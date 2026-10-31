@@ -47,6 +47,7 @@ celery_app.conf.update(
             "task": "kh.retention",
             "schedule": retention.check_interval().total_seconds(),
         },
+        "weekly-digests": {"task": "kh.digests", "schedule": 3600.0},
     },
 )
 
@@ -81,6 +82,14 @@ def slack_command(space_id: str, integration_id: str, text: str, response_url: s
     from app.services.slack import answer_job
 
     asyncio.run(_with_client(lambda client: answer_job(client, space_id, integration_id, text, response_url, asked_by)))
+
+
+@celery_app.task(name="kh.digests")
+def send_digests() -> list:
+    """Hourly: the weekly digests due now (services/digest.py)."""
+    from app.services import digest
+
+    return asyncio.run(_with_client(digest.run_scheduled))
 
 
 @celery_app.task(name="kh.retention")

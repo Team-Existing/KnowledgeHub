@@ -2,6 +2,7 @@
   <h3>Is this still true?</h3>
 
   @if (error) { <p class="error-text">{{ error }}</p> }
+  @if (item.support) { <div style="margin-bottom:0.75rem"><app-support-note [support]="item.support" /></div> }
 
   @if (retired) {
     <p class="muted-text">This item is {{ item.status }}, so it isn't checked for being out of date.</p>
@@ -60,6 +61,9 @@
         <div style="margin-top:0.6rem">
           <button class="link-btn" [disabled]="busy" (click)="checkConsistency()">Check against similar knowledge</button>
           @if (checkResult) { <span class="muted-text" style="margin-left:0.5rem">{{ checkResult }}</span> }
+          @if (item.artifact_id) {
+            <button class="link-btn" [disabled]="busy" (click)="checkSupport()" style="margin-left:0.75rem">Check against its source</button>
+          }
         </div>
       }
     }

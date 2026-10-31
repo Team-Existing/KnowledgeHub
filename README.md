@@ -21,7 +21,7 @@ A **local-first knowledge base** for teams. It turns meeting notes, retros, deci
 |---|---|
 | [**Hub**](docs/images/hub.png) | Add knowledge: paste text, upload a file (PDF, TXT, MD, DOCX), fetch a URL, or submit a transcript, email thread or Slack export. Browse, see the graph, cross-link items, export and import the space |
 | [**Search**](docs/images/search.png) | Full-text search over items and sources, filtered by type, source and tag |
-| [**Review**](docs/images/review.png) | Accept, edit or reject extracted items before GraphRAG uses them |
+| [**Review**](docs/images/review.png) | Accept, edit or reject extracted items before GraphRAG uses them; each says whether its source states it |
 | [**Decisions**](docs/images/decisions.png) | The decision log and risk register, with each item's status and what replaced it |
 | [**Commitments**](docs/images/commitments.png) | What decisions set in motion: owners, due dates, overdue first; and whether the decisions worked ([outcomes](docs/images/outcomes.png)) |
 | [**Systems**](docs/images/systems.png) | Services, databases and teams, and what depends on what |
@@ -30,6 +30,8 @@ A **local-first knowledge base** for teams. It turns meeting notes, retros, deci
 | [**Sources**](docs/images/sources.png) | Connectors that pull in transcripts, notes, ADRs, pull requests and issues |
 | [**GraphRAG**](docs/images/graphrag.png) | Ask questions; answers cite their sources, flag superseded decisions, and say so when nothing covers the question |
 | [**Impact**](docs/images/impact.png) | Describe a change: the decisions it may conflict with, their reasoning, the systems it reaches, risks and lessons |
+| **Assistant** | One box for any question: picks the agents that fit, runs them, and marks sentences of the answer no source backs ([docs](docs/assistant.md)) |
+| **Learn** | The knowledge map for your systems, what was tried and abandoned, recurring mistakes, controversial decisions ([docs](docs/learning.md)) |
 | [**Copilot**](docs/images/copilot.png) | The same, as a comment on GitHub pull requests and Jira and Linear issues, and Slack's `/decisions` |
 | [**Organizations**](docs/images/organizations.png) | Members, roles, invite links, joining by email domain |
 | [**Groups**](docs/images/groups.png) | Create groups inside an organization, invite its members and share a space with them |

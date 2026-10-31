@@ -51,6 +51,8 @@ def item_dict(i: Row) -> Row:
         # commitments (action items) and decision outcomes: see services/tracking.py
         **({"commitment": tracking.commitment_view(i)} if i.get("type") == "action-item" else {}),
         **({"outcome": tracking.outcome_view(i)} if i.get("type") == "decision" else {}),
+        # whether its source says what a model extracted (see services/grounding.py); None if not checked
+        "support": i.get("support"),
     }
 
 
