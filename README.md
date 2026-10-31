@@ -5,7 +5,7 @@
 
 A **local-first knowledge base** for teams. It turns meeting notes, retros, decision logs, documents, web pages and transcripts into structured knowledge (decisions, risks, lessons, how-tos) that you can review, search, track over time and question in plain English.
 
-![A tour of Knowledge Hubs: Hub, Search, Review, Decisions, Playbooks, GraphRAG, Sources, Groups, Models and Users](docs/images/tour.gif)
+![A tour of Knowledge Hubs: Hub, Decisions, Health, Commitments, Impact, GraphRAG, Copilot, Systems, Review and Organizations](docs/images/tour.gif)
 
 <sub>Fictional demo data. Each page on its own: [Screenshots](docs/screenshots.md).</sub>
 
@@ -23,12 +23,18 @@ A **local-first knowledge base** for teams. It turns meeting notes, retros, deci
 | [**Search**](docs/images/search.png) | Full-text search over items and sources, filtered by type, source and tag |
 | [**Review**](docs/images/review.png) | Accept, edit or reject extracted items before GraphRAG uses them |
 | [**Decisions**](docs/images/decisions.png) | The decision log and risk register, with each item's status and what replaced it |
-| **Health** | What may be out of date, and why: a changed source, a reversed decision it builds on, a flag, a review date |
+| [**Commitments**](docs/images/commitments.png) | What decisions set in motion: owners, due dates, overdue first; and whether the decisions worked ([outcomes](docs/images/outcomes.png)) |
+| [**Systems**](docs/images/systems.png) | Services, databases and teams, and what depends on what |
+| [**Health**](docs/images/health.png) | What may be out of date, and why: a changed source, a reversed decision it builds on, a flag, a review date |
 | [**Playbooks**](docs/images/playbooks.png) | Repeatable procedures, written as steps or built from how-tos and checklists in the space |
 | [**Sources**](docs/images/sources.png) | Connectors that pull in transcripts, notes, ADRs, pull requests and issues |
 | [**GraphRAG**](docs/images/graphrag.png) | Ask questions; answers cite their sources, flag superseded decisions, and say so when nothing covers the question |
-| [**Groups**](docs/images/groups.png) | Create groups, invite people and share a space with them |
-| [**Models**](docs/images/models.png) | Download, switch or remove the local LLMs; re-embed the knowledge base |
+| [**Impact**](docs/images/impact.png) | Describe a change: the decisions it may conflict with, their reasoning, the systems it reaches, risks and lessons |
+| [**Copilot**](docs/images/copilot.png) | The same, as a comment on GitHub pull requests and Jira and Linear issues, and Slack's `/decisions` |
+| [**Organizations**](docs/images/organizations.png) | Members, roles, invite links, joining by email domain |
+| [**Groups**](docs/images/groups.png) | Create groups inside an organization, invite its members and share a space with them |
+| [**Models**](docs/images/models.png) | Download, switch or remove the local LLMs, or use hosted ones; re-embed the knowledge base |
+| [**Account**](docs/images/account.png) | Your verified email and connected single sign-on providers |
 | [**Users**](docs/images/users.png) *(server admins)* | Create accounts, change roles, see inactive accounts due for deletion |
 
 More in [Features](docs/features.md).

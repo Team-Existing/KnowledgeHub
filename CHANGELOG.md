@@ -56,6 +56,8 @@ Notable changes to Knowledge Hubs. The format follows [Keep a Changelog](https:/
 - Docker base images: Caddy 2.10, Node 22.
 
 ### Fixed
+- **The space switcher showed "My space" while you worked in another space**, and a commitment's status menu showed "Open" for one in progress: a menu's value was applied before its options existed. Each option now says whether it's the selected one.
+- **An item's extracted details could show as empty boxes**, and the hub's graph redrew every node on each change: lists built afresh on every check were tracked by object identity. They're tracked by a stable key now.
 - **Search missed items containing the exact word.** ArcadeDB's full-text index answered a prefix query (`billing*`) with only some of the matching items (2 of 3 decisions about billing). Each word is now searched as the whole term or a prefix.
 - A write that collided with another on the same ArcadeDB storage page failed outright ("Concurrent modification… Please retry"): a 3,000-item import was lost when a summary was saved meanwhile. Ingest, embedding and summary writes now run again on such a conflict (only the writes; extraction isn't repeated).
 - Finding the relationships for a page scanned every edge in the space: about a second for the Hub on 6,000 items. They're now found by walking out from the page's nodes (Hub 2.4 s → 0.2 s, graph 1.3 s → 0.16 s).
