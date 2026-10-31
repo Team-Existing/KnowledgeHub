@@ -22,7 +22,8 @@ FIELDS = [
                 help="The repository's web address, e.g. https://github.com/acme/payments-api "
                      "(or your GitHub Enterprise address)"),
     ConfigField("token", "Access token", type="password", secret=True,
-                help="Fine-grained token with read access to pull requests; optional for public repos"),
+                help="Fine-grained token with read access to pull requests; optional for public repos. "
+                     "For the PR Copilot to comment, it needs read and write"),
     ConfigField("api_url", "API address (optional)",
                 help="Only if your GitHub Enterprise API isn't at <host>/api/v3"),
     ConfigField("max_items", "Max PRs per sync", type="number", default=30),

@@ -47,7 +47,7 @@ class GroupRepository:
         p = {"g": group_id}
         await self.session.execute("DELETE VERTEX FROM Node WHERE user_id = :g", p)   # edges go with them
         await delete_space_systems(self.session, group_id)
-        for doc in ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog"):
+        for doc in ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog", "CopilotRun"):
             await self.session.execute(f"DELETE FROM {doc} WHERE user_id = :g", p)
         await self.session.execute("DELETE FROM Membership WHERE group_id = :g", p)
         await self.session.execute("DELETE FROM GroupSpace WHERE id = :g", p)

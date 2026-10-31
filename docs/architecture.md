@@ -60,6 +60,7 @@ The schema lives in [`backend/app/schema.py`](../backend/app/schema.py) and is a
 | `System` | vertex (not a `Node`) | a service, database, team …: `name`, `kind`, `aliases`, `owner` ([impact analysis](impact-analysis.md)) |
 | `AFFECTS` | edge | knowledge item → system it concerns |
 | `DEPENDS_ON` | edge | system → system it depends on |
+| `CopilotRun` | document | one [PR Copilot](decision-copilot.md) analysis: PR, commit, `source` (manual / webhook), `status` (posted, updated, skipped, failed), report counts |
 | `OrgDomain` | document | an email domain an organization claimed: verified SSO users there join it |
 | `SsoIdentity` | document | a sign-in provider account (`provider` + `subject`) connected to a user; `User.email` holds the provider-verified address |
 | `GroupSpace` | document | a group: name, creator, `org_id`, `last_active_at` |

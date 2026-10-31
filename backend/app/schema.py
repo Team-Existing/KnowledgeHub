@@ -25,6 +25,7 @@ Organization              the tenant: its own shared space, members, groups and 
 OrgMember                 user <-> organization: role owner | admin | member, status active | left | removed
 OrgInvite                 an invite link to an organization (only the token's hash is stored)
 OrgDomain                 an email domain whose verified SSO users join the organization
+CopilotRun                one Decision Copilot analysis of a pull request: posted, updated, skipped or failed
 SsoIdentity               a provider account (provider + subject) that signs in as a user
 GroupSpace                a group: a shared space inside an organization (org_id)
 Membership                user <-> group: status invited | active | declined | left | removed
@@ -242,6 +243,17 @@ CREATE PROPERTY OrgDomain.added_by IF NOT EXISTS STRING
 CREATE PROPERTY OrgDomain.added_at IF NOT EXISTS STRING
 CREATE INDEX IF NOT EXISTS ON OrgDomain (domain) UNIQUE
 CREATE INDEX IF NOT EXISTS ON OrgDomain (org_id) NOTUNIQUE
+
+CREATE DOCUMENT TYPE CopilotRun IF NOT EXISTS
+CREATE PROPERTY CopilotRun.id IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.user_id IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.connector_id IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.pr_number IF NOT EXISTS INTEGER
+CREATE PROPERTY CopilotRun.head_sha IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.status IF NOT EXISTS STRING
+CREATE PROPERTY CopilotRun.created_at IF NOT EXISTS STRING
+CREATE INDEX IF NOT EXISTS ON CopilotRun (id) UNIQUE
+CREATE INDEX IF NOT EXISTS ON CopilotRun (user_id) NOTUNIQUE
 
 CREATE DOCUMENT TYPE OrgInvite IF NOT EXISTS
 CREATE PROPERTY OrgInvite.id IF NOT EXISTS STRING

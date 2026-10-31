@@ -651,6 +651,43 @@ export interface Connector {
   last_status: SyncStatus
   last_error: string | null
   last_result: SyncResult
+  /** GitHub connectors: whether the Decision Copilot is on */
+  copilot?: { enabled: boolean; has_secret: boolean }
+}
+
+/** GET/PUT /connectors/{id}/copilot; the secret only in the response that creates it */
+export interface CopilotSettings {
+  enabled: boolean
+  has_secret: boolean
+  webhook_url: string
+  webhook_secret?: string
+}
+
+/** POST /knowledge/copilot/preview */
+export interface CopilotPreview {
+  pr: { number: number; title: string; url: string; head_sha: string; draft: boolean; state: string }
+  files: number
+  report: ImpactReport
+  /** whether the record has something to say: a webhook run would comment */
+  relevant: boolean
+  /** the comment, in GitHub Markdown */
+  comment: string
+}
+
+/** GET /knowledge/copilot/runs */
+export interface CopilotRun {
+  id: string
+  connector_id: string
+  pr_number: number
+  pr_title: string | null
+  pr_url: string | null
+  head_sha: string | null
+  source: 'manual' | 'webhook'
+  status: 'posted' | 'updated' | 'skipped' | 'failed'
+  reason: string | null
+  comment_url: string | null
+  counts: Partial<ImpactReport['counts']>
+  created_at: string
 }
 
 /** GET /connectors/{id}/documents */

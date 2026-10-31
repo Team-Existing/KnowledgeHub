@@ -20,6 +20,7 @@ module.exports = {
   '/spaces': entry,
   '/groups': entry,
   '/organizations': entry,
+  '/copilot': entry,
   '/invitations': entry,
   '/knowledge': entry,
   '/connectors': entry,

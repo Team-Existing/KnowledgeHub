@@ -18,7 +18,7 @@ from app.auth import check_secret_key
 from app.db import close_db, get_client, init_db, migrate_on_startup
 from app.middleware import BodySizeLimitMiddleware
 from app.routers import (admin, auth, connectors, graphrag, groups, health, knowledge, knowledge_health, lineage,
-                         models, organizations, sso, systems, tracking)
+                         copilot, models, organizations, sso, systems, tracking)
 from app.services.file_ingestion import MAX_UPLOAD_BYTES
 from app.services import retention
 from app.services.connectors.sync import QueueUnavailable
@@ -94,6 +94,7 @@ app.include_router(organizations.router)
 app.include_router(models.router)
 app.include_router(health.router)
 app.include_router(connectors.router)
+app.include_router(copilot.router)
 # graphrag, lineage, knowledge_health, tracking and systems before knowledge: knowledge ends with the GET /knowledge/{item_id} catch-all
 app.include_router(graphrag.router)
 app.include_router(lineage.router)
