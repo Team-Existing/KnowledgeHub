@@ -38,7 +38,7 @@
           <span class="chip" [ngClass]="confidenceClass">{{ confidence }}% confidence</span>
         }
         @if (item.status) {
-          <span class="status-badge chip-link" [ngClass]="'status-' + item.status" (click)="scrollTo('history')">{{ item.status }}</span>
+          <span class="status-badge chip-link" [ngClass]="'status-' + item.status" (click)="scrollTo('history')">{{ item.status.replace('_', ' ') }}</span>
         }
       </div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
@@ -83,7 +83,7 @@
         }
         @if (cleanDetailEntries.length > 0) {
           <dl class="detail-fields">
-            @for (entry of cleanDetailEntries; track entry) {
+            @for (entry of cleanDetailEntries; track entry.key) {
               <div>
                 <dt>
                   {{ humanize(entry.key) }}
@@ -143,7 +143,7 @@
         @if (relatedItems.length > 0) {
           <h4 style="margin:1.25rem 0 0.6rem;font-size:0.875rem;color:var(--text-2)">Related Items</h4>
           <div class="related-list">
-            @for (r of relatedItems; track r) {
+            @for (r of relatedItems; track $index) {
               <a class="related-row" [routerLink]="['/knowledge', r.item.id]">
                 <span class="type-pill" style="font-size:0.7rem">{{ r.item.type }}</span>
                 <span class="related-title">{{ r.item.title }}</span>

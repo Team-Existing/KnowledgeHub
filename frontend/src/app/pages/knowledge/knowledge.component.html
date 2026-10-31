@@ -186,14 +186,14 @@
             (mouseup)="onMouseUp($event)"
             (mouseleave)="onMouseUp($event)">
             <g [attr.transform]="svgTransform">
-              @for (edge of edgesWithPos; track edge) {
+              @for (edge of edgesWithPos; track $index) {
                 <g>
                   <line [class]="isEdgeSelected(edge) ? 'graph-edge selected' : 'graph-edge'"
                     [attr.x1]="edge.sx" [attr.y1]="edge.sy" [attr.x2]="edge.tx" [attr.y2]="edge.ty" />
                     <text class="graph-edge-label" [attr.x]="(edge.sx+edge.tx)/2" [attr.y]="(edge.sy+edge.ty)/2-6">{{ edge.label }}</text>
                   </g>
                 }
-                @for (node of nodesWithPos; track node) {
+                @for (node of nodesWithPos; track node.id) {
                   <g
                     [class]="selectedNodeId === node.id ? 'graph-node selected' : 'graph-node ' + node.type"
                     role="button" tabindex="0"

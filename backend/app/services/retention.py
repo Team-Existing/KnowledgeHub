@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 Row = Dict[str, Any]
 
 # documents whose owner id (user_id) may be a personal space or a group
-_SPACE_DOCUMENTS = ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog", "CopilotRun")
+_SPACE_DOCUMENTS = ("ItemEvent", "SyncedDocument", "Connector", "Playbook", "QueryLog", "CopilotRun", "SlackIntegration")
 
 
 def enabled() -> bool:

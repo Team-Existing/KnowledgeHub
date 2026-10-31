@@ -210,3 +210,20 @@ async def dispatch_copilot(space_id: str, connector_id: str, ref: str, backgroun
         raise RuntimeError("in-process mode needs FastAPI BackgroundTasks to run the analysis")
     background.add_task(webhook_job, get_client(), space_id, connector_id, ref)
     return "in-process"
+
+
+async def dispatch_slack(space_id: str, integration_id: str, text: str, response_url: str, asked_by: str,
+                         background=None) -> str:
+    """Answer a Slack /decisions command after its acknowledgement: on the worker, or in this process."""
+    if worker_mode():
+        from starlette.concurrency import run_in_threadpool
+        from app.worker import celery_app
+        await run_in_threadpool(celery_app.send_task, "kh.slack_command",
+                                args=[space_id, integration_id, text, response_url, asked_by])
+        return "worker"
+    from app.db import get_client
+    from app.services.slack import answer_job
+    if background is None:
+        raise RuntimeError("in-process mode needs FastAPI BackgroundTasks to answer")
+    background.add_task(answer_job, get_client(), space_id, integration_id, text, response_url, asked_by)
+    return "in-process"

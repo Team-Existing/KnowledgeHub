@@ -1,6 +1,6 @@
 # Decision Copilot
 
-The Decision Copilot puts the decisions a change touches where the change is being discussed. It works on **GitHub pull requests**, **Jira issues** and **Linear issues**, through the connector you already use to sync them.
+The Decision Copilot puts the decisions a change touches where the change is being discussed. It works on **GitHub pull requests**, **Jira issues** and **Linear issues**, through the connector you already use to sync them, and in **Slack** as a `/decisions` command (see [Slack](#slack)).
 
 **It is advisory only.** It writes one comment per pull request or issue and edits that comment when the change evolves. It never approves, requests changes, transitions, assigns, labels or merges anything.
 
@@ -68,6 +68,33 @@ From then on:
   - One analysis per pull request or issue runs at a time, so two events arriving together post one comment.
   - The analysis uses the model chosen by whoever added the connector.
 
-## Limits
+## Slack
 
-- **Slack** is planned next: answers in a thread when someone asks about a change.
+In Slack, anyone can ask before making a change:
+
+```
+/decisions move the payment service to MongoDB
+```
+
+The answer covers what the record says, as in a comment:
+- decisions on record and any the change may conflict with
+- the systems it reaches
+- risks and lessons
+
+**Who sees it:** only the person who asked, unless they type `/decisions share …`, which posts it in the channel. `/decisions` alone or `/decisions help` explains the command.
+
+**Least privilege.** A slash command answers through the reply address Slack sends with each request, so:
+- Knowledge Hubs holds **no bot token** and can't read or post anything in Slack on its own.
+- It stores only the app's **signing secret**, encrypted.
+- Every request must carry Slack's signature (`X-Slack-Signature`, an HMAC-SHA256 of `v0:<timestamp>:<body>`) with a timestamp under five minutes old.
+- The reply address must be `https://hooks.slack.com/…`, or nothing is sent.
+
+**Setting it up**, on the **Copilot** page under *Slack*:
+1. At [api.slack.com/apps](https://api.slack.com/apps), create an app (from scratch) in your workspace.
+2. Copy its *Signing Secret* (Basic Information) and add it in Knowledge Hubs, with a name for the workspace.
+3. Under *Slash Commands*, create `/decisions` with the request URL Knowledge Hubs shows.
+4. Install the app to the workspace.
+
+**Which space answers:** each Slack app belongs to one space, and answers from that space's knowledge. To answer from an organization's shared knowledge, add the app while working in the organization's space.
+
+**Timing:** Slack waits at most three seconds. Knowledge Hubs acknowledges at once ("Looking up …"), then replaces that with the answer. The answer is worked out on the Celery worker in worker mode, using the model of whoever added the app.

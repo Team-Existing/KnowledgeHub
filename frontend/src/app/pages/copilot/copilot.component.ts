@@ -7,6 +7,7 @@ import { firstValueFrom } from 'rxjs'
 import { API_BASE } from '../../services/auth.service'
 import { errorMessage } from '../../services/http-error'
 import { Connector, CopilotPreview, CopilotRun, CopilotSettings } from '../../models/api'
+import { SlackSettingsComponent } from '../../components/slack-settings/slack-settings.component'
 
 const KINDS = ['github', 'jira', 'linear']
 
@@ -24,7 +25,7 @@ export const TARGET: Record<string, { noun: string; label: string; placeholder: 
  */
 @Component({
   selector: 'app-copilot',
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, SlackSettingsComponent],
   templateUrl: './copilot.component.html'
 })
 export class CopilotComponent implements OnInit {

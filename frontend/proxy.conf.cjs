@@ -21,6 +21,7 @@ module.exports = {
   '/groups': entry,
   '/organizations': entry,
   '/copilot': entry,
+  '/slack': entry,
   '/invitations': entry,
   '/knowledge': entry,
   '/connectors': entry,

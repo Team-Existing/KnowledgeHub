@@ -38,9 +38,9 @@
             <span class="muted-text">
               @if (c.due_date) { due {{ c.due_date | date:'mediumDate' }} } @else if (c.due_text) { due “{{ c.due_text }}” } @else { no due date }
             </span>
-            <select [value]="c.status" (change)="setStatus(c, $any($event.target).value)" [disabled]="busy"
+            <select (change)="setStatus(c, $any($event.target).value)" [disabled]="busy"
                     [attr.aria-label]="'Status of ' + c.title">
-              @for (s of statuses; track s) { <option [value]="s">{{ statusLabel[s] }}</option> }
+              @for (s of statuses; track s) { <option [value]="s" [selected]="s === c.status">{{ statusLabel[s] }}</option> }
             </select>
             @if (c.decision) {
               <span class="muted-text" style="flex-basis:100%;font-size:0.8rem">

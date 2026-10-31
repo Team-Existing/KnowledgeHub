@@ -1,6 +1,6 @@
 <section class="detail-panel" id="tracking">
   @if (item.type === 'action-item' && item.commitment; as c) {
-    <h2>Commitment</h2>
+    <h3>Commitment</h3>
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
       <select [ngModel]="item.status ?? 'open'" (ngModelChange)="setStatus($event)" [disabled]="busy" aria-label="Status">
         @for (s of statuses; track s) { <option [value]="s">{{ statusLabel[s] }}</option> }
@@ -17,7 +17,7 @@
   }
 
   @if (item.type === 'decision' && item.outcome; as o) {
-    <h2>Outcome</h2>
+    <h3>Outcome</h3>
     @if (editingExpectation) {
       <label class="field-help" for="expected">What should this decision achieve?</label>
       <textarea id="expected" rows="2" [(ngModel)]="expected" maxlength="1000"
